@@ -1,0 +1,70 @@
+# region ===== App Metadata =====
+spring:
+  application:
+    name: S14P21A205
+# endregion
+
+# region ===== Config Import (.env) =====
+  config:
+    import: optional:file:.env[.properties]
+# endregion
+
+# region ===== Local Infra Defaults =====
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/mydb}
+    username: ${DB_USERNAME:myuser}
+    password: ${DB_PASSWORD:mypassword}
+    driver-class-name: org.postgresql.Driver
+# endregion
+
+# region ===== JPA =====
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:true}
+# endregion
+
+# region ===== OAuth2 (Google) =====
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:}
+            client-secret: ${GOOGLE_CLIENT_SECRET:}
+            scope: openid,profile,email
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-name: Google
+# endregion
+
+# region ===== Server =====
+server:
+  port: ${APP_PORT:8080}
+  forward-headers-strategy: framework
+# endregion
+
+# region ===== Swagger =====
+springdoc:
+  swagger-ui:
+    path: /swagger-ui/index.html
+# endregion
+
+# region ===== Auth Redirect Policy =====
+app:
+  auth:
+    default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/swagger-ui/index.html}
+    allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:http://localhost:8080,http://127.0.0.1:8080}
+# endregion
+
+# region ===== Dotenv =====
+dotenv:
+  enabled: true
+  ignoreIfMissing: true
+  ignoreIfMalformed: true
+# endregion

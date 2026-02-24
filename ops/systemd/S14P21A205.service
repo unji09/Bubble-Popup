@@ -1,0 +1,17 @@
+[Unit]
+Description=S14P21A205 Spring Boot Application
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/S14P21A205
+EnvironmentFile=/home/ubuntu/S14P21A205/.env.prod
+Environment=SPRING_DOCKER_COMPOSE_ENABLED=false
+ExecStart=/usr/bin/java -jar /home/ubuntu/S14P21A205/app.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

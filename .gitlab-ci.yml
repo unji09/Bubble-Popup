@@ -1,0 +1,75 @@
+stages:
+  - build
+  - bootstrap
+  - deploy
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  PROD_USER: "ubuntu"
+  PROD_APP_DIR: "/home/ubuntu/S14P21A205"
+  PROD_DOMAIN: "pss6161.bunnect.kr"
+
+build_jar:
+  stage: build
+  image: eclipse-temurin:17-jdk
+  script:
+    - chmod +x ./gradlew
+    - ./gradlew clean bootJar
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - build/libs/*.jar
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+bootstrap_ec2:
+  stage: bootstrap
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client bash
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts
+  script:
+    - ssh "$PROD_USER@$PROD_HOST" "mkdir -p $PROD_APP_DIR/ops/nginx $PROD_APP_DIR/ops/systemd $PROD_APP_DIR/ops/scripts"
+    - scp ops/nginx/pss6161.bunnect.kr.http.conf "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/ops/nginx/"
+    - scp ops/nginx/pss6161.bunnect.kr.https.conf "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/ops/nginx/"
+    - scp ops/systemd/S14P21A205.service "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/ops/systemd/"
+    - scp ops/scripts/bootstrap_ec2.sh "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/ops/scripts/"
+    - scp ops/scripts/setup_server_nginx.sh "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/ops/scripts/"
+    - ssh "$PROD_USER@$PROD_HOST" "chmod +x $PROD_APP_DIR/ops/scripts/bootstrap_ec2.sh $PROD_APP_DIR/ops/scripts/setup_server_nginx.sh"
+    - ssh "$PROD_USER@$PROD_HOST" "sudo DEPLOY_USER=$PROD_USER APP_DIR=$PROD_APP_DIR DOMAIN=$PROD_DOMAIN bash $PROD_APP_DIR/ops/scripts/bootstrap_ec2.sh"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+
+deploy_prod:
+  stage: deploy
+  image: alpine:3.20
+  needs:
+    - build_jar
+  before_script:
+    - apk add --no-cache openssh-client bash coreutils
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts
+  script:
+    - test -n "$PROD_ENV_FILE_B64"
+    - APP_JAR="$(ls build/libs/*.jar | head -n1)"
+    - test -n "$APP_JAR"
+    - echo "$PROD_ENV_FILE_B64" | base64 -d > .env.prod
+    - ssh "$PROD_USER@$PROD_HOST" "mkdir -p $PROD_APP_DIR/ops/systemd"
+    - scp "$APP_JAR" "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/app.jar"
+    - scp .env.prod "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/.env.prod"
+    - scp ops/systemd/S14P21A205.service "$PROD_USER@$PROD_HOST:$PROD_APP_DIR/ops/systemd/S14P21A205.service"
+    - ssh "$PROD_USER@$PROD_HOST" "sudo cp $PROD_APP_DIR/ops/systemd/S14P21A205.service /etc/systemd/system/S14P21A205.service"
+    - ssh "$PROD_USER@$PROD_HOST" "sudo systemctl daemon-reload && sudo systemctl enable S14P21A205 && sudo systemctl restart S14P21A205"
+    - ssh "$PROD_USER@$PROD_HOST" "sudo systemctl status S14P21A205 --no-pager --lines=30"
+  environment:
+    name: production
+    url: https://pss6161.bunnect.kr
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
