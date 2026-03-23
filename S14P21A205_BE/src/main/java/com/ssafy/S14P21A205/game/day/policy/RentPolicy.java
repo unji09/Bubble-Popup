@@ -92,13 +92,14 @@ public class RentPolicy {
                 && store.getMenu() != null
                 && store.getMenu().getMenuName() != null
                 && !previousMenuName.equals(store.getMenu().getMenuName());
+        // Menu changes discard carried stock, but disposal no longer reduces cash.
         int disposalQuantity = menuChanged ? carriedStock : 0;
-        int disposalLoss = Math.multiplyExact(disposalQuantity, appliedUnitCost);
+        int disposalLoss = 0;
         int openingAgedStock = menuChanged ? 0 : carriedStock;
         int openingFreshStock = regularOrderQuantity;
         int fixedCostTotal = Math.addExact(
                 Math.addExact(dailyRentApplied, interiorCost),
-                Math.addExact(regularOrderCost, disposalLoss)
+                regularOrderCost
         );
         int initialBalance = carriedBalance - fixedCostTotal;
 

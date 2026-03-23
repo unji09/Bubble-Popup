@@ -8,7 +8,7 @@ import CountdownTimer from "../components/common/CountdownTimer";
 import ProfitChart from "../components/report/ProfitChart";
 import WeatherCard from "../components/report/WeatherCard";
 import BankruptModal from "../components/report/BankruptModal";
-import { getAllDayReports, type GameDayReportResponse } from "../api/game";
+import { getDayReport, getAllDayReports, type GameDayReportResponse } from "../api/game";
 import useBrandName from "../hooks/useBrandName";
 
 function getNetProfit(r: GameDayReportResponse) {
@@ -20,7 +20,7 @@ function getIsBankrupt(r: GameDayReportResponse) {
 }
 
 function getReputation(r: GameDayReportResponse) {
-  return ((r.capture_rate ?? 0) / 2);
+  return Math.min((r.capture_rate ?? 0) * 5, 5);
 }
 
 function buildChartData(reports: GameDayReportResponse[], currentDay: number) {
@@ -63,11 +63,11 @@ export default function ReportPage() {
     setLoading(true);
     setError(null);
 
-    getAllDayReports(day)
-      .then((reports) => {
+    Promise.all([getDayReport(day), getAllDayReports(day)])
+      .then(([todayReport, reports]) => {
         if (cancelled) return;
         setAllReports(reports);
-        setReport(reports.find((r) => r.day === day) ?? reports[reports.length - 1]);
+        setReport(todayReport);
       })
       .catch(() => {
         if (cancelled) return;
@@ -105,7 +105,7 @@ export default function ReportPage() {
   const isBankrupt = getIsBankrupt(report);
   const disposal = isStockDisposalDay(report.day);
   const reputation = getReputation(report);
-  const reputationChange = (report.reputationChange ?? 0) / 2;
+  const reputationChange = (report.change_capture_rate ?? 0) * 5;
 
   const fmt = (v: number) => v < 0 ? `-₩${Math.abs(v).toLocaleString()}` : `₩${v.toLocaleString()}`;
 

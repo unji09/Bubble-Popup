@@ -102,7 +102,7 @@ export interface GameDayReportResponse {
   stockRemaining: number;
   stockDisposedCount: number;
   capture_rate: number;
-  reputationChange: number;
+  change_capture_rate: number;
   dailyRevenue: {
     first: number;
     second: number;
@@ -151,6 +151,11 @@ export interface CustomerTick {
   rValue: number;
 }
 
+export interface CustomerPlanByHourItem {
+  gameHour: number;
+  customerCount: number;
+}
+
 export type GameTrafficStatus =
   | "VERY_SMOOTH"
   | "SMOOTH"
@@ -193,6 +198,7 @@ export interface GameStateResponse {
   cash: number;
   customerCount: number;
   customerTick: CustomerTick;
+  customerPlanByHour?: CustomerPlanByHourItem[] | null;
   inventory: { totalStock: number };
   actionStatus: GameActionStatus;
   appliedEvents: AppliedEvent[];

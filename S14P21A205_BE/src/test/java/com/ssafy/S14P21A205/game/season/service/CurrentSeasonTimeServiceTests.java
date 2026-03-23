@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import org.mockito.Mockito;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -115,6 +116,32 @@ class CurrentSeasonTimeServiceTests {
     }
 
     @Test
+    void getCurrentSeasonTimeUsesFinishedSeasonDuringSeasonSummaryWindow() {
+        currentSeasonTimeService = createService(
+                Clock.fixed(Instant.parse("2026-03-18T01:23:30Z"), ZoneId.of("Asia/Seoul"))
+        );
+
+        Season season = season(7, 7, LocalDateTime.of(2026, 3, 18, 10, 0, 0));
+        when(seasonRepository.findByStatusAndStartTimeLessThanEqualAndEndTimeAfterOrderByEndTimeDescIdDesc(
+                SeasonStatus.FINISHED,
+                LocalDateTime.of(2026, 3, 18, 10, 23, 30),
+                LocalDateTime.of(2026, 3, 18, 10, 23, 30)
+        )).thenReturn(List.of(season));
+
+        CurrentSeasonTimeResponse response = currentSeasonTimeService.getCurrentSeasonTime();
+
+        assertThat(response.seasonPhase()).isEqualTo("SEASON_SUMMARY");
+        assertThat(response.currentDay()).isEqualTo(7);
+        assertThat(response.phaseRemainingSeconds()).isEqualTo(90);
+        assertThat(response.serverTime()).isEqualTo(LocalDateTime.of(2026, 3, 18, 10, 23, 30));
+        assertThat(response.seasonStartTime()).isEqualTo(LocalDateTime.of(2026, 3, 18, 10, 0, 0));
+        assertThat(response.gameTime()).isNull();
+        assertThat(response.tick()).isNull();
+        assertThat(response.joinEnabled()).isFalse();
+        assertThat(response.joinPlayableFromDay()).isNull();
+    }
+
+    @Test
     void getCurrentSeasonTimeThrowsWhenNoCurrentSeasonExists() {
         currentSeasonTimeService = createService(Clock.system(ZoneId.of("Asia/Seoul")));
         assertThatThrownBy(() -> currentSeasonTimeService.getCurrentSeasonTime())
@@ -132,8 +159,8 @@ class CurrentSeasonTimeServiceTests {
             Integer totalDays,
             LocalDateTime startTime
     ) {
-        Season season = org.mockito.Mockito.mock(Season.class);
-        org.mockito.Mockito.lenient().when(season.getCurrentDay()).thenReturn(currentDay);
+        Season season = Mockito.mock(Season.class);
+        Mockito.lenient().when(season.getCurrentDay()).thenReturn(currentDay);
         when(season.getTotalDays()).thenReturn(totalDays);
         when(season.getStartTime()).thenReturn(startTime);
         return season;

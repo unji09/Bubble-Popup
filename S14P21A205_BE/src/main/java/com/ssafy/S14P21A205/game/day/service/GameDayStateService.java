@@ -1,8 +1,7 @@
 package com.ssafy.S14P21A205.game.day.service;
 
-import com.ssafy.S14P21A205.action.entity.ActionCategory;
+import com.ssafy.S14P21A205.action.dto.ActionStatusResponse;
 import com.ssafy.S14P21A205.action.entity.ActionLog;
-import com.ssafy.S14P21A205.action.entity.PromotionType;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
@@ -110,6 +109,11 @@ public class GameDayStateService {
                 store.getId(),
                 OrderType.EMERGENCY
         );
+        List<Order> currentDayEmergencyOrders = orderRepository.findByStoreIdAndOrderedDayAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                store.getId(),
+                day,
+                OrderType.EMERGENCY
+        );
         GameDayLiveState state = normalizeState(rawState, dailyStartOrder);
         DayWindow currentTimeline = SEASON_TIMELINE_SERVICE.day(store.getSeason(), day);
 
@@ -126,7 +130,8 @@ public class GameDayStateService {
                 tick,
                 effectiveNow
         );
-        ActionUsage actionUsage = resolveActionUsage(store.getId(), day);
+        ActionStatusResponse actionStatus = resolveActionStatus(store.getId(), day);
+        long actionTotalCost = resolveActionTotalCost(store.getId(), day);
         int regionStoreCount = resolveRegionStoreCount(store, state, serverTime);
 
         CalculatedGameState calculatedState = calculateGameState(
@@ -134,7 +139,7 @@ public class GameDayStateService {
                 state,
                 currentTimeline,
                 tick,
-                actionUsage,
+                actionTotalCost,
                 effectiveNow,
                 dailyStartOrder,
                 emergencyOrders,
@@ -153,12 +158,13 @@ public class GameDayStateService {
 
         gameDayStoreStateRedisRepository.saveStateAndTickLog(store.getId(), day, calculatedState.liveState());
         log.info(
-                "state-updated storeId={} seasonId={} day={} tick={} populationPerStore={} cash={} stock={}",
+                "state-updated storeId={} seasonId={} day={} tick={} populationPerStore={} customerCount={} cash={} stock={}",
                 store.getId(),
                 store.getSeason().getId(),
                 day,
                 tick,
                 calculatedState.populationPerStore(),
+                calculatedState.liveState().cumulativeCustomerCount(),
                 calculatedState.cash(),
                 calculatedState.totalStock()
         );
@@ -170,6 +176,8 @@ public class GameDayStateService {
                 currentTimeline.dayStart(),
                 effectiveNow
         );
+
+        EmergencyOrderState currentDayEmergencyOrderState = resolveEmergencyOrderState(currentDayEmergencyOrders, effectiveNow);
 
         return Optional.of(new GameStateResponse(
                 serverTime,
@@ -198,14 +206,12 @@ public class GameDayStateService {
                 ),
                 new GameStateResponse.Inventory(calculatedState.totalStock()),
                 new GameStateResponse.ActionStatus(
-                        actionUsage.discountUsed(),
-                        actionUsage.donationUsed(),
-                        actionUsage.influencerUsed(),
-                        actionUsage.snsUsed(),
-                        actionUsage.leafletUsed(),
-                        actionUsage.friendUsed(),
-                        calculatedState.emergencyOrderState().pending(),
-                        calculatedState.emergencyOrderState().pending() ? calculatedState.emergencyOrderState().arriveAt() : null
+                        actionStatus.discountUsed(),
+                        actionStatus.donationUsed(),
+                        actionStatus.promotionUsed(),
+                        actionStatus.emergencyUsed(),
+                        currentDayEmergencyOrderState.pending(),
+                        currentDayEmergencyOrderState.pending() ? currentDayEmergencyOrderState.arriveAt() : null
                 ),
                 calculatedState.appliedEvents()
         ));
@@ -306,15 +312,13 @@ public class GameDayStateService {
         );
     }
 
-    private ActionUsage resolveActionUsage(Long storeId, int day) {
-        List<ActionLog> actionLogs = actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(storeId, day);
+    private ActionStatusResponse resolveActionStatus(Long storeId, int day) {
+        java.util.Map<String, Boolean> actions = gameDayStoreStateRedisRepository.getActions(storeId, day);
+        return ActionStatusResponse.from(actions == null ? java.util.Map.of() : actions);
+    }
 
-        boolean discountUsed = false;
-        boolean donationUsed = false;
-        boolean influencerUsed = false;
-        boolean snsUsed = false;
-        boolean leafletUsed = false;
-        boolean friendUsed = false;
+    private long resolveActionTotalCost(Long storeId, int day) {
+        List<ActionLog> actionLogs = actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(storeId, day);
         long totalCost = 0L;
 
         for (ActionLog actionLog : actionLogs) {
@@ -323,41 +327,8 @@ public class GameDayStateService {
             }
 
             totalCost += actionLog.getAction().getCost() == null ? 0L : actionLog.getAction().getCost();
-
-            ActionCategory category = actionLog.getAction().getCategory();
-            if (category == ActionCategory.DISCOUNT) {
-                discountUsed = true;
-                continue;
-            }
-            if (category == ActionCategory.DONATION) {
-                donationUsed = true;
-                continue;
-            }
-            if (category != ActionCategory.PROMOTION) {
-                continue;
-            }
-
-            PromotionType promotionType = actionLog.getAction().getPromotionType();
-            if (promotionType == PromotionType.INFLUENCER) {
-                influencerUsed = true;
-            } else if (promotionType == PromotionType.SNS) {
-                snsUsed = true;
-            } else if (promotionType == PromotionType.LEAFLET) {
-                leafletUsed = true;
-            } else if (promotionType == PromotionType.FRIEND) {
-                friendUsed = true;
-            }
         }
-
-        return new ActionUsage(
-                discountUsed,
-                donationUsed,
-                influencerUsed,
-                snsUsed,
-                leafletUsed,
-                friendUsed,
-                totalCost
-        );
+        return totalCost;
     }
 
     private EmergencyOrderState resolveEmergencyOrderState(List<Order> emergencyOrders, LocalDateTime effectiveNow) {
@@ -373,7 +344,7 @@ public class GameDayStateService {
             GameDayLiveState state,
             DayWindow currentTimeline,
             int tick,
-            ActionUsage actionUsage,
+            long actionTotalCost,
             LocalDateTime effectiveNow,
             Order dailyStartOrder,
             List<Order> emergencyOrders,
@@ -398,7 +369,7 @@ public class GameDayStateService {
                 store,
                 dailyStartOrder,
                 state.startResponse(),
-                actionUsage.totalCost(),
+                actionTotalCost,
                 EMERGENCY_ORDER_ENGINE.resolveOrderedDayTotalCost(emergencyOrders, day),
                 state.locationChangeCost() == null ? 0L : state.locationChangeCost(),
                 eventEffect.capitalChange(),
@@ -502,7 +473,8 @@ public class GameDayStateService {
                     day,
                     nextTick,
                     populationSnapshot,
-                    regionStoreCount
+                    regionStoreCount,
+                    captureRate
             );
             int desiredCustomerCount = customerScore.customerCount();
             int nextCursor = stockEngine.advancePurchaseCursor(state.purchaseList(), purchaseCursor, desiredCustomerCount);
@@ -561,7 +533,8 @@ public class GameDayStateService {
                 day,
                 currentTick,
                 currentPopulationSnapshot,
-                regionStoreCount
+                regionStoreCount,
+                captureRate
         );
         int currentPopulationPerStore = currentCustomerScore.populationPerStore();
 
@@ -624,7 +597,8 @@ public class GameDayStateService {
             int day,
             int tick,
             PopulationPolicy.PopulationSnapshot populationSnapshot,
-            int regionStoreCount
+            int regionStoreCount,
+            BigDecimal captureRate
     ) {
         if (regionStoreCount <= 0) {
             log.warn(
@@ -636,7 +610,7 @@ public class GameDayStateService {
             );
             return CustomerScorePolicy.CustomerScoreResult.empty();
         }
-        return customerScorePolicy.calculate(populationSnapshot, regionStoreCount);
+        return customerScorePolicy.calculate(populationSnapshot, regionStoreCount, captureRate);
     }
 
     private int applyStockEventDelta(
@@ -713,17 +687,6 @@ public class GameDayStateService {
 
     private LocalDateTime min(LocalDateTime left, LocalDateTime right) {
         return left.isBefore(right) ? left : right;
-    }
-
-    private record ActionUsage(
-            boolean discountUsed,
-            boolean donationUsed,
-            boolean influencerUsed,
-            boolean snsUsed,
-            boolean leafletUsed,
-            boolean friendUsed,
-            long totalCost
-    ) {
     }
 
     private record EmergencyOrderState(

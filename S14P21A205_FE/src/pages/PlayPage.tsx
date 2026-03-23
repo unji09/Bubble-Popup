@@ -16,6 +16,7 @@ import PromotionModal, {
 } from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal, { type MoveRegion } from "../components/play/modals/MoveModal";
+import UnityCanvas, { type UnityBridgeHandle } from "../components/play/UnityCanvas";
 import {
   getPromotionPrice,
   postDiscount,
@@ -28,6 +29,7 @@ import {
   getGameDayState,
   getCurrentSeasonTopRankings,
   startGameDay,
+  type CustomerPlanByHourItem,
   type GameStateResponse,
   type GameTrafficStatus,
 } from "../api/game";
@@ -41,7 +43,14 @@ import {
   type StoreMenuResponse,
 } from "../api/store";
 import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
-import { BUSINESS_SECONDS, DAY_SECONDS, elapsedToGameTime } from "../constants/gameTime";
+import {
+  BUSINESS_CLOSE_HOUR,
+  BUSINESS_OPEN_HOUR,
+  BUSINESS_SECONDS,
+  DAY_SECONDS,
+  elapsedToGameTime,
+} from "../constants/gameTime";
+import { setWeather, startDay, spawnShopAtIndex } from "../utils/unity";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
@@ -286,6 +295,15 @@ function normalizeAreaName(value: string) {
   return value.trim();
 }
 
+function resolvePopupStoreIndex(locationId: number | null | undefined) {
+  if (typeof locationId !== "number") {
+    return null;
+  }
+
+  const popupStoreIndex = locationId - 1;
+  return popupStoreIndex >= 0 && popupStoreIndex < 8 ? popupStoreIndex : null;
+}
+
 function buildAreaTrafficRankMap(items: AreaRankingItemResponse[]) {
   return new Map(
     items.map((item) => [normalizeAreaName(item.areaName), item.rank] as const),
@@ -382,6 +400,71 @@ function getTrafficStatusLabel(status: GameTrafficStatus | null | undefined) {
   }
 }
 
+type UnityCongestionLevel = 1 | 2 | 3 | 4 | 5;
+
+type HeaderCongestionLevel =
+  | "very_crowded"
+  | "crowded"
+  | "normal"
+  | "relaxed"
+  | "very_relaxed";
+
+const TRAFFIC_STATUS_TO_UNITY_LEVEL: Record<GameTrafficStatus, UnityCongestionLevel> = {
+  VERY_SMOOTH: 1,
+  SMOOTH: 2,
+  NORMAL: 3,
+  CONGESTED: 4,
+  VERY_CONGESTED: 5,
+};
+
+const BUSINESS_HOUR_COUNT = BUSINESS_CLOSE_HOUR - BUSINESS_OPEN_HOUR;
+const BUSINESS_SECONDS_PER_HOUR = BUSINESS_SECONDS / BUSINESS_HOUR_COUNT;
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max));
+}
+
+function getElapsedBusinessSeconds(remainingMilliseconds: number) {
+  return clampNumber(BUSINESS_SECONDS - remainingMilliseconds / 1000, 0, BUSINESS_SECONDS);
+}
+
+function getBusinessHourWindowSeconds(gameHour: number) {
+  if (!Number.isFinite(gameHour) || gameHour < BUSINESS_OPEN_HOUR || gameHour >= BUSINESS_CLOSE_HOUR) {
+    return null;
+  }
+
+  const hourOffset = gameHour - BUSINESS_OPEN_HOUR;
+  const start = hourOffset * BUSINESS_SECONDS_PER_HOUR;
+  const end = start + BUSINESS_SECONDS_PER_HOUR;
+
+  return { start, end };
+}
+
+function getUnityCongestionLevel(status: GameTrafficStatus | null | undefined) {
+  if (!status) {
+    return null;
+  }
+
+  return TRAFFIC_STATUS_TO_UNITY_LEVEL[status];
+}
+
+function getHeaderCongestionLevel(status: GameTrafficStatus | null | undefined): HeaderCongestionLevel {
+  switch (status) {
+    case "VERY_SMOOTH":
+      return "very_relaxed";
+    case "SMOOTH":
+      return "relaxed";
+    case "NORMAL":
+      return "normal";
+    case "CONGESTED":
+      return "crowded";
+    case "VERY_CONGESTED":
+      return "very_crowded";
+    default:
+      return "normal";
+  }
+}
+
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
   const guardContext = useOutletContext<GameGuardContext>();
@@ -410,17 +493,28 @@ function PlayPageSession({
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
+  const unityIframeRef = useRef<HTMLIFrameElement>(null);
+  const [unityReady, setUnityReady] = useState(false);
+  const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
+  const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
   const hasLoadedCarryOverRef = useRef(false);
   const [balance, setBalance] = useState(0);
   const [stock, setStock] = useState(0);
   const [guests, setGuests] = useState(0);
   const [currentLocationName, setCurrentLocationName] = useState("");
+  const currentLocationIdRef = useRef<number | null>(null);
+  const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
+  const scheduledVisitorTimersRef = useRef<number[]>([]);
+  const dispatchedVisitorsByHourRef = useRef<Map<number, number>>(new Map());
+  const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
+  const latestBackendCustomerCountRef = useRef(0);
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
   const [moveRegions, setMoveRegions] = useState<MoveRegion[]>([]);
   const [promotionOptions, setPromotionOptions] = useState<PromotionOption[]>(() =>
     buildPromotionOptions(),
   );
+  const [trafficStatus, setTrafficStatus] = useState<GameTrafficStatus | null>(null);
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
   const [estimatedEmergencyArriveAt, setEstimatedEmergencyArriveAt] = useState<string | null>(null);
@@ -434,6 +528,8 @@ function PlayPageSession({
   const hasLowStockAlertRef = useRef(false);
   const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
+  const remainingMillisecondsRef = useRef(remainingMilliseconds);
+  remainingMillisecondsRef.current = remainingMilliseconds;
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
   const displayedEmergencyArriveAt = emergencyArriveAt ?? estimatedEmergencyArriveAt;
@@ -495,12 +591,160 @@ function PlayPageSession({
   const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
   const [stockDelta, setStockDelta] = useState<number | null>(null);
   const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+  const unityBridgeRef = useRef<UnityBridgeHandle | null>(null);
+  const latestTrafficStatusRef = useRef<GameTrafficStatus | null>(null);
+  const lastUnityCongestionLevelRef = useRef<UnityCongestionLevel | null>(null);
   // ref로 최신 값 추적 (클로저 캡처 문제 방지)
   const prevGuestsRef = useRef<number | null>(null);
   const prevStockRef = useRef<number | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
 
+  const clearScheduledVisitorTimers = () => {
+    for (const timerId of scheduledVisitorTimersRef.current) {
+      window.clearTimeout(timerId);
+    }
+
+    scheduledVisitorTimersRef.current = [];
+  };
+
+  const spawnPopupVisitorsImmediately = (popupStoreIndex: number, count: number) => {
+    const totalCount = Math.max(0, Math.floor(count));
+    let didSendAny = false;
+
+    for (let index = 0; index < totalCount; index += 1) {
+      const didSend = unityBridgeRef.current?.spawnSinglePopupVisitor(popupStoreIndex) ?? false;
+      didSendAny = didSend || didSendAny;
+    }
+
+    return didSendAny;
+  };
+
+  const schedulePlannedVisitors = (
+    customerPlanByHour: CustomerPlanByHourItem[] | null | undefined,
+    backendCustomerCount: number,
+  ) => {
+    const normalizedPlan = [...(customerPlanByHour ?? [])]
+      .filter(
+        (item) =>
+          Number.isFinite(item.gameHour) &&
+          Number.isFinite(item.customerCount) &&
+          item.customerCount > 0,
+      )
+      .sort((a, b) => a.gameHour - b.gameHour);
+
+    latestCustomerPlanRef.current = normalizedPlan;
+    latestBackendCustomerCountRef.current = backendCustomerCount;
+
+    clearScheduledVisitorTimers();
+
+    if (normalizedPlan.length === 0) {
+      return;
+    }
+
+    const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
+
+    if (popupStoreIndex === null) {
+      return;
+    }
+
+    const elapsedBusinessSeconds = getElapsedBusinessSeconds(remainingMillisecondsRef.current);
+    let cumulativePlannedCustomers = 0;
+
+    for (const planItem of normalizedPlan) {
+      const hourWindow = getBusinessHourWindowSeconds(planItem.gameHour);
+      const plannedCustomers = Math.max(0, Math.floor(planItem.customerCount));
+
+      if (!hourWindow || plannedCustomers <= 0) {
+        cumulativePlannedCustomers += plannedCustomers;
+        continue;
+      }
+
+      if (elapsedBusinessSeconds >= hourWindow.end) {
+        cumulativePlannedCustomers += plannedCustomers;
+        continue;
+      }
+
+      const dispatchedCustomers = dispatchedVisitorsByHourRef.current.get(planItem.gameHour) ?? 0;
+      let remainingCustomers = Math.max(0, plannedCustomers - dispatchedCustomers);
+
+      if (elapsedBusinessSeconds >= hourWindow.start) {
+        const realizedCurrentHour = clampNumber(
+          backendCustomerCount - cumulativePlannedCustomers,
+          0,
+          plannedCustomers,
+        );
+
+        remainingCustomers = Math.max(
+          0,
+          plannedCustomers - Math.max(dispatchedCustomers, realizedCurrentHour),
+        );
+      }
+
+      cumulativePlannedCustomers += plannedCustomers;
+
+      if (remainingCustomers <= 0) {
+        continue;
+      }
+
+      const scheduleWindowStart = Math.max(elapsedBusinessSeconds, hourWindow.start);
+      const delayMs = Math.max(0, Math.round((scheduleWindowStart - elapsedBusinessSeconds) * 1000));
+
+      const timerId = window.setTimeout(() => {
+        const didSend = spawnPopupVisitorsImmediately(popupStoreIndex, remainingCustomers);
+
+        if (!didSend) {
+          return;
+        }
+
+        dispatchedVisitorsByHourRef.current.set(
+          planItem.gameHour,
+          (dispatchedVisitorsByHourRef.current.get(planItem.gameHour) ?? 0) + remainingCustomers,
+        );
+      }, delayMs);
+
+      scheduledVisitorTimersRef.current.push(timerId);
+    }
+  };
+
+  const syncUnityCongestionLevel = (status: GameTrafficStatus | null | undefined) => {
+    latestTrafficStatusRef.current = status ?? null;
+
+    const nextLevel = getUnityCongestionLevel(status);
+
+    if (nextLevel === null || lastUnityCongestionLevelRef.current === nextLevel) {
+      return;
+    }
+
+    const didSend = unityBridgeRef.current?.setCongestionLevel(nextLevel) ?? false;
+
+    if (didSend) {
+      lastUnityCongestionLevelRef.current = nextLevel;
+    }
+  };
+
+  const handleUnityReady = () => {
+    lastUnityCongestionLevelRef.current = null;
+    syncUnityCongestionLevel(latestTrafficStatusRef.current);
+    schedulePlannedVisitors(latestCustomerPlanRef.current, latestBackendCustomerCountRef.current);
+  };
+
+  const handlePopupArrival = (popupStoreIndex: number | null) => {
+    const currentPopupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
+
+    if (currentPopupStoreIndex === null) {
+      return;
+    }
+
+    if (popupStoreIndex !== null && popupStoreIndex !== currentPopupStoreIndex) {
+      return;
+    }
+
+    setGuests((prev) => prev + 1);
+  };
+
   const applyGameState = (state: GameStateResponse) => {
+    const hasCustomerPlan =
+      Array.isArray(state.customerPlanByHour) && state.customerPlanByHour.length > 0;
     // 이전 값이 있으면 delta 계산
     if (prevGuestsRef.current !== null) {
       const gd = state.customerCount - prevGuestsRef.current;
@@ -509,6 +753,13 @@ function PlayPageSession({
       if (gd !== 0) setGuestsDelta(gd);
       if (sd !== 0) setStockDelta(sd);
       if (bd !== 0) setBalanceDelta(bd);
+      if (!hasCustomerPlan && gd > 0) {
+        const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
+
+        if (popupStoreIndex !== null) {
+          spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+        }
+      }
     }
 
     // 현재 값을 ref에 저장 (다음 비교용)
@@ -519,7 +770,10 @@ function PlayPageSession({
     setBalance(state.cash);
     setStock(state.inventory.totalStock);
     setGuests(state.customerCount);
+    setTrafficStatus(state.traffic?.status ?? null);
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
+    syncUnityCongestionLevel(state.traffic?.status);
+    schedulePlannedVisitors(state.customerPlanByHour, state.customerCount);
     const estimatedEmergencyArriveAt = getEstimatedEmergencyArrivalTime(
       state.serverTime,
       state.traffic?.delaySeconds,
@@ -616,6 +870,25 @@ function PlayPageSession({
     };
   }, [nickname]);
 
+  // Unity ready 시그널 수신
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "unityReady") {
+        setUnityReady(true);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Unity 준비 완료 + 데이터 있을 때 명령 전송
+  useEffect(() => {
+    if (!unityReady || dayWeatherType === null || storeRegionIndex === null) return;
+    spawnShopAtIndex(unityIframeRef, storeRegionIndex);
+    setWeather(unityIframeRef, dayWeatherType);
+    startDay(unityIframeRef, BUSINESS_SECONDS);
+  }, [unityReady, dayWeatherType, storeRegionIndex]);
+
   useEffect(() => {
     let isActive = true;
 
@@ -631,6 +904,9 @@ function PlayPageSession({
         const dayStartRes = await startGameDay();
         if (isActive && dayStartRes.eventSchedule) {
           setEventSchedule(dayStartRes.eventSchedule);
+        }
+        if (isActive) {
+          setDayWeatherType(dayStartRes.weatherType ?? null);
         }
       } catch (error) {
         startErrorMessage = getErrorMessage(error, "영업 상태를 준비하지 못했습니다.");
@@ -661,9 +937,14 @@ function PlayPageSession({
       if (stateResult.status === "fulfilled") {
         applyGameState(stateResult.value);
       } else {
+        setTrafficStatus(null);
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
         setEstimatedEmergencyArriveAt(null);
+        latestCustomerPlanRef.current = [];
+        latestBackendCustomerCountRef.current = 0;
+        dispatchedVisitorsByHourRef.current.clear();
+        clearScheduledVisitorTimers();
         syncDiscountActionState(false);
         syncPromotionActionState(false);
         syncShareActionState(false);
@@ -699,6 +980,15 @@ function PlayPageSession({
 
       if (storeResult.status === "fulfilled") {
         setCurrentLocationName(storeResult.value.location);
+        // 매장 지역의 Unity 인덱스 계산 (locationId - 1 = 0-based index)
+        if (locationResult.status === "fulfilled") {
+          const matched = locationResult.value.locations.find(
+            (loc) => loc.locationName === storeResult.value.location,
+          );
+          if (matched) {
+            setStoreRegionIndex(matched.locationId - 1);
+          }
+        }
       }
 
       const trafficRankByAreaName =
@@ -707,12 +997,30 @@ function PlayPageSession({
           : new Map<string, number>();
 
       if (locationResult.status === "fulfilled") {
+        const nextLocationIdByName = new Map(
+          locationResult.value.locations.map((location) => [
+            normalizeAreaName(location.locationName),
+            location.locationId,
+          ] as const),
+        );
+
+        locationIdByNameRef.current = nextLocationIdByName;
+        currentLocationIdRef.current =
+          nextLocationIdByName.get(normalizeAreaName(nextCurrentLocationName)) ?? currentLocationIdRef.current;
+        if (stateResult.status === "fulfilled") {
+          schedulePlannedVisitors(
+            stateResult.value.customerPlanByHour,
+            stateResult.value.customerCount,
+          );
+        }
+
         setMoveRegions(
           locationResult.value.locations.map((location) =>
             mapLocationToMoveRegion(location, trafficRankByAreaName),
           ),
         );
       } else {
+        locationIdByNameRef.current = new Map();
         setMoveRegions([]);
       }
 
@@ -791,6 +1099,7 @@ function PlayPageSession({
     return () => window.clearInterval(timer);
   }, [playEndTimestampMs]);
 
+
   // 10초마다 게임 상태 폴링 (유동인구, 손님, 재고, 잔액)
   useEffect(() => {
     const poll = async () => {
@@ -804,6 +1113,12 @@ function PlayPageSession({
 
     const timer = window.setInterval(poll, 10_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearScheduledVisitorTimers();
+    };
   }, []);
 
   const triggeredEventsRef = useRef<Set<string>>(new Set());
@@ -1007,7 +1322,7 @@ function PlayPageSession({
         day={dayNumber}
         remainingSeconds={remainingSeconds}
         remainingMilliseconds={remainingMilliseconds}
-        congestion="normal"
+        congestion={getHeaderCongestionLevel(trafficStatus)}
         guests={guests}
         stock={stock}
         balance={balance}
@@ -1018,14 +1333,13 @@ function PlayPageSession({
 
       <main className="relative flex flex-1 overflow-hidden">
         <div className="absolute inset-0 z-0 bg-transparent" />
-        <div className="relative z-0 flex-1 bg-slate-950">
-          <iframe
-            src="/unity/index.html"
-            title="Unity Game"
-            className="h-full w-full border-0"
-            allow="fullscreen"
-          />
-        </div>
+        <UnityCanvas
+          ref={unityBridgeRef}
+          iframeRef={unityIframeRef}
+          className="relative z-0 flex-1 bg-slate-950"
+          onReady={handleUnityReady}
+          onPopupArrival={handlePopupArrival}
+        />
 
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
@@ -1198,10 +1512,18 @@ function PlayPageSession({
             }
 
             if (storeSyncResult.status === "fulfilled") {
+              currentLocationIdRef.current =
+                locationIdByNameRef.current.get(normalizeAreaName(storeSyncResult.value.location)) ?? regionId;
               setCurrentLocationName(storeSyncResult.value.location);
             } else {
+              currentLocationIdRef.current = regionId;
               setCurrentLocationName(regionName);
             }
+
+            schedulePlannedVisitors(
+              latestCustomerPlanRef.current,
+              latestBackendCustomerCountRef.current,
+            );
 
             completeAction("move", {
               alert: {

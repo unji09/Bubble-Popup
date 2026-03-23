@@ -123,7 +123,7 @@ function buildNewsSidebarSections(day: number, rankingResponse: NewsRankingRespo
     sections.push({
       title: "유동인구 순위",
       eyebrow: "Foot Traffic Ranking",
-      items: mapAreaRankings(rankingResponse.areaTrafficRanking),
+      items: mapAreaRankings(rankingResponse.areaTrafficRanking.slice(0, 3)),
     });
 
     if (day >= 2) {

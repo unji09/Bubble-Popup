@@ -81,6 +81,11 @@ public class SeasonTimelineService {
         return gameTimePolicy.resolveSeasonSummaryEndAt(season.getStartTime(), season.getTotalDays());
     }
 
+    public LocalDateTime resolveSeasonSummaryStartAt(Season season) {
+        validateSeason(season);
+        return gameTimePolicy.resolveSeasonSummaryStartAt(season.getStartTime(), season.getTotalDays());
+    }
+
     public LocalDateTime resolveNextSeasonStartAt(Season season) {
         validateSeason(season);
         return gameTimePolicy.resolveNextSeasonStartAt(season.getStartTime(), season.getTotalDays());

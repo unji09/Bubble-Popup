@@ -273,14 +273,15 @@ class SeasonLifecycleServiceTests {
     }
 
     @Test
-    void synchronizeFinishesSeasonAndSchedulesNextSeasonAfterSeasonSummaryEnds() {
+    void synchronizeFinishesSeasonAndSchedulesNextSeasonWhenSeasonSummaryStarts() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
-        LocalDateTime now = seasonStartAt.plusSeconds(120 + 7L * 180L + 120L);
-        LocalDateTime expectedNextSeasonStartAt = now.plusMinutes(5);
+        LocalDateTime now = seasonStartAt.plusSeconds(120 + 7L * 180L);
+        LocalDateTime expectedNextSeasonStartAt = now.plusMinutes(7);
 
         Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
         ReflectionTestUtils.setField(inProgressSeason, "id", 31L);
         inProgressSeason.start("spark-20260318-03");
+        inProgressSeason.advanceToDay(7);
 
         seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
 

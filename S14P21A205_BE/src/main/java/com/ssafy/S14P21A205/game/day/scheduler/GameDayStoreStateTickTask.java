@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.game.day.scheduler;
 
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
+import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.scheduler.GameTickTask;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
@@ -49,7 +50,16 @@ public class GameDayStoreStateTickTask implements GameTickTask {
         List<Store> stores = storeRepository.findBySeason_IdOrderByIdAsc(season.getId());
         for (Store store : stores) {
             try {
-                gameDayStateService.refreshGameState(store);
+                gameDayStateService.refreshGameState(store)
+                        .ifPresent(response -> log.info(
+                                "game-state-tick storeId={} seasonId={} day={} customerCount={} cash={} totalStock={}",
+                                store.getId(),
+                                response.seasonId(),
+                                response.day(),
+                                response.customerCount(),
+                                response.cash(),
+                                response.inventory() == null ? null : response.inventory().totalStock()
+                        ));
             } catch (Exception e) {
                 log.error(
                         "Failed to refresh game day store state. seasonId={} storeId={}",

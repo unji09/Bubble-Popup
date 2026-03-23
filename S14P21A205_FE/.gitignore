@@ -11,7 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
-public/unity/
+public/unity/Build
+public/unity/TemplateData
 
 # Editor directories and files
 .vscode/*

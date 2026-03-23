@@ -11,7 +11,11 @@ public class CustomerScorePolicy {
     private static final BigDecimal SCORE_OFFSET = new BigDecimal("600");
     private static final BigDecimal DECIMAL_ZERO = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
 
-    public CustomerScoreResult calculate(PopulationPolicy.PopulationSnapshot populationSnapshot, Integer regionStoreCount) {
+    public CustomerScoreResult calculate(
+            PopulationPolicy.PopulationSnapshot populationSnapshot,
+            Integer regionStoreCount,
+            BigDecimal captureRate
+    ) {
         if (populationSnapshot == null || regionStoreCount == null || regionStoreCount <= 0) {
             return CustomerScoreResult.empty();
         }
@@ -26,13 +30,22 @@ public class CustomerScorePolicy {
         BigDecimal rValue = BigDecimal.valueOf(currentFloatingPopulation)
                 .divide(BigDecimal.valueOf(regionStoreCount), 6, RoundingMode.HALF_UP);
         int populationPerStore = rValue.setScale(0, RoundingMode.HALF_UP).intValue();
-        int customerCount = SCORE_MULTIPLIER
+        BigDecimal score = SCORE_MULTIPLIER
                 .multiply(rValue)
                 .divide(rValue.add(SCORE_OFFSET), 6, RoundingMode.HALF_UP)
+                .multiply(normalizeCaptureRate(captureRate));
+        int customerCount = score
                 .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
 
         return new CustomerScoreResult(populationPerStore, rValue, customerCount);
+    }
+
+    private BigDecimal normalizeCaptureRate(BigDecimal captureRate) {
+        if (captureRate == null || captureRate.signum() <= 0) {
+            return DECIMAL_ZERO;
+        }
+        return captureRate.setScale(6, RoundingMode.HALF_UP);
     }
 
     public record CustomerScoreResult(

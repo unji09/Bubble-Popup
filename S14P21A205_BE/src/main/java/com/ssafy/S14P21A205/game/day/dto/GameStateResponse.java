@@ -48,10 +48,8 @@ public record GameStateResponse(
     public record ActionStatus(
             Boolean discountUsed,
             Boolean donationUsed,
-            Boolean influencerUsed,
-            Boolean snsUsed,
-            Boolean leafletUsed,
-            Boolean friendUsed,
+            Boolean promotionUsed,
+            Boolean emergencyUsed,
             Boolean emergencyOrderPending,
             LocalDateTime emergencyOrderArriveAt
     ) {

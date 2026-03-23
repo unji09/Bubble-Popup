@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ssafy.S14P21A205.action.dto.ActionStatusResponse;
 import com.ssafy.S14P21A205.action.dto.DiscountRequest;
 import com.ssafy.S14P21A205.action.dto.DiscountResponse;
 import com.ssafy.S14P21A205.action.dto.DonationRequest;
@@ -15,6 +16,7 @@ import com.ssafy.S14P21A205.action.dto.EmergencyOrderRequest;
 import com.ssafy.S14P21A205.action.dto.EmergencyOrderResponse;
 import com.ssafy.S14P21A205.action.entity.Action;
 import com.ssafy.S14P21A205.action.entity.ActionCategory;
+import com.ssafy.S14P21A205.action.entity.PromotionType;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
@@ -114,6 +116,63 @@ class ActionServiceImplTests {
     }
 
     @Test
+    void getActionStatusTreatsLegacyPromotionKeysAsPromotionUsed() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of("sns", true));
+
+        ActionStatusResponse response = actionService.getActionStatus(1);
+
+        assertThat(response.discountUsed()).isFalse();
+        assertThat(response.donationUsed()).isFalse();
+        assertThat(response.emergencyUsed()).isFalse();
+        assertThat(response.promotionUsed()).isTrue();
+    }
+
+    @Test
+    void executePromotionBlocksWhenAnyLegacyPromotionKeyIsAlreadyUsed() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of("leaflet", true));
+
+        assertThatThrownBy(() -> actionService.executePromotion(
+                1,
+                new com.ssafy.S14P21A205.action.dto.PromotionRequest(PromotionType.SNS)
+        ))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.ACTION_ALREADY_USED));
+    }
+
+    @Test
+    void executePromotionMarksSharedPromotionFlagAndLegacyTypeFlag() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("0.10"));
+        GameDayLiveState state = state(500_000L);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
+        when(actionRepository.findByCategoryAndPromotionType(ActionCategory.PROMOTION, PromotionType.SNS))
+                .thenReturn(Optional.of(promotionAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+
+        actionService.executePromotion(
+                1,
+                new com.ssafy.S14P21A205.action.dto.PromotionRequest(PromotionType.SNS)
+        );
+
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5500");
+        verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "promotion");
+        verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "sns");
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 499_500L);
+    }
+
+    @Test
     void executeDiscountAppliesTwoHundredPercentBandMultiplier() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 5_000);
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
@@ -121,7 +180,7 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(storeRepository.findAveragePriceBySeasonIdAndMenuId(9L, 7L)).thenReturn(2_000);
@@ -146,7 +205,7 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(storeRepository.findAveragePriceBySeasonIdAndMenuId(9L, 7L)).thenReturn(4_000);
@@ -167,7 +226,7 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(storeRepository.findAveragePriceBySeasonIdAndMenuId(9L, 7L)).thenReturn(4_000);
@@ -188,7 +247,7 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(storeRepository.findAveragePriceBySeasonIdAndMenuId(9L, 7L)).thenReturn(4_000);
@@ -209,7 +268,7 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(storeRepository.findAveragePriceBySeasonIdAndMenuId(9L, 7L)).thenReturn(2_500);
@@ -231,7 +290,7 @@ class ActionServiceImplTests {
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
 
         assertThatThrownBy(() -> actionService.executeDiscount(1, new DiscountRequest(600)))
@@ -248,7 +307,7 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "donation")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
 
@@ -274,7 +333,7 @@ class ActionServiceImplTests {
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
         when(menuRepository.findById(8L)).thenReturn(Optional.of(emergencyMenu));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "emergency")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(
@@ -330,7 +389,7 @@ class ActionServiceImplTests {
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
         when(menuRepository.findById(7L)).thenReturn(Optional.of(store.getMenu()));
-        when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "emergency")).thenReturn(false);
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
 
@@ -404,11 +463,10 @@ class ActionServiceImplTests {
                 SeasonStatus.IN_PROGRESS
         )).thenReturn(Optional.of(store));
         when(menuRepository.findById(GameDayTestFixtures.MENU_ID)).thenReturn(Optional.of(menu));
-        when(gameDayStoreStateRedisRepository.isActionUsed(
+        when(gameDayStoreStateRedisRepository.getActions(
                 GameDayTestFixtures.STORE_ID,
-                GameDayTestFixtures.CURRENT_DAY,
-                "emergency"
-        )).thenReturn(false);
+                GameDayTestFixtures.CURRENT_DAY
+        )).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
                 .thenReturn(Optional.of(state));
@@ -511,6 +569,13 @@ class ActionServiceImplTests {
         ReflectionTestUtils.setField(action, "category", category);
         ReflectionTestUtils.setField(action, "cost", cost);
         ReflectionTestUtils.setField(action, "captureRate", BigDecimal.ZERO);
+        return action;
+    }
+
+    private Action promotionAction(PromotionType promotionType, int cost, BigDecimal captureRate) {
+        Action action = action(ActionCategory.PROMOTION, cost);
+        ReflectionTestUtils.setField(action, "promotionType", promotionType);
+        ReflectionTestUtils.setField(action, "captureRate", captureRate);
         return action;
     }
 

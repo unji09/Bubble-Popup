@@ -46,6 +46,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @Slf4j
@@ -83,6 +85,10 @@ public class ActionServiceImpl implements ActionService {
     private static final BigDecimal RATIO_60 = new BigDecimal("0.60");
     private static final BigDecimal DONATION_CAPTURE_RATE_BONUS = new BigDecimal("0.10");
     private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
+    private static final String ACTION_FIELD_DISCOUNT = "discount";
+    private static final String ACTION_FIELD_DONATION = "donation";
+    private static final String ACTION_FIELD_EMERGENCY = "emergency";
+    private static final String ACTION_FIELD_PROMOTION = "promotion";
 
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ActionRepository actionRepository;
@@ -105,7 +111,7 @@ public class ActionServiceImpl implements ActionService {
         Store store = findStore(userId);
         int day = resolveCurrentDay(store);
         Map<String, Boolean> actions = gameDayStoreStateRedisRepository.getActions(store.getId(), day);
-        return ActionStatusResponse.from(actions);
+        return ActionStatusResponse.from(actions == null ? Map.of() : actions);
     }
 
     @Override
@@ -119,9 +125,9 @@ public class ActionServiceImpl implements ActionService {
     public ActionResponse executePromotion(Integer userId, PromotionRequest request) {
         Store store = findStore(userId);
         int day = resolveCurrentDay(store);
-        String field = request.promotionType().name().toLowerCase();
+        String legacyField = request.promotionType().name().toLowerCase();
 
-        validateNotUsed(store.getId(), day, field);
+        validateNotUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
 
         Action action = actionRepository
                 .findByCategoryAndPromotionType(ActionCategory.PROMOTION, request.promotionType())
@@ -129,11 +135,20 @@ public class ActionServiceImpl implements ActionService {
         long updatedBalance = resolveUpdatedBalance("PROMOTION", userId, store, day, valueOf(action.getCost()));
 
         BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
-        applyCaptureRateMultiplier(store.getId(), day, multiplier);
+        BigDecimal newCaptureRate = resolveAppliedCaptureRate(store.getId(), day, multiplier);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
-        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, field);
-        gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        afterCommit(() -> {
+            gameDayStoreStateRedisRepository.updateField(
+                    store.getId(),
+                    day,
+                    "capture_rate",
+                    newCaptureRate.toPlainString()
+            );
+            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
+            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, legacyField);
+            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        });
 
         logActionExecution(
                 "PROMOTION",
@@ -157,7 +172,7 @@ public class ActionServiceImpl implements ActionService {
         Store store = findStore(userId);
         int day = resolveCurrentDay(store);
 
-        validateNotUsed(store.getId(), day, "discount");
+        validateNotUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
 
         Action action = findSingleAction(ActionCategory.DISCOUNT);
         int previousPrice = store.getPrice();
@@ -179,12 +194,20 @@ public class ActionServiceImpl implements ActionService {
         }
         PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
 
-        gameDayStoreStateRedisRepository.updateField(store.getId(), day, "sale_price", String.valueOf(newPrice));
-        applyCaptureRateMultiplier(store.getId(), day, priceRange.multiplier());
+        BigDecimal newCaptureRate = resolveAppliedCaptureRate(store.getId(), day, priceRange.multiplier());
 
         actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier()));
-        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "discount");
-        gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        afterCommit(() -> {
+            gameDayStoreStateRedisRepository.updateField(store.getId(), day, "sale_price", String.valueOf(newPrice));
+            gameDayStoreStateRedisRepository.updateField(
+                    store.getId(),
+                    day,
+                    "capture_rate",
+                    newCaptureRate.toPlainString()
+            );
+            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
+            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        });
 
         logActionExecution(
                 "DISCOUNT",
@@ -216,7 +239,7 @@ public class ActionServiceImpl implements ActionService {
         Store store = findStore(userId);
         int day = resolveCurrentDay(store);
 
-        validateNotUsed(store.getId(), day, "donation");
+        validateNotUsed(store.getId(), day, ACTION_FIELD_DONATION);
 
         Action action = findSingleAction(ActionCategory.DONATION);
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day)
@@ -230,14 +253,21 @@ public class ActionServiceImpl implements ActionService {
         BigDecimal captureRateBonus = DONATION_CAPTURE_RATE_BONUS.setScale(2, RoundingMode.HALF_UP);
 
         int newStock = currentStock - request.quantity();
-        gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", String.valueOf(newStock));
-
         BigDecimal multiplier = BigDecimal.ONE.add(captureRateBonus);
-        applyCaptureRateMultiplier(store.getId(), day, multiplier);
+        BigDecimal newCaptureRate = resolveAppliedCaptureRate(store.getId(), day, multiplier);
 
         actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
-        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "donation");
-        gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        afterCommit(() -> {
+            gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", String.valueOf(newStock));
+            gameDayStoreStateRedisRepository.updateField(
+                    store.getId(),
+                    day,
+                    "capture_rate",
+                    newCaptureRate.toPlainString()
+            );
+            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DONATION);
+            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        });
 
         logActionExecution(
                 "DONATION",
@@ -266,7 +296,7 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        validateNotUsed(store.getId(), day, "emergency");
+        validateNotUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
 
         Action action = findSingleAction(ActionCategory.EMERGENCY_ORDER);
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day)
@@ -316,8 +346,10 @@ public class ActionServiceImpl implements ActionService {
                 )
         );
 
-        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "emergency");
-        gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        afterCommit(() -> {
+            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
+            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+        });
 
         logActionExecution(
                 "EMERGENCY_ORDER",
@@ -366,7 +398,14 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private void validateNotUsed(Long storeId, int day, String field) {
-        if (gameDayStoreStateRedisRepository.isActionUsed(storeId, day, field)) {
+        Map<String, Boolean> actions = gameDayStoreStateRedisRepository.getActions(storeId, day);
+        if (actions == null) {
+            actions = Map.of();
+        }
+        boolean alreadyUsed = ACTION_FIELD_PROMOTION.equals(field)
+                ? ActionStatusResponse.isPromotionUsed(actions)
+                : Boolean.TRUE.equals(actions.get(field));
+        if (alreadyUsed) {
             throw new BaseException(ErrorCode.ACTION_ALREADY_USED);
         }
     }
@@ -389,7 +428,7 @@ public class ActionServiceImpl implements ActionService {
         return currentBalance - normalizedRequiredAmount;
     }
 
-    private void applyCaptureRateMultiplier(Long storeId, int day, BigDecimal multiplier) {
+    private BigDecimal resolveAppliedCaptureRate(Long storeId, int day, BigDecimal multiplier) {
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(storeId, day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
         BigDecimal currentRate = state.captureRate() != null
@@ -397,8 +436,7 @@ public class ActionServiceImpl implements ActionService {
                 : state.startResponse() != null && state.startResponse().captureRate() != null
                 ? state.startResponse().captureRate()
                 : BigDecimal.ZERO;
-        BigDecimal newRate = captureRatePolicy.applyMultiplier(currentRate, multiplier);
-        gameDayStoreStateRedisRepository.updateField(storeId, day, "capture_rate", newRate.toPlainString());
+        return captureRatePolicy.applyMultiplier(currentRate, multiplier);
     }
 
     private PriceRange determinePriceRange(int sellingPrice, int averagePrice) {
@@ -569,6 +607,20 @@ public class ActionServiceImpl implements ActionService {
 
     private long valueOf(Integer amount) {
         return amount == null ? 0L : amount.longValue();
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+            return;
+        }
+        action.run();
     }
 
     private record PriceRange(String label, BigDecimal multiplier) {

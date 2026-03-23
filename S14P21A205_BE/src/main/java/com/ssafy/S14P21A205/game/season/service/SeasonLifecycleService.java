@@ -1137,7 +1137,7 @@ public class SeasonLifecycleService {
     }
 
     private LocalDateTime resolveSeasonFinishAt(Season season) {
-        return seasonTimelineService.resolveSeasonSummaryEndAt(season);
+        return seasonTimelineService.resolveSeasonSummaryStartAt(season);
     }
 
     private void scheduleNextSeasonIfNeeded(Season finishedSeason, LocalDateTime nextSeasonStartAt) {

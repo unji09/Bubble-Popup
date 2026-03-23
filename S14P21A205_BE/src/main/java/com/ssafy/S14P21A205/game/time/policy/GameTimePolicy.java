@@ -217,8 +217,12 @@ public class GameTimePolicy {
         return LocalTime.of(BUSINESS_OPEN_HOUR, 0).plusMinutes(gameMinutes).format(TIME_FORMATTER);
     }
 
+    public LocalDateTime resolveSeasonSummaryStartAt(LocalDateTime seasonStartTime, int totalDays) {
+        return seasonStartTime.plus(playableDuration(totalDays));
+    }
+
     public LocalDateTime resolveSeasonSummaryEndAt(LocalDateTime seasonStartTime, int totalDays) {
-        return seasonStartTime.plus(playableDuration(totalDays)).plus(SEASON_SUMMARY_DURATION);
+        return resolveSeasonSummaryStartAt(seasonStartTime, totalDays).plus(SEASON_SUMMARY_DURATION);
     }
 
     public LocalDateTime resolveNextSeasonWaitStartAt(LocalDateTime seasonStartTime, int totalDays) {

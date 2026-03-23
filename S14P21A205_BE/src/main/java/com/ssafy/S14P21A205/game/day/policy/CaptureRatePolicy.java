@@ -32,7 +32,7 @@ public class CaptureRatePolicy {
         if (value == null) {
             return DECIMAL_ZERO.setScale(4, RoundingMode.HALF_UP);
         }
-        return value.max(DECIMAL_ZERO).setScale(4, RoundingMode.HALF_UP);
+        return value.max(DECIMAL_ZERO).min(DECIMAL_ONE).setScale(4, RoundingMode.HALF_UP);
     }
 
     private BigDecimal normalizePositiveMultiplier(BigDecimal value) {
