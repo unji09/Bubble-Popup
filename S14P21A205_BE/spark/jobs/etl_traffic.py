@@ -23,16 +23,29 @@ if not xlsx_files:
     spark.stop()
     raise SystemExit(1)
 
-# 엑셀 파일 구조:
-# - 시트 0: 범례 (스킵)
-# - 시트 1: 실제 교통량 데이터 (컬럼: 일자, 요일, 지점명, 지점번호, 방향, 방향설명, 0시~23시)
-# - 시트 2+: 지점 주소 등 참고 정보 (스킵)
-# dataAddress로 두 번째 시트 지정
+TEMP_OUTPUT_PATH = "hdfs://namenode:9000/tmp/traffic_unpivot/"
+FINAL_OUTPUT_PATH = "hdfs://namenode:9000/processed/traffic/"
 
-from functools import reduce
-from pyspark.sql import DataFrame
 
-dfs = []
+def delete_hdfs_path_if_exists(path_text):
+    path = hadoop.Path(path_text)
+    if fs.exists(path):
+        fs.delete(path, True)
+
+
+def find_column(columns, keyword, exact=False):
+    for column_name in columns:
+        stripped = column_name.strip()
+        if exact and stripped == keyword:
+            return column_name
+        if not exact and keyword in stripped:
+            return column_name
+    return None
+
+
+delete_hdfs_path_if_exists(TEMP_OUTPUT_PATH)
+processed_any = False
+
 for path in xlsx_files:
     match = re.search(r"seoul_traffic_(\d{4})_(\d{2})\.xlsx$", path)
     if not match:
@@ -57,8 +70,35 @@ for path in xlsx_files:
                 .option("maxRowsInMemory", "200") \
                 .option("dataAddress", data_address) \
                 .load(path)
-            dfs.append(_df)
             print(f"Loaded traffic sheet {data_address} from {path}")
+
+            hour_cols = [c for c in _df.columns if c.endswith("시") and c[:-1].isdigit()]
+            if not hour_cols:
+                raise RuntimeError(f"Hour columns not found in path={path}, columns={_df.columns}")
+
+            spot_col = find_column(_df.columns, "지점번호")
+            ymd_col = find_column(_df.columns, "일자")
+            dir_col = find_column(_df.columns, "방향", exact=True)
+            if not spot_col or not ymd_col or not dir_col:
+                raise RuntimeError(
+                    f"Traffic columns missing in path={path}. "
+                    f"spot_col={spot_col}, ymd_col={ymd_col}, dir_col={dir_col}, columns={_df.columns}"
+                )
+
+            stack_expr = ", ".join([f"'{c[:-1]}', `{c}`" for c in hour_cols])
+            stack_sql = f"stack({len(hour_cols)}, {stack_expr}) as (HH, VOL)"
+
+            df_unpivot = _df.select(
+                trim(col(spot_col)).cast(StringType()).alias("SPOT_NUM"),
+                col(ymd_col).cast(IntegerType()).cast(StringType()).alias("YMD"),
+                trim(col(dir_col)).alias("DIR"),
+                expr(stack_sql)
+            ).withColumn("HH", col("HH").cast(IntegerType())) \
+             .withColumn("VOL", col("VOL").cast(IntegerType()))
+
+            df_target = df_unpivot.filter(col("SPOT_NUM").isin(TARGET_SPOTS))
+            df_target.write.mode("append").parquet(TEMP_OUTPUT_PATH)
+            processed_any = True
             loaded = True
             break
         except Exception as exc:
@@ -67,61 +107,13 @@ for path in xlsx_files:
     if not loaded:
         raise RuntimeError(f"Failed to load traffic workbook path={path}, candidates={candidate_sheets}, error={last_error}")
 
-if not dfs:
-    print("ERROR: No traffic workbooks could be loaded")
+if not processed_any:
+    print("ERROR: No traffic workbooks could be processed")
     spark.stop()
     raise SystemExit(1)
 
-df = reduce(DataFrame.unionByName, dfs)
-print("Traffic columns:", df.columns)
-print("Traffic row count (raw):", df.count())
-
-# 컬럼 구조: 일자, 요일, 지점명, 지점번호, 방향, 방향설명, 0시, 1시, ..., 23시
-# 시간별 컬럼(0시~23시)을 unpivot하여 HH, VOL 형태로 변환
-hour_cols = [c for c in df.columns if c.endswith("시") and c[:-1].isdigit()]
-print(f"Hour columns found: {hour_cols}")
-
-if not hour_cols:
-    print("ERROR: Could not find hour columns (0시~23시)")
-    print("Available columns:", df.columns)
-    spark.stop()
-    raise SystemExit(1)
-
-# 컬럼 찾기
-spot_col = None
-ymd_col = None
-dir_col = None
-for c in df.columns:
-    cl = c.strip()
-    if "지점번호" in cl:
-        spot_col = c
-    elif "일자" in cl:
-        ymd_col = c
-    elif "방향" == cl:
-        dir_col = c
-
-if not spot_col or not ymd_col or not dir_col:
-    print(f"ERROR: spot_col={spot_col}, ymd_col={ymd_col}, dir_col={dir_col}")
-    print("Available columns:", df.columns)
-    spark.stop()
-    raise SystemExit(1)
-
-print(f"Using spot_col='{spot_col}', ymd_col='{ymd_col}', dir_col='{dir_col}'")
-
-# stack()으로 unpivot: 시간별 컬럼 → (HH, VOL) 행, 방향 포함
-stack_expr = ", ".join([f"'{c[:-1]}', `{c}`" for c in hour_cols])
-stack_sql = f"stack({len(hour_cols)}, {stack_expr}) as (HH, VOL)"
-
-df_unpivot = df.select(
-    trim(col(spot_col)).cast(StringType()).alias("SPOT_NUM"),
-    col(ymd_col).cast(IntegerType()).cast(StringType()).alias("YMD"),
-    trim(col(dir_col)).alias("DIR"),
-    expr(stack_sql)
-).withColumn("HH", col("HH").cast(IntegerType())) \
- .withColumn("VOL", col("VOL").cast(IntegerType()))
-
-# 타겟 지점만 필터링
-df_target = df_unpivot.filter(col("SPOT_NUM").isin(TARGET_SPOTS))
+df_target = spark.read.parquet(TEMP_OUTPUT_PATH)
+print("Traffic row count (raw target):", df_target.count())
 
 # 유입/유출 중 하나만 선택: 유입 우선, 없으면 유출
 # 방향 우선순위: 유입=1, 유출=2
@@ -140,9 +132,9 @@ df_dedup = df_ranked.withColumn("rn", row_number().over(w)) \
 
 df_filtered = df_dedup
 
-df_filtered.write.mode("overwrite").parquet(
-    "hdfs://namenode:9000/processed/traffic/"
-)
+delete_hdfs_path_if_exists(FINAL_OUTPUT_PATH)
+df_filtered.write.mode("overwrite").parquet(FINAL_OUTPUT_PATH)
 
 print(f"Traffic ETL complete. Rows: {df_filtered.count()}")
+delete_hdfs_path_if_exists(TEMP_OUTPUT_PATH)
 spark.stop()
