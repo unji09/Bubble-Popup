@@ -1,0 +1,2 @@
+ALTER TABLE orders
+    ADD COLUMN sale_price INT NOT NULL DEFAULT 0;
