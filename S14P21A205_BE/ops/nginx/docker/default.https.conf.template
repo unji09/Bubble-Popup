@@ -23,7 +23,7 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location ^~ /api/ {
-        proxy_pass http://backend:8080;
+        proxy_pass http://backend:8080/;
         proxy_http_version 1.1;
 
         proxy_set_header Host $host;
