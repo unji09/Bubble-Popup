@@ -2,6 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, trim, lit, expr, first, when
 from pyspark.sql.types import IntegerType, StringType
 from pyspark.sql import Window
+import re
 
 TARGET_SPOTS = ["D-06", "D-23", "D-44", "D-43", "A-12", "D-04", "D-28", "D-17"]
 
@@ -33,12 +34,42 @@ from pyspark.sql import DataFrame
 
 dfs = []
 for path in xlsx_files:
-    _df = spark.read.format("com.crealytics.spark.excel") \
-        .option("header", "true") \
-        .option("inferSchema", "true") \
-        .option("dataAddress", "'2024년 12월'!A1") \
-        .load(path)
-    dfs.append(_df)
+    match = re.search(r"seoul_traffic_(\d{4})_(\d{2})\.xlsx$", path)
+    if not match:
+        print(f"SKIP: could not parse sheet name from path={path}")
+        continue
+
+    year = match.group(1)
+    month_padded = match.group(2)
+    month = str(int(month_padded))
+    candidate_sheets = [
+        f"'{year}년 {month_padded}월'!A1",
+        f"'{year}년 {month}월'!A1",
+    ]
+
+    loaded = False
+    last_error = None
+    for data_address in candidate_sheets:
+        try:
+            _df = spark.read.format("com.crealytics.spark.excel") \
+                .option("header", "true") \
+                .option("inferSchema", "true") \
+                .option("dataAddress", data_address) \
+                .load(path)
+            dfs.append(_df)
+            print(f"Loaded traffic sheet {data_address} from {path}")
+            loaded = True
+            break
+        except Exception as exc:
+            last_error = exc
+
+    if not loaded:
+        raise RuntimeError(f"Failed to load traffic workbook path={path}, candidates={candidate_sheets}, error={last_error}")
+
+if not dfs:
+    print("ERROR: No traffic workbooks could be loaded")
+    spark.stop()
+    raise SystemExit(1)
 
 df = reduce(DataFrame.unionByName, dfs)
 print("Traffic columns:", df.columns)
