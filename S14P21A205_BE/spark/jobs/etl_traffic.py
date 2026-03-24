@@ -53,7 +53,8 @@ for path in xlsx_files:
         try:
             _df = spark.read.format("com.crealytics.spark.excel") \
                 .option("header", "true") \
-                .option("inferSchema", "true") \
+                .option("inferSchema", "false") \
+                .option("maxRowsInMemory", "200") \
                 .option("dataAddress", data_address) \
                 .load(path)
             dfs.append(_df)
