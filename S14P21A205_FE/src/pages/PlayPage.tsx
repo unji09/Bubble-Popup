@@ -634,9 +634,6 @@ function PlayPageSession({
     syncActionUsageState("emergency", emergencyUsed);
   };
 
-  const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
-  const [stockDelta, setStockDelta] = useState<number | null>(null);
-  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
   const unityBridgeRef = useRef<UnityBridgeHandle | null>(null);
   const latestTrafficStatusRef = useRef<GameTrafficStatus | null>(null);
   const lastUnityCongestionLevelRef = useRef<UnityCongestionLevel | null>(null);

@@ -194,7 +194,6 @@ export default function EmergencyOrderModal({
   }
 
   const isCurrentMenu = selectedMenu.menuId === currentMenuId;
-  const appliedCurrentPricing = isCurrentMenu ? currentMenuPricing : null;
   const ingredientDiscountMultiplier = selectedMenu.ingredientDiscountMultiplier;
   const hasItemDiscount = ingredientDiscountMultiplier < 1;
   // 판매가 범위는 메뉴 기본 원가 기준 (정규 발주와 동일)
