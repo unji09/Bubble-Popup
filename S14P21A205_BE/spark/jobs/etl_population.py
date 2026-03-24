@@ -21,6 +21,7 @@ df = spark.read.csv(
     "hdfs://namenode:9000/data/population/",
     header=True,
     encoding="euc-kr",
+    recursiveFileLookup="true",
 )
 
 cols = df.columns

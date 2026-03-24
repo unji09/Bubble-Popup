@@ -8,6 +8,7 @@ ETL에 전달할 랜덤 시작 날짜를 결정합니다.
 출력 형식: DATE:YYYYMMDD (한 줄에 하나씩, 오름차순)
 """
 
+import sys
 from pyspark.sql import SparkSession
 
 spark = SparkSession.builder \
@@ -20,6 +21,7 @@ try:
     for row in dates:
         print(f"DATE:{row['YMD']}")
 except Exception as e:
-    print(f"ERROR:{e}")
+    print(f"ERROR:{e}", file=sys.stderr)
+    raise
 finally:
     spark.stop()

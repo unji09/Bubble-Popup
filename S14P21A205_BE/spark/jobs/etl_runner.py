@@ -85,6 +85,8 @@ def load_total_days(connection, season_id):
 def parse_available_dates(output):
     dates = []
     for line in output.splitlines():
+        if line.startswith('ERROR:'):
+            raise RuntimeError(line[6:].strip() or 'list_available_dates failed')
         if line.startswith('DATE:'):
             dates.append(line[5:].strip())
     return sorted(dates)
