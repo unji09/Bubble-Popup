@@ -1,0 +1,5 @@
+item_name,category,point,discount_rate
+원재료값 할인권(대),INGREDIENT,30,0.80
+임대료 할인권(대),RENT,30,0.80
+원재료값 할인권(소),INGREDIENT,10,0.95
+임대료 할인권(소),RENT,10,0.95

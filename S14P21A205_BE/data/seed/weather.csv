@@ -1,0 +1,7 @@
+weather_type,population_percent
+SUNNY,1.10
+RAIN,0.90
+SNOW,0.80
+HEATWAVE,0.90
+FOG,0.95
+COLDWAVE,0.90
