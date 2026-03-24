@@ -48,3 +48,7 @@ out/
 
 # Spark jars (downloaded at docker build time)
 spark/jars/
+
+# Local raw data for Hadoop/Spark
+data/*
+!data/init-hdfs.sh
