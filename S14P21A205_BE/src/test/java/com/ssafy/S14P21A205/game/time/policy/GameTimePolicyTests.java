@@ -21,9 +21,9 @@ class GameTimePolicyTests {
                 .isEqualTo(SeasonPhase.LOCATION_SELECTION);
         assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(120)))
                 .isEqualTo(SeasonPhase.DAY_PREPARING);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(170)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(160)))
                 .isEqualTo(SeasonPhase.DAY_BUSINESS);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(290)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(280)))
                 .isEqualTo(SeasonPhase.DAY_REPORT);
         assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(300)))
                 .isEqualTo(SeasonPhase.DAY_PREPARING);
@@ -37,7 +37,7 @@ class GameTimePolicyTests {
 
     @Test
     void convertsBusinessElapsedSecondsToGameTimeAndTick() {
-        LocalDateTime dayOneBusinessStart = SEASON_START_AT.plusSeconds(170);
+        LocalDateTime dayOneBusinessStart = SEASON_START_AT.plusSeconds(160);
 
         assertThat(gameTimePolicy.resolveGameTime(SEASON_START_AT, TOTAL_DAYS, dayOneBusinessStart))
                 .isEqualTo("10:00");
@@ -73,7 +73,7 @@ class GameTimePolicyTests {
                 .isEqualTo(6);
         assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, dayFiveReport)).isTrue();
 
-        LocalDateTime daySixBusiness = SEASON_START_AT.plusSeconds(120 + 5L * 180L + 50L);
+        LocalDateTime daySixBusiness = SEASON_START_AT.plusSeconds(120 + 5L * 180L + 40L);
         assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, daySixBusiness))
                 .isNull();
         assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, daySixBusiness)).isFalse();

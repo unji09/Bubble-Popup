@@ -14,9 +14,9 @@ public class GameTimePolicy {
     public static final int BUSINESS_CLOSE_HOUR = 22;
 
     private static final Duration LOCATION_SELECTION_DURATION = Duration.ofMinutes(2);
-    private static final Duration PREP_DURATION = Duration.ofSeconds(50);
+    private static final Duration PREP_DURATION = Duration.ofSeconds(40);
     private static final Duration BUSINESS_DURATION = Duration.ofMinutes(2);
-    private static final Duration REPORT_DURATION = Duration.ofSeconds(10);
+    private static final Duration REPORT_DURATION = Duration.ofSeconds(20);
     private static final Duration DAY_DURATION = PREP_DURATION.plus(BUSINESS_DURATION).plus(REPORT_DURATION);
     private static final Duration SEASON_SUMMARY_DURATION = Duration.ofMinutes(2);
     private static final Duration NEXT_SEASON_WAIT_DURATION = Duration.ofMinutes(5);

@@ -37,8 +37,8 @@ class TrafficDelayResolverTests {
 
     @Test
     void resolveReturnsRedisTrafficForExactDayAndHour() {
-        when(trafficDayRedisRepository.findHour(9L, 3L, 2, 12))
-                .thenReturn(Optional.of(new TrafficDayRedisRepository.TrafficEntry(12, TrafficStatus.CONGESTED)));
+        when(trafficDayRedisRepository.findHour(9L, 3L, 2, 13))
+                .thenReturn(Optional.of(new TrafficDayRedisRepository.TrafficEntry(13, TrafficStatus.CONGESTED)));
 
         TrafficDelayResolver.ResolvedTraffic resolvedTraffic = trafficDelayResolver.resolve(
                 9L,
@@ -50,21 +50,21 @@ class TrafficDelayResolverTests {
         );
 
         assertThat(resolvedTraffic.resolvedDay()).isEqualTo(2);
-        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(12);
+        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(13);
         assertThat(resolvedTraffic.trafficStatus()).isEqualTo(TrafficStatus.CONGESTED);
         assertThat(resolvedTraffic.delaySeconds()).isEqualTo(25);
     }
 
     @Test
     void resolveFallsBackToFixedDayTableWhenRedisMisses() {
-        when(trafficDayRedisRepository.findHour(9L, 3L, 2, 11)).thenReturn(Optional.empty());
+        when(trafficDayRedisRepository.findHour(9L, 3L, 2, 12)).thenReturn(Optional.empty());
         when(trafficRepository.findByLocation_IdAndDateBetweenOrderByDateAsc(
                 3L,
                 LocalDateTime.of(2026, 3, 17, 0, 0),
                 LocalDateTime.of(2026, 3, 17, 23, 59, 59, 999_999_999)
         )).thenReturn(List.of(
                 traffic(3L, LocalDateTime.of(2026, 3, 17, 10, 0), TrafficStatus.SMOOTH),
-                traffic(3L, LocalDateTime.of(2026, 3, 17, 11, 0), TrafficStatus.VERY_SMOOTH)
+                traffic(3L, LocalDateTime.of(2026, 3, 17, 12, 0), TrafficStatus.VERY_SMOOTH)
         ));
 
         TrafficDelayResolver.ResolvedTraffic resolvedTraffic = trafficDelayResolver.resolve(
@@ -77,14 +77,14 @@ class TrafficDelayResolverTests {
         );
 
         assertThat(resolvedTraffic.resolvedDay()).isEqualTo(2);
-        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(11);
+        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(12);
         assertThat(resolvedTraffic.trafficStatus()).isEqualTo(TrafficStatus.VERY_SMOOTH);
         assertThat(resolvedTraffic.delaySeconds()).isEqualTo(5);
     }
 
     @Test
     void resolveReturnsNormalFallbackWhenFixedDayHourIsMissing() {
-        when(trafficDayRedisRepository.findHour(9L, 3L, 2, 14)).thenReturn(Optional.empty());
+        when(trafficDayRedisRepository.findHour(9L, 3L, 2, 15)).thenReturn(Optional.empty());
         when(trafficRepository.findByLocation_IdAndDateBetweenOrderByDateAsc(
                 3L,
                 LocalDateTime.of(2026, 3, 17, 0, 0),
@@ -103,14 +103,14 @@ class TrafficDelayResolverTests {
         );
 
         assertThat(resolvedTraffic.resolvedDay()).isEqualTo(2);
-        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(14);
+        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(15);
         assertThat(resolvedTraffic.trafficStatus()).isEqualTo(TrafficStatus.NORMAL);
         assertThat(resolvedTraffic.delaySeconds()).isEqualTo(20);
     }
 
     @Test
     void resolveReturnsNormalFallbackWhenSeasonTrafficIsMissing() {
-        when(trafficDayRedisRepository.findHour(9L, 3L, 1, 11)).thenReturn(Optional.empty());
+        when(trafficDayRedisRepository.findHour(9L, 3L, 1, 12)).thenReturn(Optional.empty());
         when(trafficRepository.findByLocation_IdAndDateBetweenOrderByDateAsc(
                 3L,
                 LocalDateTime.of(2026, 3, 17, 0, 0),
@@ -127,7 +127,7 @@ class TrafficDelayResolverTests {
         );
 
         assertThat(resolvedTraffic.resolvedDay()).isEqualTo(1);
-        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(11);
+        assertThat(resolvedTraffic.resolvedHour()).isEqualTo(12);
         assertThat(resolvedTraffic.trafficStatus()).isEqualTo(TrafficStatus.NORMAL);
         assertThat(resolvedTraffic.delaySeconds()).isEqualTo(20);
     }

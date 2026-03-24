@@ -17,6 +17,8 @@ import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,6 +40,7 @@ public class SeasonRankingService {
     private final SeasonRankingRecordRepository seasonRankingRecordRepository;
     private final DailyReportRepository dailyReportRepository;
     private final UserService userService;
+    private final Clock clock;
 
     public CurrentSeasonTopRankingsResponse getCurrentTopRankings() {
         CurrentSeasonTopRankingsResponse cachedResponse = seasonRankingRedisRepository.findCurrentTopRankings()
@@ -61,8 +64,7 @@ public class SeasonRankingService {
     }
 
     private CurrentSeasonRankingsResponse getCurrentFinalRankings(Integer userId) {
-        Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+        Season season = resolveCurrentFinalRankingSeason(LocalDateTime.now(clock));
         Map<Long, Integer> bankruptcyDays = bankruptcyDays(season);
 
         List<RankingView> allRankings = seasonRankingRecordRepository
@@ -72,7 +74,7 @@ public class SeasonRankingService {
                 .sorted(rankingViewComparator())
                 .toList();
         if (allRankings.isEmpty()) {
-            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
+            throw new BaseException(ErrorCode.FINAL_RANKING_NOT_READY);
         }
 
         List<CurrentSeasonRankingItemResponse> rankings = extractDisplayRankings(allRankings);
@@ -81,6 +83,38 @@ public class SeasonRankingService {
                 rankings,
                 extractMyRankings(userId, allRankings)
         );
+    }
+
+    private Season resolveCurrentFinalRankingSeason(LocalDateTime now) {
+        Season inProgressSeason = seasonRepository
+                .findByStatusAndStartTimeLessThanEqualOrderByStartTimeDescIdDesc(SeasonStatus.IN_PROGRESS, now)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        if (inProgressSeason != null) {
+            return inProgressSeason;
+        }
+
+        Season finishedSeason = seasonRepository
+                .findByStatusAndStartTimeLessThanEqualAndEndTimeAfterOrderByEndTimeDescIdDesc(
+                        SeasonStatus.FINISHED,
+                        now,
+                        now
+                )
+                .stream()
+                .findFirst()
+                .orElse(null);
+        if (finishedSeason != null) {
+            return finishedSeason;
+        }
+
+        boolean hasCurrentOrUpcomingSeason = seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED).isPresent()
+                || seasonRepository.findFirstByOrderByIdDesc().isPresent();
+        if (hasCurrentOrUpcomingSeason) {
+            throw new BaseException(ErrorCode.FINAL_RANKING_NOT_READY);
+        }
+
+        throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
     private List<CurrentSeasonTopRankingItemResponse> normalizeTopRankings(List<CurrentSeasonTopRankingItemResponse> rankings) {

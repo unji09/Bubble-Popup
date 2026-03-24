@@ -77,7 +77,7 @@ export default function PlayHeader({
   balanceDelta,
 }: PlayHeaderProps) {
   const congestionInfo = congestionMap[congestion];
-  const formattedBalance = `₩${balance.toLocaleString()}`;
+  const formattedBalance = `${balance.toLocaleString()}원`;
   const isUrgent = remainingSeconds <= 10;
 
   return (
@@ -115,7 +115,7 @@ export default function PlayHeader({
         <div className="h-3.5 w-px bg-slate-300" />
         <div className="flex items-center gap-1">
           <span className="material-symbols-outlined text-[16px] text-primary">storefront</span>
-          <span className="font-bold text-slate-800 truncate max-w-[100px]">{storeName}</span>
+          <span className="font-bold text-slate-800 whitespace-nowrap">{storeName}</span>
         </div>
         <div className="h-3.5 w-px bg-slate-300 hidden sm:block" />
         <MenuBadge menuName={menuName} />

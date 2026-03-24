@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getSeasonTime, type CurrentSeasonTimeResponse } from "../api/game";
 import { getStore, type StoreResponse } from "../api/store";
 import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
+import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
 
 /** GameGuard가 하위 페이지에 전달하는 context */
@@ -136,11 +137,23 @@ export default function GameGuard() {
         joined = false;
       }
 
-      // 서버의 StoreResponse.playableFromDay로 대기 여부 판정 (새로고침해도 정확)
-      const playableFromDay = storeData?.playableFromDay ?? null;
+      // getStore 실패 시 sessionStorage의 playableFromDay를 fallback으로 사용
+      // (BE가 파산 후 재참여 시 store를 바로 안 만드는 경우 대비)
+      const cachedPlayableFromDay = useGameStore.getState().playableFromDay;
+      if (!joined && cachedPlayableFromDay != null && day < cachedPlayableFromDay) {
+        joined = true;
+      }
+
+      const playableFromDay = storeData?.playableFromDay ?? cachedPlayableFromDay;
       const waitingForPlayableDay = joined
         && playableFromDay != null
         && day < playableFromDay;
+
+      // playableFromDay를 지났으면 캐시 클리어 (다음 시즌에 영향 방지)
+      if (cachedPlayableFromDay != null && day >= cachedPlayableFromDay) {
+        useGameStore.getState().clearGame();
+      }
+
 
       const pathname = location.pathname;
       let allowed = false;
@@ -157,6 +170,17 @@ export default function GameGuard() {
       }
 
       if (allowed) {
+        // 대기 유저가 /game/waiting에 route state 없이 도달한 경우 (새로고침, 직접 이동 등)
+        // → state를 주입해서 WaitingPage가 정상 렌더링되도록
+        if (waitingForPlayableDay && pathname === "/game/waiting" && !location.state) {
+          const waitingState = buildWaitingState(timeData, storeData, true);
+          setState({
+            status: "redirect",
+            target: { path: "/game/waiting", state: waitingState },
+          });
+          return { allowed: false, remaining: 0 };
+        }
+
         setState({
           status: "allowed",
           context: {

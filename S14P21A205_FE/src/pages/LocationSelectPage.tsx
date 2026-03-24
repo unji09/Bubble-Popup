@@ -20,12 +20,13 @@ import {
 } from "../utils/dashboardItems";
 
 const DEFAULT_PREP_DAY = 1;
-const INITIAL_CAPITAL = 10_000_000;
+const INITIAL_CAPITAL = 5_000_000;
 const PREP_SECONDS = 50;
 const BUSINESS_SECONDS = 120;
 const REPORT_SECONDS = 10;
 const DAY_SECONDS = PREP_SECONDS + BUSINESS_SECONDS + REPORT_SECONDS;
 const MIDSEASON_CUTOFF_DAY = 6;
+const BRAND_NAME_MAX_LENGTH = 10;
 
 type SelectionMode = "opening_window" | "midseason";
 
@@ -290,16 +291,22 @@ export default function LocationSelectPage() {
       return;
     }
 
+    const normalizedBrandName = brandName.trim().slice(0, BRAND_NAME_MAX_LENGTH);
+
+    if (!normalizedBrandName) {
+      return;
+    }
+
     setJoinError(null);
     setIsJoining(true);
-    setStoredBrandName(brandName);
+    setStoredBrandName(normalizedBrandName);
 
     try {
       const serverLocationId = getServerLocationId(selectedDistrict);
 
       const joinResponse = await joinCurrentSeason({
         locationId: serverLocationId,
-        storeName: brandName,
+        storeName: normalizedBrandName,
       });
       // join 응답의 playableFromDay를 store에 저장 (GameGuard에서 참조)
       useGameStore.getState().setPlayableFromDay(joinResponse.playableFromDay);
@@ -324,7 +331,7 @@ export default function LocationSelectPage() {
 
         const waitingState: WaitingRouteState = {
           mode: "next_business_day",
-          brandName,
+          brandName: normalizedBrandName,
           districtName: selectedDistrict.name,
           nextPath: nextPrepPath,
           targetDay: joinResponse.playableFromDay,
@@ -338,7 +345,7 @@ export default function LocationSelectPage() {
       if (selectionWindow.mode === "opening_window" && remainingSelectionSeconds > 0) {
         const waitingState: WaitingRouteState = {
           mode: "prep_locked",
-          brandName,
+          brandName: normalizedBrandName,
           districtName: selectedDistrict.name,
           endTimestampMs: selectionWindow.endTimestampMs,
           nextPath: nextPrepPath,

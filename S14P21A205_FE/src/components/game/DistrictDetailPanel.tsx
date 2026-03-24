@@ -21,6 +21,8 @@ interface DistrictDetailPanelProps {
   onClose: () => void;
 }
 
+const BRAND_NAME_MAX_LENGTH = 10;
+
 const congestionTone: Record<string, { label: string; text: string }> = {
   "매우 혼잡": { label: "매우 혼잡", text: "text-rose-500" },
   혼잡: { label: "혼잡", text: "text-amber-600" },
@@ -71,7 +73,7 @@ export default function DistrictDetailPanel({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const trimmedBrandName = brandName.trim();
+    const trimmedBrandName = brandName.trim().slice(0, BRAND_NAME_MAX_LENGTH);
 
     if (!trimmedBrandName || isSubmitting) {
       return;
@@ -200,12 +202,18 @@ export default function DistrictDetailPanel({
               <input
                 type="text"
                 value={brandName}
-                onChange={(event) => setBrandName(event.target.value)}
+                onChange={(event) =>
+                  setBrandName(event.target.value.slice(0, BRAND_NAME_MAX_LENGTH))
+                }
+                maxLength={BRAND_NAME_MAX_LENGTH}
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-base font-medium text-slate-800 transition-all placeholder:text-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15"
                 placeholder="브랜드 이름을 입력해주세요"
                 autoFocus
                 disabled={isSubmitting}
               />
+              <p className="mt-2 text-right text-xs text-slate-400">
+                {brandName.length}/{BRAND_NAME_MAX_LENGTH}자
+              </p>
 
               {submitError && (
                 <p className="mt-3 text-sm text-rose-500">{submitError}</p>

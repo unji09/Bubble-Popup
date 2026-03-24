@@ -14,7 +14,7 @@ class CustomerScorePolicyTests {
         PopulationPolicy.PopulationSnapshot populationSnapshot = new PopulationPolicy.PopulationSnapshot(
                 0,
                 BigDecimal.ONE,
-                900
+                12
         );
 
         CustomerScorePolicy.CustomerScoreResult result = customerScorePolicy.calculate(
@@ -23,8 +23,8 @@ class CustomerScorePolicyTests {
                 new BigDecimal("0.50")
         );
 
-        assertThat(result.populationPerStore()).isEqualTo(900);
-        assertThat(result.rValue()).isEqualByComparingTo("900.000000");
+        assertThat(result.populationPerStore()).isEqualTo(12);
+        assertThat(result.rValue()).isEqualByComparingTo("12.000000");
         assertThat(result.customerCount()).isEqualTo(6);
     }
 
@@ -33,7 +33,7 @@ class CustomerScorePolicyTests {
         PopulationPolicy.PopulationSnapshot populationSnapshot = new PopulationPolicy.PopulationSnapshot(
                 0,
                 BigDecimal.ONE,
-                900
+                12
         );
 
         CustomerScorePolicy.CustomerScoreResult result = customerScorePolicy.calculate(
@@ -42,8 +42,46 @@ class CustomerScorePolicyTests {
                 null
         );
 
-        assertThat(result.populationPerStore()).isEqualTo(900);
-        assertThat(result.rValue()).isEqualByComparingTo("900.000000");
+        assertThat(result.populationPerStore()).isEqualTo(12);
+        assertThat(result.rValue()).isEqualByComparingTo("12.000000");
         assertThat(result.customerCount()).isZero();
+    }
+
+    @Test
+    void calculateClampsPopulationScoreToTwenty() {
+        PopulationPolicy.PopulationSnapshot populationSnapshot = new PopulationPolicy.PopulationSnapshot(
+                0,
+                BigDecimal.ONE,
+                33
+        );
+
+        CustomerScorePolicy.CustomerScoreResult result = customerScorePolicy.calculate(
+                populationSnapshot,
+                1,
+                new BigDecimal("0.50")
+        );
+
+        assertThat(result.populationPerStore()).isEqualTo(20);
+        assertThat(result.rValue()).isEqualByComparingTo("20.000000");
+        assertThat(result.customerCount()).isEqualTo(10);
+    }
+
+    @Test
+    void calculateUsesFiveAsMaximumStoreDivisor() {
+        PopulationPolicy.PopulationSnapshot populationSnapshot = new PopulationPolicy.PopulationSnapshot(
+                0,
+                BigDecimal.ONE,
+                20
+        );
+
+        CustomerScorePolicy.CustomerScoreResult result = customerScorePolicy.calculate(
+                populationSnapshot,
+                6,
+                BigDecimal.ONE
+        );
+
+        assertThat(result.populationPerStore()).isEqualTo(4);
+        assertThat(result.rValue()).isEqualByComparingTo("4.000000");
+        assertThat(result.customerCount()).isEqualTo(4);
     }
 }

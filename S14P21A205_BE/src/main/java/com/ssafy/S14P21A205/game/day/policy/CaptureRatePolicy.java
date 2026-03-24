@@ -25,7 +25,7 @@ public class CaptureRatePolicy {
     public BigDecimal applyMultiplier(BigDecimal currentCaptureRate, BigDecimal effectMultiplier) {
         BigDecimal baseRate = normalizeCaptureRate(currentCaptureRate);
         BigDecimal multiplier = normalizePositiveMultiplier(effectMultiplier);
-        return baseRate.multiply(multiplier).setScale(4, RoundingMode.HALF_UP);
+        return normalizeCaptureRate(baseRate.multiply(multiplier));
     }
 
     public BigDecimal normalizeCaptureRate(BigDecimal value) {

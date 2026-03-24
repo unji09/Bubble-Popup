@@ -60,11 +60,11 @@ class CurrentSeasonTimeServiceTests {
 
         assertThat(response.seasonPhase()).isEqualTo("DAY_BUSINESS");
         assertThat(response.currentDay()).isEqualTo(1);
-        assertThat(response.phaseRemainingSeconds()).isEqualTo(90);
+        assertThat(response.phaseRemainingSeconds()).isEqualTo(80);
         assertThat(response.serverTime()).isEqualTo(LocalDateTime.of(2026, 3, 18, 10, 3, 20));
         assertThat(response.seasonStartTime()).isEqualTo(LocalDateTime.of(2026, 3, 18, 10, 0, 0));
-        assertThat(response.gameTime()).isEqualTo("13:00");
-        assertThat(response.tick()).isEqualTo(3);
+        assertThat(response.gameTime()).isEqualTo("14:00");
+        assertThat(response.tick()).isEqualTo(4);
         assertThat(response.joinEnabled()).isTrue();
         assertThat(response.joinPlayableFromDay()).isEqualTo(2);
     }
@@ -110,7 +110,7 @@ class CurrentSeasonTimeServiceTests {
 
         assertThat(response.seasonPhase()).isEqualTo("DAY_PREPARING");
         assertThat(response.currentDay()).isEqualTo(1);
-        assertThat(response.phaseRemainingSeconds()).isEqualTo(40);
+        assertThat(response.phaseRemainingSeconds()).isEqualTo(30);
         assertThat(response.joinEnabled()).isTrue();
         assertThat(response.joinPlayableFromDay()).isEqualTo(2);
     }

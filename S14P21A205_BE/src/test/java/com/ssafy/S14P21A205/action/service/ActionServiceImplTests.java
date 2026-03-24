@@ -617,7 +617,7 @@ class ActionServiceImplTests {
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
         LocalDateTime businessStartAt = LocalDateTime.ofInstant(fixedClock.instant(), fixedClock.getZone()).withSecond(0).withNano(0);
-        LocalDateTime seasonStartAt = businessStartAt.minusSeconds(120L + (currentDay - 1L) * 180L + 50L);
+        LocalDateTime seasonStartAt = businessStartAt.minusSeconds(120L + (currentDay - 1L) * 180L + 40L);
         ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
         ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
 

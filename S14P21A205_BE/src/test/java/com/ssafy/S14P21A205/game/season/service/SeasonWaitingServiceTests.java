@@ -40,8 +40,8 @@ class SeasonWaitingServiceTests {
         assertEquals(2, response.currentDay());
         assertNull(response.nextSeasonStartTime());
         assertEquals("DAY_BUSINESS", response.seasonPhase());
-        assertEquals("16:00", response.gameTime());
-        assertEquals(6, response.tick());
+        assertEquals("17:00", response.gameTime());
+        assertEquals(7, response.tick());
         assertEquals(true, response.joinEnabled());
         assertEquals(3, response.joinPlayableFromDay());
         assertEquals(12, response.participantCount());

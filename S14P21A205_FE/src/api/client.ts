@@ -2,6 +2,9 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { refreshAccessToken } from "./auth";
 import { clearAuthSession } from "../hooks/useAuth";
 
+/** 게임 에러 코드: 파산/시즌 종료 등 (PlayPage 폴링에서 개별 처리) */
+export const GAME_EXIT_CODES = new Set(["STORE-001", "GAME-003"]);
+
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
   headers: { "Content-Type": "application/json" },

@@ -6,10 +6,7 @@ export interface ActionStatusResponse {
   discountUsed: boolean;
   emergencyUsed: boolean;
   donationUsed: boolean;
-  influencerUsed: boolean;
-  snsUsed: boolean;
-  leafletUsed: boolean;
-  friendUsed: boolean;
+  promotionUsed: boolean;
 }
 
 export type PromotionType = "INFLUENCER" | "SNS" | "LEAFLET" | "FRIEND";

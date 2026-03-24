@@ -94,7 +94,7 @@ public final class GameDayTestFixtures {
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
         ReflectionTestUtils.setField(season, "currentDay", CURRENT_DAY);
         ReflectionTestUtils.setField(season, "totalDays", TOTAL_DAYS);
-        LocalDateTime seasonStartAt = DAY4_STARTED_AT.minusSeconds(120L + (CURRENT_DAY - 1L) * 180L + 50L);
+        LocalDateTime seasonStartAt = DAY4_STARTED_AT.minusSeconds(120L + (CURRENT_DAY - 1L) * 180L + 40L);
         ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
         ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + TOTAL_DAYS * 180L + 120L));
         return season;
@@ -257,10 +257,10 @@ public final class GameDayTestFixtures {
                         "0.00",
                         "1.05",
                         0,
-                        EventStartTime.IMMEDIATE,
+                        EventStartTime.NEXT_DAY,
                         EventEndTime.SEASON_END
                 ),
-                CURRENT_DAY,
+                CURRENT_DAY - 1,
                 0,
                 null,
                 null,

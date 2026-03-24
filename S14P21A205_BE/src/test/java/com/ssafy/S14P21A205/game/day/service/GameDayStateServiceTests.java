@@ -210,9 +210,9 @@ class GameDayStateServiceTests {
 
         assertThat(response.serverTime()).isEqualTo(LocalDateTime.of(2026, 3, 9, 14, 32, 10));
         assertThat(response.lastCalculatedAt()).isEqualTo(LocalDateTime.of(2026, 3, 9, 14, 32, 10));
-        assertThat(response.cash()).isEqualTo(2_700L);
-        assertThat(response.customerCount()).isEqualTo(3);
-        assertThat(response.inventory().totalStock()).isEqualTo(9);
+        assertThat(response.cash()).isEqualTo(3_700L);
+        assertThat(response.customerCount()).isEqualTo(6);
+        assertThat(response.inventory().totalStock()).isEqualTo(7);
         assertThat(response.population()).isEqualTo("\uB9E4\uC6B0 \uD63C\uC7A1");
         assertThat(response.traffic()).isEqualTo(new GameStateResponse.Traffic(TrafficStatus.NORMAL, 3, 12, 15));
         assertThat(response.appliedEvents()).hasSize(1);
@@ -224,14 +224,14 @@ class GameDayStateServiceTests {
                 3L,
                 1,
                 7,
-                LocalDateTime.of(2026, 3, 9, 14, 30, 20),
+                LocalDateTime.of(2026, 3, 9, 14, 30, 30),
                 LocalDateTime.of(2026, 3, 9, 14, 32, 10)
         );
 
         ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
         verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(org.mockito.ArgumentMatchers.eq(15L), org.mockito.ArgumentMatchers.eq(1), stateCaptor.capture());
-        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(3);
-        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(1_500L);
+        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(6);
+        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(2_500L);
         assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(300L);
     }
 
@@ -315,9 +315,9 @@ class GameDayStateServiceTests {
 
         assertThat(dummyStore.getPrice()).isEqualTo(2_000);
         assertThat(response.population()).isEqualTo("\uB9E4\uC6B0 \uD63C\uC7A1");
-        assertThat(response.cash()).isEqualTo(5_218_000L);
-        assertThat(response.customerCount()).isEqualTo(5);
-        assertThat(response.inventory().totalStock()).isEqualTo(123);
+        assertThat(response.cash()).isEqualTo(5_442_000L);
+        assertThat(response.customerCount()).isEqualTo(50);
+        assertThat(response.inventory().totalStock()).isEqualTo(67);
         assertThat(response.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
                 .containsExactly("GOVERNMENT_SUBSIDY", "TACO_PRICE_UP", "FESTIVAL");
 
@@ -327,9 +327,9 @@ class GameDayStateServiceTests {
                 org.mockito.ArgumentMatchers.eq(GameDayTestFixtures.CURRENT_DAY),
                 stateCaptor.capture()
         );
-        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(5);
-        assertThat(stateCaptor.getValue().tickPurchaseCount()).isEqualTo(1);
-        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(28_000L);
+        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(50);
+        assertThat(stateCaptor.getValue().tickPurchaseCount()).isEqualTo(13);
+        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(252_000L);
         assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(300_000L);
     }
 
@@ -628,8 +628,8 @@ class GameDayStateServiceTests {
         GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
 
         assertThat(response.actionStatus().emergencyOrderPending()).isFalse();
-        assertThat(response.inventory().totalStock()).isEqualTo(140);
-        assertThat(response.cash()).isEqualTo(5_165_000L);
+        assertThat(response.inventory().totalStock()).isEqualTo(70);
+        assertThat(response.cash()).isEqualTo(5_447_000L);
 
         ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
         verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(
@@ -787,7 +787,7 @@ class GameDayStateServiceTests {
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
         LocalDateTime currentBusinessAt = LocalDateTime.of(2026, 3, 9, 14, 32, 10);
-        LocalDateTime seasonStartAt = currentBusinessAt.minusSeconds(120L + (currentDay - 1L) * 180L + 50L + 60L);
+        LocalDateTime seasonStartAt = currentBusinessAt.minusSeconds(120L + (currentDay - 1L) * 180L + 40L + 60L);
         ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
         ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
 

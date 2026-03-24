@@ -34,10 +34,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -93,9 +95,11 @@ public class GameDayReportService {
     ) {
         Integer totalDays = store.getSeason().getTotalDays();
         if (totalDays != null && day > totalDays) {
+            log.warn("[DayReport] Skipped: day {} > totalDays {}. storeId={}", day, totalDays, store.getId());
             return;
         }
         if (dailyReportRepository.existsByStoreIdAndDay(store.getId(), day)) {
+            log.debug("[DayReport] Already exists. storeId={} day={}", store.getId(), day);
             return;
         }
 
@@ -105,11 +109,13 @@ public class GameDayReportService {
 
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
         if (state == null || state.startedAt() == null) {
+            log.warn("[DayReport] Skipped: Redis state missing. storeId={} day={} state={}", store.getId(), day, state);
             return;
         }
 
         DayWindow timeline = SEASON_TIMELINE_SERVICE.day(store.getSeason(), day);
         if (now.isBefore(timeline.businessEnd())) {
+            log.warn("[DayReport] Skipped: before businessEnd. storeId={} day={} now={} businessEnd={}", store.getId(), day, now, timeline.businessEnd());
             return;
         }
 
@@ -142,6 +148,8 @@ public class GameDayReportService {
         );
         if (bankruptcyResult.bankrupt()) {
             shopService.resetPurchasedItems(store.getUser().getId());
+            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, 0L);
+            gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", "0");
         }
     }
 

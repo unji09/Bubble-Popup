@@ -27,6 +27,7 @@ import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherDayRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherLocationRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
 import com.ssafy.S14P21A205.game.event.repository.RandomEventRepository;
@@ -118,7 +119,7 @@ class SeasonLifecycleServiceTests {
                 .when(trafficRepository.saveAll(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient()
-                .when(randomEventRepository.findFirstByEventCategoryAndEventName(any(), any()))
+                .when(randomEventRepository.findFirstByEventCategory(any()))
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
                 .when(randomEventRepository.save(any(RandomEvent.class)))
@@ -133,7 +134,6 @@ class SeasonLifecycleServiceTests {
         ReflectionTestUtils.setField(scheduledSeason, "id", 11L);
 
         Location location = location(3L);
-        Menu menu = menu(5L, "bread");
         String batchKey = "spark-20260318-01";
 
         seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
@@ -142,7 +142,7 @@ class SeasonLifecycleServiceTests {
         when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
                 .thenReturn(Optional.of(scheduledSeason));
         when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
-        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(allMenus());
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(allWeatherMasters());
         when(festivalRepository.findAllByOrderByIdAsc()).thenReturn(List.of(festival(location)));
         when(populationRepository.findByLocationIdOrderByDateAsc(3L))
@@ -194,7 +194,6 @@ class SeasonLifecycleServiceTests {
         ReflectionTestUtils.setField(scheduledSeason, "id", 41L);
 
         Location location = location(3L);
-        Menu menu = menu(5L, "bread");
 
         seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
 
@@ -203,17 +202,89 @@ class SeasonLifecycleServiceTests {
         when(newsReportRepository.existsBySeasonId(41L)).thenReturn(false);
         when(dailyEventRepository.existsBySeasonId(41L)).thenReturn(false, false);
         when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(allMenus());
+        when(festivalRepository.findAllByOrderByIdAsc()).thenReturn(List.of(festival(location)));
+
+        seasonLifecycleService.prepareScheduledSeasonIfNeeded();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<DailyEvent>> savedEventsCaptor = ArgumentCaptor.forClass(List.class);
+        InOrder inOrder = inOrder(dailyEventRepository, newsService);
+        inOrder.verify(dailyEventRepository).deleteBySeasonId(41L);
+        inOrder.verify(dailyEventRepository).saveAll(savedEventsCaptor.capture());
+        inOrder.verify(newsService).generateSeasonNews(41L);
+        verify(sparkEtlScheduler).runEtl();
+        verify(newsService, never()).generateEventPreviewNewsIfMissing(41L);
+
+        assertThat(savedEventsCaptor.getValue()).hasSize(15);
+        assertThat(savedEventsCaptor.getValue())
+                .extracting(dailyEvent -> dailyEvent.getEvent().getEventCategory())
+                .doesNotHaveDuplicates();
+    }
+
+    @Test
+    void prepareScheduledSeasonIfNeededAllowsLastDayFallbackWhenOnlyNextDayUniqueEventsRemain() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.minusMinutes(1);
+        Season scheduledSeason = Season.createScheduled(6, seasonStartAt, seasonStartAt.plusMinutes(27));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 42L);
+
+        Location location = location(3L);
+        Menu menu = menu(5L, "bread");
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+        when(newsReportRepository.existsBySeasonId(42L)).thenReturn(false);
+        when(dailyEventRepository.existsBySeasonId(42L)).thenReturn(false, false);
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
         when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
         when(festivalRepository.findAllByOrderByIdAsc()).thenReturn(List.of(festival(location)));
 
         seasonLifecycleService.prepareScheduledSeasonIfNeeded();
 
-        InOrder inOrder = inOrder(dailyEventRepository, newsService);
-        inOrder.verify(dailyEventRepository).deleteBySeasonId(41L);
-        inOrder.verify(dailyEventRepository).saveAll(any());
-        inOrder.verify(newsService).generateSeasonNews(41L);
-        verify(sparkEtlScheduler).runEtl();
-        verify(newsService, never()).generateEventPreviewNewsIfMissing(41L);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<DailyEvent>> savedEventsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(dailyEventRepository).saveAll(savedEventsCaptor.capture());
+
+        List<DailyEvent> savedEvents = savedEventsCaptor.getValue();
+        List<?> eventCategories = savedEvents.stream()
+                .map(dailyEvent -> dailyEvent.getEvent().getEventCategory())
+                .toList();
+        assertThat(savedEvents).hasSize(13);
+        assertThat(eventCategories).hasSize(13);
+        assertThat(eventCategories.stream().distinct().count()).isLessThan((long) eventCategories.size());
+        assertThat(savedEvents.stream()
+                .filter(dailyEvent -> dailyEvent.getDay() == 6)
+                .map(dailyEvent -> dailyEvent.getEvent().getEventCategory())
+                .toList()).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void prepareScheduledSeasonIfNeededFailsWhenFallbackStillCannotFillSeason() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.minusMinutes(1);
+        Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 43L);
+
+        Location location = location(3L);
+        Menu menu = menu(5L, "bread");
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+        when(newsReportRepository.existsBySeasonId(43L)).thenReturn(false);
+        when(dailyEventRepository.existsBySeasonId(43L)).thenReturn(false, false);
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
+
+        seasonLifecycleService.prepareScheduledSeasonIfNeeded();
+
+        verify(dailyEventRepository).deleteBySeasonId(43L);
+        verify(dailyEventRepository, never()).saveAll(any());
+        verify(newsService, never()).generateSeasonNews(43L);
     }
 
     @Test
@@ -375,6 +446,21 @@ class SeasonLifecycleServiceTests {
         ReflectionTestUtils.setField(menu, "menuName", menuName);
         ReflectionTestUtils.setField(menu, "originPrice", 1_200);
         return menu;
+    }
+
+    private List<Menu> allMenus() {
+        return List.of(
+                menu(1L, "bread"),
+                menu(2L, "mala_skewer"),
+                menu(3L, "jelly"),
+                menu(4L, "tteokbokki"),
+                menu(5L, "hamburger"),
+                menu(6L, "ice_cream"),
+                menu(7L, "dakgangjeong"),
+                menu(8L, "taco"),
+                menu(9L, "hotdog"),
+                menu(10L, "bubble_tea")
+        );
     }
 
     private Weather weather(WeatherType type, Long id) {

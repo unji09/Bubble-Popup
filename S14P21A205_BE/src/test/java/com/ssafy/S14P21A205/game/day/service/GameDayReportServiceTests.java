@@ -195,6 +195,8 @@ class GameDayReportServiceTests {
         gameDayReportService.recordClosedDayReport(store, 3);
 
         verify(shopService).resetPurchasedItems(1);
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 3, 0L);
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 3, "stock", "0");
     }
 
     @Test

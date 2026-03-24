@@ -476,12 +476,24 @@ public class SeasonLifecycleService {
         dailyEventRepository.deleteBySeasonId(season.getId());
 
         List<WeightedEventSpec> fullPool = buildWeightedEventPool(menus);
+        List<WeightedEventSpec> remainingPool = new ArrayList<>(fullPool);
         List<DailyEvent> dailyEvents = new ArrayList<>(season.getTotalDays() * EVENTS_PER_DAY + 1);
 
         for (int day = 1; day <= season.getTotalDays(); day++) {
-            List<WeightedEventSpec> eligiblePool = filterEligiblePool(fullPool, day, season.getTotalDays());
+            Set<EventCategory> selectedCategoriesForDay = new LinkedHashSet<>();
             for (int index = 0; index < EVENTS_PER_DAY; index++) {
-                WeightedEventSpec selectedEvent = selectWeightedEvent(eligiblePool, random)
+                WeightedEventSpec selectedBaseEvent = selectUniqueWeightedEvent(
+                        fullPool,
+                        remainingPool,
+                        selectedCategoriesForDay,
+                        day,
+                        season.getTotalDays(),
+                        random
+                );
+                removeSelectedCategory(remainingPool, selectedBaseEvent.category());
+                selectedCategoriesForDay.add(selectedBaseEvent.category());
+
+                WeightedEventSpec selectedEvent = selectedBaseEvent
                         .withApplyOffsetSeconds(index == 0 ? FIRST_EVENT_OFFSET_SECONDS : SECOND_EVENT_OFFSET_SECONDS);
                 RandomEvent randomEvent = upsertRandomEvent(selectedEvent);
                 dailyEvents.add(DailyEvent.create(
@@ -525,6 +537,54 @@ public class SeasonLifecycleService {
         }
 
         dailyEventRepository.saveAll(dailyEvents);
+    }
+
+    private WeightedEventSpec selectUniqueWeightedEvent(
+            List<WeightedEventSpec> fullPool,
+            List<WeightedEventSpec> remainingPool,
+            Set<EventCategory> selectedCategoriesForDay,
+            int day,
+            int totalDays,
+            Random random
+    ) {
+        List<WeightedEventSpec> eligiblePool = excludeAlreadySelectedForDay(
+                filterEligiblePool(remainingPool, day, totalDays),
+                selectedCategoriesForDay
+        );
+        if (!eligiblePool.isEmpty()) {
+            return selectWeightedEvent(eligiblePool, random);
+        }
+
+        if (day == totalDays) {
+            List<WeightedEventSpec> fallbackPool = excludeAlreadySelectedForDay(
+                    filterEligiblePool(fullPool, day, totalDays),
+                    selectedCategoriesForDay
+            );
+            if (!fallbackPool.isEmpty()) {
+                return selectWeightedEvent(fallbackPool, random);
+            }
+        }
+
+        throw new BaseException(
+                ErrorCode.INVALID_INPUT_VALUE,
+                "No eligible events remain for day " + day
+        );
+    }
+
+    private List<WeightedEventSpec> excludeAlreadySelectedForDay(
+            List<WeightedEventSpec> pool,
+            Set<EventCategory> selectedCategoriesForDay
+    ) {
+        if (selectedCategoriesForDay.isEmpty()) {
+            return pool;
+        }
+        return pool.stream()
+                .filter(event -> !selectedCategoriesForDay.contains(event.category()))
+                .toList();
+    }
+
+    private void removeSelectedCategory(List<WeightedEventSpec> remainingPool, EventCategory category) {
+        remainingPool.removeIf(event -> event.category() == category);
     }
 
     private void prepareDailyEventsIfMissing(Season season, List<Location> locations) {
@@ -938,7 +998,7 @@ public class SeasonLifecycleService {
                     resolveMenuPriceCategory(menu.getMenuName(), true),
                     menu.getMenuName() + " price down",
                     1.5,
-                    EventStartTime.IMMEDIATE,
+                    EventStartTime.NEXT_DAY,
                     EventEndTime.SEASON_END,
                     DECIMAL_ONE,
                     ZERO_DECIMAL,
@@ -1037,7 +1097,7 @@ public class SeasonLifecycleService {
 
     private RandomEvent upsertRandomEvent(WeightedEventSpec spec) {
         RandomEvent randomEvent = randomEventRepository
-                .findFirstByEventCategoryAndEventName(spec.category(), spec.eventName())
+                .findFirstByEventCategory(spec.category())
                 .orElseGet(() -> RandomEvent.create(
                         spec.category(),
                         spec.eventName(),

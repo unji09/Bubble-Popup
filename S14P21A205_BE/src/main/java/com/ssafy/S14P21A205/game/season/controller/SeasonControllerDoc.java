@@ -128,7 +128,7 @@ public interface SeasonControllerDoc {
 
     @Operation(
             summary = "Get finalized season rankings",
-            description = "Return the finalized season rankings from SQL, including top 10 and the requesting user's additional stores.",
+            description = "Return the finalized rankings for the current result-target season. If the current season final ranking is not ready yet, return 409 instead of falling back to an older season.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
@@ -143,8 +143,13 @@ public interface SeasonControllerDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
+                    responseCode = "409",
+                    description = "Current final ranking is not ready yet",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
                     responseCode = "404",
-                    description = "Final ranking data not found",
+                    description = "Season data not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })

@@ -26,6 +26,7 @@ public enum ErrorCode {
     MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "GAME-006", "Menu was not found."),
     ALREADY_JOINED_CURRENT_SEASON(HttpStatus.CONFLICT, "GAME-007", "Current season is already joined."),
     NEWS_NOT_FOUND(HttpStatus.NOT_FOUND, "GAME-008", "News not found for the requested day."),
+    FINAL_RANKING_NOT_READY(HttpStatus.CONFLICT, "GAME-009", "Current final ranking is not ready."),
 
     // Store
     STORE_NOT_FOUND(HttpStatus.NOT_FOUND, "STORE-001", "Store was not found."),

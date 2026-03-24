@@ -65,13 +65,23 @@ public class SeasonDayClosingScheduler {
             LocalDateTime businessEndAt = dayWindow.businessEnd();
 
             if (!now.isBefore(businessEndAt)) {
-                seasonDayClosingService.handleBusinessEnd(season.getId(), day);
+                try {
+                    seasonDayClosingService.handleBusinessEnd(season.getId(), day);
+                } catch (Exception e) {
+                    log.error("Day closing catch-up failed. seasonId={} day={}", season.getId(), day, e);
+                }
                 continue;
             }
 
             final int targetDay = day;
             ScheduledFuture<?> future = taskScheduler.schedule(
-                    () -> seasonDayClosingService.handleBusinessEnd(season.getId(), targetDay),
+                    () -> {
+                        try {
+                            seasonDayClosingService.handleBusinessEnd(season.getId(), targetDay);
+                        } catch (Exception e) {
+                            log.error("Day closing failed. seasonId={} day={}", season.getId(), targetDay, e);
+                        }
+                    },
                     businessEndAt.atZone(clock.getZone()).toInstant()
             );
             if (future != null) {

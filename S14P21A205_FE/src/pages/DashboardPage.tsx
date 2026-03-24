@@ -414,13 +414,20 @@ export default function DashboardPage() {
 
       // 게임 참여 중이면 돌아가기 경로 계산
       try {
-        await getStore(); // 성공하면 참여 중
+        const storeData = await getStore(); // 성공하면 참여 중
         const timeData = await getSeasonTime();
         const phase = timeData.seasonPhase as SeasonPhase;
         const day = timeData.currentDay;
-        const path = phaseToRoute(phase, day);
-        if (path && path !== "/") {
-          setGameReturnPath(path);
+
+        // playableFromDay > currentDay면 아직 대기 중 → /game/waiting으로
+        const pfd = storeData.playableFromDay;
+        if (typeof pfd === "number" && day < pfd) {
+          setGameReturnPath("/game/waiting");
+        } else {
+          const path = phaseToRoute(phase, day);
+          if (path && path !== "/") {
+            setGameReturnPath(path);
+          }
         }
       } catch {
         // getStore 실패 = 미참여 → 무시

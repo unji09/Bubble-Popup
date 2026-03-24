@@ -20,7 +20,8 @@ export default function ShareModal({
   const [quantity, setQuantity] = useState<number | "">("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const isOutOfStock = currentStock <= 0;
+  const maxShareQuantity = Math.max(0, currentStock);
+  const isOutOfStock = maxShareQuantity <= 0;
 
   const handleChange = (value: string) => {
     if (value === "") {
@@ -33,7 +34,7 @@ export default function ShareModal({
       return;
     }
 
-    const normalizedValue = Math.max(1, Math.min(currentStock, Number(value)));
+    const normalizedValue = Math.max(1, Math.min(maxShareQuantity, Number(value)));
     setQuantity(normalizedValue);
   };
 
@@ -46,7 +47,8 @@ export default function ShareModal({
     setSubmitError(null);
 
     try {
-      await Promise.resolve(onSubmit(Number(quantity)));
+      const normalizedQuantity = Math.max(1, Math.min(maxShareQuantity, Number(quantity)));
+      await Promise.resolve(onSubmit(normalizedQuantity));
     } catch (error) {
       if (axios.isAxiosError<ApiErrorResponse>(error)) {
         setSubmitError(
@@ -91,7 +93,7 @@ export default function ShareModal({
               onChange={(event) => handleChange(event.target.value)}
               placeholder={isOutOfStock ? "나눌 재고가 없습니다" : "수량을 입력하세요"}
               min={isOutOfStock ? 0 : 1}
-              max={currentStock}
+              max={maxShareQuantity}
               disabled={isOutOfStock || isSubmitting}
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-lg font-medium text-slate-800 transition-all placeholder:text-slate-300 focus:border-primary focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:bg-slate-50"
             />
@@ -101,7 +103,7 @@ export default function ShareModal({
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-rose-soft">
             <span className="material-symbols-outlined text-[16px]">info</span>
-            <span className="text-xs font-medium">1개부터 현재 재고만큼까지 선택할 수 있습니다.</span>
+            <span className="text-xs font-medium">1개부터 현재 재고 {maxShareQuantity}개까지 선택할 수 있습니다.</span>
           </div>
         </div>
 

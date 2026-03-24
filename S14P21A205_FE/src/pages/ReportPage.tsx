@@ -63,15 +63,18 @@ export default function ReportPage() {
     setLoading(true);
     setError(null);
 
-    Promise.all([getDayReport(day), getAllDayReports(day)])
-      .then(([todayReport, reports]) => {
+    Promise.allSettled([getDayReport(day), getAllDayReports(day)])
+      .then(([todayResult, allResult]) => {
         if (cancelled) return;
+        const reports = allResult.status === "fulfilled" ? allResult.value : [];
         setAllReports(reports);
-        setReport(todayReport);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setError("리포트를 불러오지 못했습니다.");
+        if (todayResult.status === "fulfilled") {
+          setReport(todayResult.value);
+        } else {
+          const fallback = reports.find((r) => r.day === day) ?? reports[reports.length - 1] ?? null;
+          setReport(fallback);
+          if (!fallback) setError("리포트를 불러오지 못했습니다.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

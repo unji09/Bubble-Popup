@@ -167,8 +167,9 @@ function getSellingPriceDefault(
   costPrice: number,
   previousSalePrice: number,
   day: number,
+  playableday: number | null,
 ) {
-  if (day >= 2) {
+  if (playableday !== null && day > playableday) {
     return previousSalePrice;
   }
 
@@ -243,6 +244,7 @@ export default function PrepPage() {
   const [isMenusLoading, setIsMenusLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [currentStoreMenuName, setCurrentStoreMenuName] = useState<string | null>(null);
+  const [playableday, setPlayableday] = useState<number | null>(null);
   const [waitingStatus, setWaitingStatus] = useState<GameWaitingResponse | null>(null);
   const [isWaitingStatusLoading, setIsWaitingStatusLoading] = useState(true);
   const [newsItems, setNewsItems] = useState<PrepNewsItem[]>([]);
@@ -269,6 +271,7 @@ export default function PrepPage() {
     originalCostPrice,
     selectedMenuData.previousSalePrice,
     day,
+    playableday,
   );
   const [price, setPrice] = useState(defaultSellingPrice);
   const totalCost = originalCostPrice * quantity;
@@ -277,7 +280,7 @@ export default function PrepPage() {
   const isServerPreparing = isOrderPreparingPhase(waitingStatus, day);
   const canPrepareToday = isRegularOrderRouteDay && isServerPreparing;
   const normalizedCurrentStoreMenuName = normalizeMenuName(currentStoreMenuName);
-  const shouldShowMenuStatus = day >= 2 && normalizedCurrentStoreMenuName.length > 0;
+  const shouldShowMenuStatus = playableday !== null && day > playableday && normalizedCurrentStoreMenuName.length > 0;
   const isSubmittingRegularOrder = regularOrderStatus === "submitting";
   const hasSubmittedRegularOrder = regularOrderStatus === "submitted";
   const canSubmitRegularOrder =
@@ -369,6 +372,11 @@ export default function PrepPage() {
             ? normalizeMenuName(storeResult.value?.menu)
             : "";
         setCurrentStoreMenuName(nextStoreMenuName || null);
+        setPlayableday(
+          storeResult.status === "fulfilled" && storeResult.value?.playableday != null
+            ? storeResult.value.playableday
+            : null,
+        );
 
         if (menusResult.status !== "fulfilled") {
           setMenuError("메뉴 정보를 불러오지 못했습니다. 정규 발주 요청은 잠시 후 다시 시도해주세요.");
@@ -713,7 +721,7 @@ export default function PrepPage() {
                       discountedCostPrice={discountedCostPrice}
                       hasItemDiscount={hasItemDiscount}
                       defaultPrice={defaultSellingPrice}
-                      defaultPriceLabel={day >= 2 ? "이전 판매가" : "권장가"}
+                      defaultPriceLabel={playableday !== null && day > playableday ? "이전 판매가" : "권장가"}
                       onChange={setPrice}
                     />
                     <div className="flex flex-col gap-5">

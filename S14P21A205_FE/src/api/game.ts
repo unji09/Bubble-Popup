@@ -173,10 +173,8 @@ export interface GameTraffic {
 export interface GameActionStatus {
   discountUsed: boolean;
   donationUsed: boolean;
-  influencerUsed: boolean;
-  snsUsed: boolean;
-  leafletUsed: boolean;
-  friendUsed: boolean;
+  promotionUsed: boolean;
+  emergencyUsed: boolean;
   emergencyOrderPending: boolean;
   emergencyOrderArriveAt: string | null;
 }

@@ -246,43 +246,43 @@ SELECT 'CELEBRITY_APPEARANCE', '연예인 등장', 'IMMEDIATE', 'SAME_DAY', 1.15
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'CELEBRITY_APPEARANCE');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'BREAD_PRICE_DOWN', '빵 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'BREAD_PRICE_DOWN', '빵 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'BREAD_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'MALA_SKEWER_PRICE_DOWN', '마라꼬치 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'MALA_SKEWER_PRICE_DOWN', '마라 꼬치 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'MALA_SKEWER_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'JELLY_PRICE_DOWN', '젤리 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'JELLY_PRICE_DOWN', '젤리 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'JELLY_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'TTEOKBOKKI_PRICE_DOWN', '떡볶이 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'TTEOKBOKKI_PRICE_DOWN', '떡볶이 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'TTEOKBOKKI_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'HAMBURGER_PRICE_DOWN', '햄버거 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'HAMBURGER_PRICE_DOWN', '햄버거 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'HAMBURGER_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'ICE_CREAM_PRICE_DOWN', '아이스크림 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'ICE_CREAM_PRICE_DOWN', '아이스크림 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'ICE_CREAM_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'DAKGANGJEONG_PRICE_DOWN', '닭강정 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'DAKGANGJEONG_PRICE_DOWN', '닭강정 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'DAKGANGJEONG_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'TACO_PRICE_DOWN', '타코 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'TACO_PRICE_DOWN', '타코 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'TACO_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'HOTDOG_PRICE_DOWN', '핫도그 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'HOTDOG_PRICE_DOWN', '핫도그 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'HOTDOG_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'BUBBLE_TEA_PRICE_DOWN', '버블티 원재료 가격 하락', 'IMMEDIATE', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'BUBBLE_TEA_PRICE_DOWN', '버블티 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'BUBBLE_TEA_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
