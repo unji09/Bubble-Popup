@@ -58,6 +58,8 @@ for path in xlsx_files:
     candidate_sheets = [
         f"'{year}년 {month_padded}월'!A1",
         f"'{year}년 {month}월'!A1",
+        f"'{year}년{month_padded}월'!A1",
+        f"'{year}년{month}월'!A1",
     ]
 
     loaded = False
@@ -70,8 +72,6 @@ for path in xlsx_files:
                 .option("maxRowsInMemory", "200") \
                 .option("dataAddress", data_address) \
                 .load(path)
-            print(f"Loaded traffic sheet {data_address} from {path}")
-
             hour_cols = [c for c in _df.columns if c.endswith("시") and c[:-1].isdigit()]
             if not hour_cols:
                 raise RuntimeError(f"Hour columns not found in path={path}, columns={_df.columns}")
@@ -98,6 +98,7 @@ for path in xlsx_files:
 
             df_target = df_unpivot.filter(col("SPOT_NUM").isin(TARGET_SPOTS))
             df_target.write.mode("append").parquet(TEMP_OUTPUT_PATH)
+            print(f"Loaded traffic sheet {data_address} from {path}")
             processed_any = True
             loaded = True
             break
