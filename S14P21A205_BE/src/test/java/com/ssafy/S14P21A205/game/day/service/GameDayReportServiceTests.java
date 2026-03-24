@@ -112,6 +112,9 @@ class GameDayReportServiceTests {
         org.mockito.Mockito.lenient()
                 .when(purchaseListGenerator.advanceCursor(any(), anyInt()))
                 .thenReturn(12);
+        org.mockito.Mockito.lenient()
+                .when(storeRepository.findFirstByUser_IdAndSeason_StatusOrderByIdDesc(anyInt(), any()))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -261,6 +264,7 @@ class GameDayReportServiceTests {
         assertThat(response.tomorrowWeather().condition()).isEqualTo("SNOW");
         assertThat(response.isNextDayOrderDay()).isTrue();
         assertThat(response.consecutiveDeficitDays()).isEqualTo(2);
+        assertThat(response.isBankrupt()).isFalse();
     }
 
     @Test
@@ -309,6 +313,44 @@ class GameDayReportServiceTests {
     }
 
     @Test
+    void getDayReportReturnsBankruptInProgressStoreReport() {
+        User user = user(1);
+        Store store = store(15L, 9L, 6, 7, "Current Location", "Current Menu", 300);
+        DailyReport daySix = dailyReport(
+                store,
+                6,
+                "Current Location",
+                "Current Menu",
+                2_000,
+                5_000,
+                -3_000,
+                12,
+                5,
+                3,
+                3,
+                true,
+                0,
+                new BigDecimal("0.08")
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 6)).thenReturn(Optional.of(daySix));
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L)).thenReturn(List.of(daySix));
+        when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(7)).thenReturn(List.of());
+
+        GameDayReportResponse response = gameDayReportService.getDayReport(mock(Authentication.class), 6);
+
+        assertThat(response.day()).isEqualTo(6);
+        assertThat(response.locationName()).isEqualTo("Current Location");
+        assertThat(response.menuName()).isEqualTo("Current Menu");
+        assertThat(response.consecutiveDeficitDays()).isEqualTo(3);
+    }
+
+    @Test
     void getDayReportThrowsWhenDayIsOutOfRange() {
         User user = user(1);
         Store store = store(15L, 9L, 2, 7, "Seongsu", "Cookie", 300);
@@ -329,6 +371,10 @@ class GameDayReportServiceTests {
         when(userService.getCurrentUser(any())).thenReturn(user);
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.empty());
+        when(storeRepository.findFirstByUser_IdAndSeason_StatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.FINISHED))
                 .thenReturn(Optional.empty());
 
@@ -336,6 +382,51 @@ class GameDayReportServiceTests {
                 .isInstanceOf(BaseException.class)
                 .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.NOT_PARTICIPATING));
+    }
+
+    @Test
+    void getDayReportAllowsBankruptInProgressStoreWhenActiveStoreIsUnavailable() {
+        User user = user(1);
+        Store store = store(15L, 9L, 3, 7, "Current Location", "Current Menu", 300);
+        DailyReport bankruptReport = dailyReport(
+                store,
+                3,
+                "Current Location",
+                "Current Menu",
+                1_000,
+                5_000,
+                -4_000,
+                12,
+                5,
+                0,
+                3,
+                true,
+                0,
+                new BigDecimal("0.05")
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstByUser_IdAndSeason_StatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 3)).thenReturn(Optional.of(bankruptReport));
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L)).thenReturn(List.of(
+                dailyReport(store, 1, "Current Location", "Current Menu", 3_000, 1_000, 2_000, 20, 10, 5, 1, false, 8_000, new BigDecimal("0.09")),
+                dailyReport(store, 2, "Current Location", "Current Menu", 1_000, 3_000, -2_000, 10, 5, 2, 2, false, 5_000, new BigDecimal("0.07")),
+                bankruptReport
+        ));
+        when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(4)).thenReturn(List.of(
+                weatherLocation(store.getLocation(), 4, weather(WeatherType.RAIN))
+        ));
+
+        GameDayReportResponse response = gameDayReportService.getDayReport(mock(Authentication.class), 3);
+
+        assertThat(response.day()).isEqualTo(3);
+        assertThat(response.isBankrupt()).isTrue();
+        assertThat(response.consecutiveDeficitDays()).isEqualTo(3);
+        assertThat(response.tomorrowWeather()).isNotNull();
+        assertThat(response.tomorrowWeather().condition()).isEqualTo("RAIN");
     }
 
     private User user(int id) {

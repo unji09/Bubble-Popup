@@ -20,7 +20,8 @@ public record GameDayReportResponse(
         DailyRevenue dailyRevenue,
         TomorrowWeather tomorrowWeather,
         Boolean isNextDayOrderDay,
-        Integer consecutiveDeficitDays
+        Integer consecutiveDeficitDays,
+        Boolean isBankrupt
 ) {
     public record DailyRevenue(
             Long first,

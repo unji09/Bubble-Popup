@@ -115,6 +115,7 @@ export interface GameDayReportResponse {
   tomorrowWeather: { condition: string } | null;
   isNextDayOrderDay: boolean | null;
   consecutiveDeficitDays: number;
+  isBankrupt: boolean;
 }
 
 export async function getDayReport(day: number) {

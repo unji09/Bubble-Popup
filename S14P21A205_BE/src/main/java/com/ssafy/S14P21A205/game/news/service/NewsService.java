@@ -67,16 +67,6 @@ public class NewsService {
     }
 
     /**
-     * 시즌 준비 시간에 뉴스를 미리 만들면 이벤트가 없어서 축제 예고가 빠짐.
-     * IN_PROGRESS 전환 후 이벤트 빌드 완료되면 이 메서드로 축제 예고만 보충.
-     */
-    public void generateEventPreviewNewsIfMissing(Long seasonId) {
-        Season season = seasonRepository.findById(seasonId).orElse(null);
-        if (season == null) return;
-        newsDataSaver.generateMissingEventPreviewNews(seasonId, season.getTotalDays());
-    }
-
-    /**
      * 영업 마감 시 당일 순위 업데이트 + 마감 뉴스 1건 생성.
      */
     public void updateDayRankings(Long seasonId, int day) {

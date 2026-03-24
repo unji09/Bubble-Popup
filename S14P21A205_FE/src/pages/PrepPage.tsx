@@ -8,7 +8,7 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
-import { postRegularOrder } from "../api/order";
+import { getCurrentOrder, postRegularOrder } from "../api/order";
 import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
 import {
   getNewsRanking,
@@ -29,20 +29,21 @@ interface PrepMenu {
   name: string;
   costPrice: number;
   previousSalePrice: number;
+  hasPreviousPrice: boolean;
   ingredientDiscountMultiplier: number;
 }
 
 const fallbackMenus: PrepMenu[] = [
-  { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200, ingredientDiscountMultiplier: 1 },
-  { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900, ingredientDiscountMultiplier: 1 },
-  { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800, ingredientDiscountMultiplier: 1 },
-  { id: 4, emoji: "🍽️", name: "떡볶이", costPrice: 2500, previousSalePrice: 4300, ingredientDiscountMultiplier: 1 },
-  { id: 5, emoji: "🍔", name: "햄버거", costPrice: 3100, previousSalePrice: 5600, ingredientDiscountMultiplier: 1 },
-  { id: 6, emoji: "🍨", name: "아이스크림", costPrice: 1400, previousSalePrice: 2600, ingredientDiscountMultiplier: 1 },
-  { id: 7, emoji: "🍗", name: "닭강정", costPrice: 2800, previousSalePrice: 4900, ingredientDiscountMultiplier: 1 },
-  { id: 8, emoji: "🌮", name: "타코", costPrice: 2600, previousSalePrice: 4500, ingredientDiscountMultiplier: 1 },
-  { id: 9, emoji: "🌭", name: "핫도그", costPrice: 1700, previousSalePrice: 3000, ingredientDiscountMultiplier: 1 },
-  { id: 10, emoji: "🧋", name: "버블티", costPrice: 2300, previousSalePrice: 4100, ingredientDiscountMultiplier: 1 },
+  { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 4, emoji: "🍽️", name: "떡볶이", costPrice: 2500, previousSalePrice: 4300, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 5, emoji: "🍔", name: "햄버거", costPrice: 3100, previousSalePrice: 5600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 6, emoji: "🍨", name: "아이스크림", costPrice: 1400, previousSalePrice: 2600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 7, emoji: "🍗", name: "닭강정", costPrice: 2800, previousSalePrice: 4900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 8, emoji: "🌮", name: "타코", costPrice: 2600, previousSalePrice: 4500, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 9, emoji: "🌭", name: "핫도그", costPrice: 1700, previousSalePrice: 3000, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 10, emoji: "🧋", name: "버블티", costPrice: 2300, previousSalePrice: 4100, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
 ];
 
 const mockPopulationRanking = [
@@ -166,13 +167,11 @@ function getRecommendedPrice(costPrice: number) {
 function getSellingPriceDefault(
   costPrice: number,
   previousSalePrice: number,
-  day: number,
-  playableday: number | null,
+  hasPreviousPrice: boolean,
 ) {
-  if (playableday !== null && day > playableday) {
+  if (hasPreviousPrice && previousSalePrice > 0) {
     return previousSalePrice;
   }
-
   return getRecommendedPrice(costPrice);
 }
 
@@ -217,17 +216,26 @@ function resolveSelectedMenuId(
   );
 }
 
-function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[]) {
+function mapStoreMenusToPrepMenus(
+  menus: StoreMenuResponse[],
+  previousSalePrice: number | null,
+  previousMenuId: number | null,
+) {
   return menus.map((menu) => {
     const fallbackMenu = fallbackMenus.find((entry) => entry.id === menu.menuId);
+    // 이전 판매가는 이전에 선택했던 메뉴에만 적용
+    const isPrevisousMenu = previousMenuId !== null && menu.menuId === previousMenuId;
+    const prevPrice = isPrevisousMenu && previousSalePrice != null
+      ? previousSalePrice
+      : null;
 
     return {
       id: menu.menuId,
       emoji: fallbackMenu?.emoji ?? "🍽️",
       name: menu.menuName,
       costPrice: menu.ingredientPrice,
-      previousSalePrice:
-        fallbackMenu?.previousSalePrice ?? getRecommendedPrice(menu.ingredientPrice),
+      previousSalePrice: prevPrice ?? getRecommendedPrice(menu.ingredientPrice),
+      hasPreviousPrice: prevPrice !== null,
       ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     } satisfies PrepMenu;
   });
@@ -270,8 +278,7 @@ export default function PrepPage() {
   const defaultSellingPrice = getSellingPriceDefault(
     originalCostPrice,
     selectedMenuData.previousSalePrice,
-    day,
-    playableday,
+    selectedMenuData.hasPreviousPrice,
   );
   const [price, setPrice] = useState(defaultSellingPrice);
   const totalCost = originalCostPrice * quantity;
@@ -358,9 +365,10 @@ export default function PrepPage() {
 
     const loadPrepMenus = async () => {
       try {
-        const [menusResult, storeResult] = await Promise.allSettled([
+        const [menusResult, storeResult, orderResult] = await Promise.allSettled([
           getStoreMenus(),
           day >= 2 ? getStore() : Promise.resolve<StoreResponse | null>(null),
+          day >= 2 ? getCurrentOrder() : Promise.resolve(null),
         ]);
 
         if (!isActive) {
@@ -390,7 +398,12 @@ export default function PrepPage() {
           return;
         }
 
-        const nextMenus = mapStoreMenusToPrepMenus(fetchedMenus);
+        const prevOrder = orderResult.status === "fulfilled" ? orderResult.value : null;
+        const nextMenus = mapStoreMenusToPrepMenus(
+          fetchedMenus,
+          prevOrder?.sellingPrice ?? null,
+          prevOrder?.menuId ?? null,
+        );
         setMenus(nextMenus);
         setSelectedMenu((currentMenuId) =>
           resolveSelectedMenuId(nextMenus, currentMenuId, day, nextStoreMenuName),
@@ -420,63 +433,78 @@ export default function PrepPage() {
 
   useEffect(() => {
     let isActive = true;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-    const loadNews = async () => {
-      try {
-        const [todayNewsResult, rankingResult] = await Promise.allSettled([
-          getTodayNews(day),
-          getNewsRanking(day),
-        ]);
+    const applyNewsData = (
+      todayNewsResult: PromiseSettledResult<Awaited<ReturnType<typeof getTodayNews>>>,
+      rankingResult: PromiseSettledResult<NewsRankingResponse>,
+    ) => {
+      if (!isActive) return;
 
-        if (!isActive) {
-          return;
-        }
+      let nextError: string | null = null;
 
-        let nextError: string | null = null;
-
-        if (todayNewsResult.status === "fulfilled") {
-          const nextNewsItems = mapTodayNews(todayNewsResult.value.news);
-          setNewsItems(nextNewsItems);
-          setExpandedNewsId((currentId) =>
-            nextNewsItems.some((item) => item.id === currentId)
-              ? currentId
-              : nextNewsItems[0]?.id ?? null,
-          );
-        } else {
-          setNewsItems([]);
-          setExpandedNewsId(null);
-          nextError = "뉴스 정보를 일부 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
-        }
-
-        if (rankingResult.status === "fulfilled") {
-          setNewsRanking(rankingResult.value);
-        } else {
-          setNewsRanking(null);
-          nextError = "뉴스 정보를 일부 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
-        }
-
-        setNewsError(nextError);
-      } catch {
-        if (!isActive) {
-          return;
-        }
-
+      if (todayNewsResult.status === "fulfilled") {
+        const nextNewsItems = mapTodayNews(todayNewsResult.value.news);
+        setNewsItems(nextNewsItems);
+        setExpandedNewsId((currentId) =>
+          nextNewsItems.some((item) => item.id === currentId)
+            ? currentId
+            : nextNewsItems[0]?.id ?? null,
+        );
+      } else {
         setNewsItems([]);
-        setNewsRanking(null);
         setExpandedNewsId(null);
-        setNewsError("뉴스 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
-      } finally {
-        if (isActive) {
-          setIsNewsLoading(false);
-        }
+        nextError = "뉴스 정보를 일부 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
       }
+
+      if (rankingResult.status === "fulfilled") {
+        setNewsRanking(rankingResult.value);
+      } else {
+        setNewsRanking(null);
+        nextError = "뉴스 정보를 일부 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+      }
+
+      setNewsError(nextError);
     };
 
     setIsNewsLoading(true);
-    void loadNews();
+    setNewsError(null);
+    setNewsItems([]);
+
+    // 최소 5초간 스켈레톤 표시 (BE 뉴스 생성 대기)
+    // 5초 후 fetch → state에 반영 + 스켈레톤 해제
+    // 10초에 한 번 더 조용히 갱신 (추가 뉴스 반영)
+    const showTimer = setTimeout(async () => {
+      if (!isActive) return;
+      try {
+        const [todayResult, rankingResult] = await Promise.allSettled([
+          getTodayNews(day),
+          getNewsRanking(day),
+        ]);
+        applyNewsData(todayResult, rankingResult);
+      } catch {
+        if (isActive) setNewsError("뉴스 정보를 불러오지 못했습니다.");
+      } finally {
+        if (isActive) setIsNewsLoading(false);
+      }
+    }, 5000);
+    timers.push(showTimer);
+
+    const silentRefreshTimer = setTimeout(async () => {
+      if (!isActive) return;
+      try {
+        const [todayResult, rankingResult] = await Promise.allSettled([
+          getTodayNews(day),
+          getNewsRanking(day),
+        ]);
+        applyNewsData(todayResult, rankingResult);
+      } catch { /* 조용히 무시 */ }
+    }, 10000);
+    timers.push(silentRefreshTimer);
 
     return () => {
       isActive = false;
+      for (const t of timers) clearTimeout(t);
     };
   }, [day]);
 
@@ -721,7 +749,7 @@ export default function PrepPage() {
                       discountedCostPrice={discountedCostPrice}
                       hasItemDiscount={hasItemDiscount}
                       defaultPrice={defaultSellingPrice}
-                      defaultPriceLabel={playableday !== null && day > playableday ? "이전 판매가" : "권장가"}
+                      defaultPriceLabel={selectedMenuData.hasPreviousPrice ? "이전 판매가" : "권장가"}
                       onChange={setPrice}
                     />
                     <div className="flex flex-col gap-5">
@@ -779,20 +807,69 @@ export default function PrepPage() {
           ) : (
             /* Tab: 버블 뉴스 */
             <div className="flex flex-col gap-4">
-              {(isNewsLoading || newsError) && (
-                <div
-                  className={`flex items-start gap-3 rounded-2xl px-4 py-3 text-sm ${
-                    newsError
-                      ? "border border-amber-200 bg-amber-50/80 text-amber-700"
-                      : "border border-slate-200 bg-slate-50/80 text-slate-500"
-                  }`}
-                >
-                  <span className="material-symbols-outlined mt-0.5 text-base">
-                    {newsError ? "error" : "hourglass_top"}
-                  </span>
-                  <p className="leading-6">
-                    {newsError ?? "뉴스 정보를 불러오는 중입니다."}
-                  </p>
+              {newsError && (
+                <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-700">
+                  <span className="material-symbols-outlined mt-0.5 text-base">error</span>
+                  <p className="leading-6">{newsError}</p>
+                </div>
+              )}
+
+              {isNewsLoading && newsItems.length === 0 && (
+                <div className="bg-cozy-paper rounded-sm relative overflow-hidden shadow-[0_10px_30px_-5px_rgba(0,0,0,0.18),0_4px_10px_-2px_rgba(0,0,0,0.1)]">
+                  <div className="p-8 animate-pulse">
+                    {/* Masthead skeleton */}
+                    <div className="border-b-4 border-cozy-ink/20 mb-6 pb-2">
+                      <div className="h-10 w-64 rounded bg-cozy-ink/10" />
+                      <div className="mt-2 h-3 w-40 rounded bg-cozy-ink/5" />
+                    </div>
+
+                    <div className="grid gap-8 lg:grid-cols-12">
+                      {/* Left: articles */}
+                      <div className="lg:col-span-7">
+                        {/* Lead story */}
+                        <div className="pb-6 border-b-2 border-cozy-ink/10">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="h-5 w-20 rounded-sm bg-red-200/50" />
+                            <div className="h-3 w-24 rounded bg-cozy-ink/5" />
+                          </div>
+                          <div className="h-8 w-5/6 rounded bg-cozy-ink/10" />
+                          <div className="h-8 w-2/3 mt-2 rounded bg-cozy-ink/10" />
+                          <div className="mt-5 pl-5 border-l-2 border-cozy-sage/30 space-y-2">
+                            <div className="h-4 w-full rounded bg-cozy-ink/5" />
+                            <div className="h-4 w-full rounded bg-cozy-ink/5" />
+                            <div className="h-4 w-4/5 rounded bg-cozy-ink/5" />
+                          </div>
+                        </div>
+                        {/* Other stories */}
+                        <div className="mt-4 space-y-4">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex items-center justify-between py-3 border-b border-dashed border-cozy-ink/10">
+                              <div className="h-5 w-3/4 rounded bg-cozy-ink/8" />
+                              <div className="h-4 w-4 rounded bg-cozy-ink/5" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Right: rankings */}
+                      <div className="lg:col-span-5 space-y-6">
+                        <div className="border border-cozy-ink/10 rounded-sm p-4">
+                          <div className="h-3 w-32 rounded bg-cozy-ink/5 mb-2" />
+                          <div className="h-6 w-28 rounded bg-cozy-ink/10 mb-4" />
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex items-center justify-between py-2">
+                              <div className="flex items-center gap-3">
+                                <div className="h-5 w-5 rounded bg-cozy-ink/5" />
+                                <div className="h-4 w-16 rounded bg-cozy-ink/8" />
+                              </div>
+                              <div className="h-5 w-14 rounded-full bg-cozy-ink/5" />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="h-40 w-full rounded bg-cozy-ink/5" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 

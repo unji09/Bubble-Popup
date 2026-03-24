@@ -30,7 +30,8 @@ class GameDayReportResponseTests {
                 new GameDayReportResponse.DailyRevenue(1000L, 1000L, 1000L, 1000L, 1000L, 1000L, null),
                 new GameDayReportResponse.TomorrowWeather("CLEAR"),
                 true,
-                0
+                0,
+                false
         );
 
         JsonNode json = objectMapper.readTree(objectMapper.writeValueAsString(response));
@@ -44,5 +45,6 @@ class GameDayReportResponseTests {
         assertThat(json.get("storeName").asText()).isEqualTo("Yoonjin Cookie");
         assertThat(json.get("dailyRevenue").get("first").longValue()).isEqualTo(1000L);
         assertThat(json.get("dailyRevenue").get("seventh").isNull()).isTrue();
+        assertThat(json.get("isBankrupt").booleanValue()).isFalse();
     }
 }

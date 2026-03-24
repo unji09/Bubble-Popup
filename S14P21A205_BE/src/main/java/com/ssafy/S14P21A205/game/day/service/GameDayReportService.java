@@ -193,7 +193,8 @@ public class GameDayReportService {
                         store.getSeason().getTotalDays()
                 ),
                 resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()),
-                defaultInt(report.getConsecutiveDeficitDays())
+                defaultInt(report.getConsecutiveDeficitDays()),
+                Boolean.TRUE.equals(report.getIsBankrupt())
         );
     }
 
@@ -203,12 +204,34 @@ public class GameDayReportService {
                 SeasonStatus.IN_PROGRESS
         );
         if (activeStore.isPresent()) {
-            STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(activeStore.get(), LocalDateTime.now(clock));
-            return activeStore.get();
+            return applyPendingLocationIfDue(activeStore.get());
+        }
+
+        Optional<Store> inProgressStore = storeRepository.findFirstByUser_IdAndSeason_StatusOrderByIdDesc(
+                userId,
+                SeasonStatus.IN_PROGRESS
+        );
+        if (inProgressStore.isPresent()) {
+            return applyPendingLocationIfDue(inProgressStore.get());
+        }
+
+        Optional<Store> bankruptInProgressStore = storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(
+                userId,
+                SeasonStatus.IN_PROGRESS
+        );
+        if (bankruptInProgressStore.isPresent()) {
+            STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(bankruptInProgressStore.get(), LocalDateTime.now(clock));
+            return bankruptInProgressStore.get();
         }
 
         return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.FINISHED)
+                .map(this::applyPendingLocationIfDue)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_PARTICIPATING));
+    }
+
+    private Store applyPendingLocationIfDue(Store store) {
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, LocalDateTime.now(clock));
+        return store;
     }
 
     private void validateDay(int day, Season season) {

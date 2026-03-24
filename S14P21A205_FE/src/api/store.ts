@@ -6,6 +6,7 @@ export interface StoreResponse {
   menu: string;
   day: number;
   playableday: number;
+  playableFromDay?: number;
 }
 
 export interface StoreMenuResponse {

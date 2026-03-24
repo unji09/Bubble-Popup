@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
@@ -19,7 +20,10 @@ import org.hibernate.annotations.CreationTimestamp;
 
 @Getter
 @Entity
-@Table(name = "daily_report")
+@Table(
+        name = "daily_report",
+        uniqueConstraints = @UniqueConstraint(name = "uk_daily_report_store_day", columnNames = {"store_id", "day"})
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class DailyReport {
 

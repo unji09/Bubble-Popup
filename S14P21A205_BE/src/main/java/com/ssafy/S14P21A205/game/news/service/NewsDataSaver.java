@@ -125,17 +125,20 @@ public class NewsDataSaver {
 
     /**
      * 영업 중 뉴스 생성 (메뉴 입점수 + 지역 입점수).
+     * 다음 날 준비 화면에서 보이도록 day+1의 NewsReport에 저장.
+     * 마지막 날이면 현재 day에 저장.
      */
     @Transactional
     public void generateOpeningNews(Long seasonId, int day) {
-        NewsReport report = newsReportRepository.findBySeasonIdAndDay(seasonId, day).orElse(null);
+        int targetDay = resolveNextNewsDay(seasonId, day);
+        NewsReport report = newsReportRepository.findBySeasonIdAndDay(seasonId, targetDay).orElse(null);
         if (report == null) {
             return;
         }
 
-        log.info("[NEWS] Starting opening news for season {} day {}", seasonId, day);
+        log.info("[NEWS] Starting opening news for season {} day {} -> targetDay {}", seasonId, day, targetDay);
         generateOpeningNewsInternal(report, seasonId, day);
-        log.info("[NEWS] Completed opening news for season {} day {}", seasonId, day);
+        log.info("[NEWS] Completed opening news for season {} day {} -> targetDay {}", seasonId, day, targetDay);
     }
 
     // ---- 영업 중 뉴스 (메뉴 입점수 + 지역 입점수) ----
@@ -393,48 +396,32 @@ public class NewsDataSaver {
     }
 
     /**
-     * 시즌 준비 시간에 트렌드 뉴스가 먼저 생성됐을 때,
-     * IN_PROGRESS 전환 후 이벤트가 빌드되면 축제 예고 뉴스만 보충.
-     */
-    @Transactional
-    public void generateMissingEventPreviewNews(Long seasonId, int totalDays) {
-        for (int day = 1; day <= totalDays; day++) {
-            NewsReport report = newsReportRepository.findBySeasonIdAndDay(seasonId, day).orElse(null);
-            if (report == null) continue;
-
-            // 이미 해당 day에 EXTRA(축제 예고) 뉴스가 있으면 건너뜀
-            boolean hasExtra = newsArticleRepository.existsByNewsReportIdAndCategory(report.getId(), NewsCategory.EXTRA);
-            if (hasExtra) continue;
-
-            try {
-                generateEventPreviewNews(report, seasonId, day, totalDays);
-            } catch (Exception e) {
-                log.error("Failed to generate missing event preview. seasonId={} day={}", seasonId, day, e);
-            }
-        }
-    }
-
-    /**
      * Redis state에서 직접 지역별 매출 순위를 집계하여 NewsReport에 저장하고, 마감 뉴스도 생성.
-     * daily_report 의존 없이 독립 실행 가능.
+     * 다음 날 준비 화면에서 보이도록 day+1의 NewsReport에 마감 뉴스 저장.
+     * 순위 업데이트는 현재 day의 NewsReport에 반영.
      */
     @Transactional
     public void updateDayRankingsFromRedis(Long seasonId, int day, List<Store> stores) {
-        NewsReport report = newsReportRepository.findBySeasonIdAndDay(seasonId, day).orElse(null);
-        if (report == null) {
+        // 순위는 현재 day에 업데이트
+        NewsReport currentReport = newsReportRepository.findBySeasonIdAndDay(seasonId, day).orElse(null);
+        if (currentReport != null) {
+            String revenueRanking = buildAreaRevenueRankingFromRedis(stores, day);
+            String menuEntryRanking = buildMenuEntryRanking(seasonId);
+            String areaEntryRanking = buildAreaEntryRanking(seasonId);
+            currentReport.updateRankings(revenueRanking, menuEntryRanking, areaEntryRanking);
+            log.info("Updated rankings from Redis for season {} day {}", seasonId, day);
+        }
+
+        // 마감 뉴스는 다음 날 NewsReport에 저장 (마지막 날이면 현재 day)
+        int targetDay = resolveNextNewsDay(seasonId, day);
+        NewsReport targetReport = newsReportRepository.findBySeasonIdAndDay(seasonId, targetDay).orElse(null);
+        if (targetReport == null) {
             return;
         }
 
-        String revenueRanking = buildAreaRevenueRankingFromRedis(stores, day);
-        String menuEntryRanking = buildMenuEntryRanking(seasonId);
-        String areaEntryRanking = buildAreaEntryRanking(seasonId);
-
-        report.updateRankings(revenueRanking, menuEntryRanking, areaEntryRanking);
-        log.info("Updated rankings from Redis for season {} day {}", seasonId, day);
-
-        log.info("[NEWS] Starting closing news from Redis for season {} day {}", seasonId, day);
-        generateClosingNewsFromRedis(report, seasonId, day, stores);
-        log.info("[NEWS] Completed closing news from Redis for season {} day {}", seasonId, day);
+        log.info("[NEWS] Starting closing news from Redis for season {} day {} -> targetDay {}", seasonId, day, targetDay);
+        generateClosingNewsFromRedis(targetReport, seasonId, day, stores);
+        log.info("[NEWS] Completed closing news from Redis for season {} day {} -> targetDay {}", seasonId, day, targetDay);
     }
 
     // ---- Redis 기반 마감 뉴스 (매출 1위 / 누적 판매량 / 팝업 이동 중 1건) ----
@@ -576,6 +563,15 @@ public class NewsDataSaver {
         newsArticleRepository.save(NewsArticle.create(
                 report, day, NewsCategory.EXTRA, result.title(), result.content()));
         log.info("Generated migration news from stores for season {} day {}", seasonId, day);
+    }
+
+    /**
+     * 영업 중/마감 뉴스를 저장할 대상 day 결정.
+     * 다음 날 준비 화면에서 보여야 하므로 day+1, 마지막 날이면 현재 day.
+     */
+    private int resolveNextNewsDay(Long seasonId, int day) {
+        boolean hasNextDay = newsReportRepository.findBySeasonIdAndDay(seasonId, day + 1).isPresent();
+        return hasNextDay ? day + 1 : day;
     }
 
     private String buildAreaRevenueRankingFromRedis(List<Store> stores, int day) {

@@ -159,15 +159,6 @@ public class SeasonLifecycleService {
         preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
 
-        try {
-            if (!newsReportRepository.existsBySeasonId(scheduledSeason.getId())) {
-                newsService.generateSeasonNews(scheduledSeason.getId());
-            }
-            newsService.generateEventPreviewNewsIfMissing(scheduledSeason.getId());
-        } catch (Exception e) {
-            log.error("Failed to generate season news. seasonId={}", scheduledSeason.getId(), e);
-        }
-
         synchronizeInProgressSeason(scheduledSeason, now);
     }
 
@@ -200,9 +191,7 @@ public class SeasonLifecycleService {
             }
             if (!newsPrepared) {
                 newsService.generateSeasonNews(seasonId);
-                return;
             }
-            newsService.generateEventPreviewNewsIfMissing(seasonId);
         } catch (Exception e) {
             log.error("Failed to prepare scheduled season. seasonId={}", seasonId, e);
         }

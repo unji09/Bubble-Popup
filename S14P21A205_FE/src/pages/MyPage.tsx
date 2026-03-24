@@ -28,14 +28,14 @@ interface SeasonHistoryItem {
 }
 
 function toSeasonHistoryItem(record: UserRecord): SeasonHistoryItem {
-  const isBankrupt = record.rank === 0 || record.profit <= 0;
+  const isBankrupt = record.rank === null;
   const rankVariant: RankVariant = record.rank === 1 ? "gold" : isBankrupt ? "rose" : "gray";
 
   return {
-    id: `season-${record.seasonNumber}-${record.rank}`,
+    id: `season-${record.seasonNumber}-${record.rank ?? "bankrupt"}`,
     season: record.seasonNumber,
-    rank: isBankrupt ? "파산" : `${record.rank}위`,
-    rankValue: isBankrupt ? null : record.rank,
+    rank: isBankrupt ? "파산" : record.rank === null ? "-" : `${record.rank}위`,
+    rankValue: isBankrupt || record.rank === null ? null : record.rank,
     rankVariant,
     status: isBankrupt ? "bankrupt" : "default",
     location: record.location,

@@ -14,6 +14,7 @@ import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
@@ -46,8 +47,8 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public StoreResponse getStore(Integer userId) {
-        Store store = getStoreByUserId(userId);
         LocalDateTime now = LocalDateTime.now(clock);
+        Store store = getReadableStoreByUserId(userId, now);
 
         return new StoreResponse(
                 store.getLocation().getLocationName(),
@@ -110,7 +111,7 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public MenuListResponse getMenus(Integer userId) {
-        getStoreByUserId(userId);
+        Store store = getStoreByUserId(userId);
         float discount = getDisplayedIngredientDiscountRate(userId).floatValue();
 
         List<MenuListResponse.MenuInfo> menuInfos = menuRepository.findAllByOrderByIdAsc().stream()
@@ -180,6 +181,26 @@ public class StoreServiceImpl implements StoreService {
     private int resolvePlayableDay(Store store) {
         Integer playableFromDay = store.getPlayableFromDay();
         return playableFromDay == null || playableFromDay <= 0 ? 1 : playableFromDay;
+    }
+
+    private Store getReadableStoreByUserId(Integer userId, LocalDateTime now) {
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+                .or(() -> readableBankruptStore(userId, now))
+                .map(store -> {
+                    STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, now);
+                    return store;
+                })
+                .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
+    }
+
+    private java.util.Optional<Store> readableBankruptStore(Integer userId, LocalDateTime now) {
+        return storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+                .filter(store -> {
+                    SeasonPhase phase = seasonTimelineService.resolve(store.getSeason(), now).phase();
+                    return phase == SeasonPhase.DAY_REPORT
+                            || phase == SeasonPhase.SEASON_SUMMARY
+                            || phase == SeasonPhase.NEXT_SEASON_WAITING;
+                });
     }
 
     private Store getStoreByUserId(Integer userId) {

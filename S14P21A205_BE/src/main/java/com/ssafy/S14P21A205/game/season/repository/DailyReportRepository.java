@@ -11,7 +11,17 @@ import org.springframework.data.repository.query.Param;
 public interface DailyReportRepository extends JpaRepository<DailyReport, Long> {
 
     @EntityGraph(attributePaths = {"store", "store.season", "store.location", "store.menu"})
-    Optional<DailyReport> findByStoreIdAndDay(Long storeId, Integer day);
+    @Query("""
+            select dr
+            from DailyReport dr
+            where dr.id = (
+                select max(candidate.id)
+                from DailyReport candidate
+                where candidate.store.id = :storeId
+                  and candidate.day = :day
+            )
+            """)
+    Optional<DailyReport> findByStoreIdAndDay(@Param("storeId") Long storeId, @Param("day") Integer day);
 
     @EntityGraph(attributePaths = {"store", "store.season", "store.location", "store.menu"})
     Optional<DailyReport> findFirstByStore_IdOrderByDayDesc(Long storeId);

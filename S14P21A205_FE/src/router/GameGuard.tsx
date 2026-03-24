@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { getSeasonTime, type CurrentSeasonTimeResponse } from "../api/game";
+import { getDayReport, getSeasonTime, type CurrentSeasonTimeResponse } from "../api/game";
 import { getStore, type StoreResponse } from "../api/store";
 import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
 import { useGameStore } from "../stores/useGameStore";
@@ -17,6 +17,27 @@ export interface GameGuardContext {
 interface RedirectTarget {
   path: string;
   state?: WaitingRouteState;
+}
+
+async function resolveJoinedStoreAccess(
+  phase: SeasonPhase,
+  day: number | null,
+) {
+  try {
+    const storeData = await getStore();
+    return { joined: true, storeData };
+  } catch {
+    if (phase === "DAY_REPORT" && day != null) {
+      try {
+        await getDayReport(day);
+        return { joined: true, storeData: null as StoreResponse | null };
+      } catch {
+        return { joined: false, storeData: null as StoreResponse | null };
+      }
+    }
+
+    return { joined: false, storeData: null as StoreResponse | null };
+  }
 }
 
 /** 참여 완료 유저의 경로 허용 판정 */
@@ -128,14 +149,7 @@ export default function GameGuard() {
       const joinEnabled = timeData.joinEnabled;
 
       // 참여 여부 확인
-      let joined = false;
-      let storeData: StoreResponse | null = null;
-      try {
-        storeData = await getStore();
-        joined = true;
-      } catch {
-        joined = false;
-      }
+      let { joined, storeData } = await resolveJoinedStoreAccess(phase, day);
 
       // getStore 실패 시 sessionStorage의 playableFromDay를 fallback으로 사용
       // (BE가 파산 후 재참여 시 store를 바로 안 만드는 경우 대비)
@@ -213,14 +227,7 @@ export default function GameGuard() {
         const phase = timeData.seasonPhase as SeasonPhase;
         const day = timeData.currentDay;
 
-        let joined = false;
-        let storeData: StoreResponse | null = null;
-        try {
-          storeData = await getStore();
-          joined = true;
-        } catch {
-          joined = false;
-        }
+        const { joined, storeData } = await resolveJoinedStoreAccess(phase, day);
 
         const pfd = storeData?.playableFromDay ?? null;
         const waiting = joined && pfd != null && day < pfd;

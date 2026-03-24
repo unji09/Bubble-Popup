@@ -67,9 +67,26 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
             @Param("seasonStatus") SeasonStatus seasonStatus
     );
 
+    // Report view may still need the in-progress store even after it has gone bankrupt.
+    @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
+    Optional<Store> findFirstByUser_IdAndSeason_StatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus);
+
     Optional<Store> findFirstByUser_IdOrderBySeason_IdDescIdDesc(Integer userId);
 
     Optional<Store> findFirstByUser_IdAndSeason_IdOrderByIdDesc(Integer userId, Long seasonId);
+
+    @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
+    @Query("""
+            select s
+            from Store s
+            where s.user.id = :userId
+              and s.season.status = :seasonStatus
+            order by s.id desc
+            """)
+    Optional<Store> findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(
+            @Param("userId") Integer userId,
+            @Param("seasonStatus") SeasonStatus seasonStatus
+    );
 
     boolean existsByUser_IdAndSeason_Id(Integer userId, Long seasonId);
 

@@ -33,13 +33,15 @@ public class AiNewsGenerator {
     );
 
     private static final String SYSTEM_PROMPT =
-            "버블팝업 음식게임 기자. "
+            "너는 '버블팝업' 팝업스토어 음식게임 전문 기자다. "
+            + "게임 이름은 반드시 '버블팝업'이다. 다른 이름을 만들어내지 마. "
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
-            + "제목 15~25자, 고유명사 포함. 본문 300~400자. "
-            + "순수 한국어만(영어·한자·외국어 금지, SNS→온라인). "
-            + "숫자 직접 쓰지 말고 간접 표현. 괄호·이모지 금지. "
+            + "제목 15~25자. 본문 150~250자 이내로 짧게. "
+            + "순수 한국어만 사용(영어·한자·아랍어·외국어 절대 금지). "
+            + "숫자 직접 쓰지 말고 간접 표현. 괄호·이모지·따옴표 금지. "
             + "마크다운 금지(**, *, #, ```, - 등 절대 쓰지 마). "
-            + "짧은 문장 위주, 자연스럽고 읽기 쉬운 한국어로 써.";
+            + "짧은 문장 위주, 자연스럽고 읽기 쉬운 한국어로 써. "
+            + "가상의 인물명·매장명·브랜드명을 만들어내지 마.";
 
     private final RestClient restClient;
     private final String model;
@@ -359,7 +361,7 @@ public class AiNewsGenerator {
     private NewsGenerationResult callAi(String promptText) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", model);
-        requestBody.put("max_tokens", 512);
+        requestBody.put("max_tokens", 350);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", SYSTEM_PROMPT),
                 Map.of("role", "user", "content", promptText)));
@@ -499,12 +501,37 @@ public class AiNewsGenerator {
             if (node.has("title") && node.has("content")) {
                 String title = sanitize(node.get("title").asText().strip());
                 String content = sanitize(node.get("content").asText().strip());
+                // 제목 25자 제한
+                if (title.length() > 25) {
+                    title = title.substring(0, 25);
+                }
+                // 본문이 너무 길면 마지막 완전한 문장에서 자르기
+                if (content.length() > 300) {
+                    content = truncateAtSentence(content, 300);
+                }
                 return new NewsGenerationResult(title, content);
             }
         } catch (Exception e) {
             log.warn("JSON parse failed: {}", e.getMessage());
         }
         return null;
+    }
+
+    /** 본문을 maxLen 이내에서 마지막 완전한 문장 기준으로 자르기 */
+    private String truncateAtSentence(String text, int maxLen) {
+        String sub = text.substring(0, maxLen);
+        int lastEnd = -1;
+        for (int i = sub.length() - 1; i >= 0; i--) {
+            char c = sub.charAt(i);
+            if (c == '.' || c == '다' || c == '!' || c == '?') {
+                lastEnd = i;
+                break;
+            }
+        }
+        if (lastEnd > maxLen / 2) {
+            return sub.substring(0, lastEnd + 1).strip();
+        }
+        return sub.strip();
     }
 
     /** 정규식으로 title/content 추출 시도 */
@@ -542,6 +569,8 @@ public class AiNewsGenerator {
         text = text.replaceAll("[a-zA-Z]+", "");
         // 중국어·일본어 문자 제거
         text = text.replaceAll("[\\u4e00-\\u9fff\\u3040-\\u309f\\u30a0-\\u30ff]+", "");
+        // 아랍어·키릴 등 비한글·비숫자·비구두점 외국어 제거
+        text = text.replaceAll("[\\u0600-\\u06FF\\u0400-\\u04FF]+", "");
         // 백슬래시 이스케이프 정리
         text = text.replace("\\n", " ").replace("\\\"", "\"");
         // 연속 공백 정리

@@ -18,7 +18,7 @@ export interface UserPointsResponse {
 
 export interface UserRecord {
   seasonNumber: number;
-  rank: number;
+  rank: number | null;
   location: string;
   popupName: string;
   profit: number;

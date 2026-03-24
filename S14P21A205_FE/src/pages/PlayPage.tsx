@@ -401,21 +401,20 @@ function formatEmergencyArrivalGameTime(arrivedTime: string, businessEndMs: numb
   return elapsedToGameTime(elapsedSec);
 }
 
-function getEstimatedEmergencyArrivalTime(
-  serverTime: string | null | undefined,
+function getEstimatedEmergencyArrivalGameTime(
+  remainingMilliseconds: number,
   delaySeconds: number | null | undefined,
 ) {
-  if (!serverTime || typeof delaySeconds !== "number" || delaySeconds < 0) {
+  if (typeof delaySeconds !== "number" || delaySeconds < 0) {
     return null;
   }
 
-  const parsedServerTime = new Date(serverTime);
-
-  if (Number.isNaN(parsedServerTime.getTime())) {
-    return null;
-  }
-
-  return new Date(parsedServerTime.getTime() + delaySeconds * 1000).toISOString();
+  const currentElapsedBusinessSeconds = Math.floor(getElapsedBusinessSeconds(remainingMilliseconds));
+  const estimatedElapsedBusinessSeconds = Math.min(
+    BUSINESS_SECONDS,
+    currentElapsedBusinessSeconds + delaySeconds,
+  );
+  return elapsedToGameTime(estimatedElapsedBusinessSeconds);
 }
 
 function getDiscountedPrice(
@@ -537,7 +536,7 @@ function PlayPageSession({
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
   const unityIframeRef = useRef<HTMLIFrameElement>(null);
-  const [unityReady, setUnityReady] = useState(false);
+  const [, setUnityReady] = useState(false);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
   const hasLoadedCarryOverRef = useRef(false);
@@ -560,7 +559,7 @@ function PlayPageSession({
   const [trafficStatus, setTrafficStatus] = useState<GameTrafficStatus | null>(null);
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
-  const [estimatedEmergencyArriveAt, setEstimatedEmergencyArriveAt] = useState<string | null>(null);
+  const [estimatedEmergencyDelaySeconds, setEstimatedEmergencyDelaySeconds] = useState<number | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
   const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
@@ -575,10 +574,9 @@ function PlayPageSession({
   remainingMillisecondsRef.current = remainingMilliseconds;
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
-  const displayedEmergencyArriveAt = emergencyArriveAt ?? estimatedEmergencyArriveAt;
-  const emergencyArrivalGameTime = displayedEmergencyArriveAt
-    ? formatEmergencyArrivalGameTime(displayedEmergencyArriveAt, playEndTimestampMs) || null
-    : null;
+  const emergencyArrivalGameTime = emergencyArriveAt
+    ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs) || null
+    : getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds);
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
@@ -646,6 +644,8 @@ function PlayPageSession({
   const prevGuestsRef = useRef<number | null>(null);
   const prevStockRef = useRef<number | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
+  // Unity arrival 시 고객별 재고/잔액 변동 큐
+  const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
 
   const clearScheduledVisitorTimers = () => {
     for (const timerId of scheduledVisitorTimersRef.current) {
@@ -793,54 +793,98 @@ function PlayPageSession({
   const handlePopupArrival = (popupStoreIndex: number | null) => {
     const currentPopupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
 
+    console.log("[PopupArrival] received:", popupStoreIndex, "current:", currentPopupStoreIndex, "locationId:", currentLocationIdRef.current, "queueSize:", arrivalQueueRef.current.length);
+
     if (currentPopupStoreIndex === null) {
+      console.log("[PopupArrival] SKIP: currentPopupStoreIndex is null");
       return;
     }
 
     if (popupStoreIndex !== null && popupStoreIndex !== currentPopupStoreIndex) {
+      console.log("[PopupArrival] SKIP: index mismatch", popupStoreIndex, "!==", currentPopupStoreIndex);
       return;
     }
 
-    setGuests((prev) => prev + 1);
+    applyOneArrival();
   };
+
+  const applyOneArrival = () => {
+    if (arrivalQueueRef.current.length === 0) return;
+
+    setGuests((prev) => prev + 1);
+
+    const change = arrivalQueueRef.current.shift();
+    if (change && (change.stockDelta !== 0 || change.balanceDelta !== 0)) {
+      setStock((prev) => prev + change.stockDelta);
+      setBalance((prev) => prev + change.balanceDelta);
+    }
+  };
+
+  // Unity UNITY_POPUP_ARRIVAL 이벤트 수신
+  useEffect(() => {
+    const handleUnityMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "UNITY_POPUP_ARRIVAL") return;
+
+      const signalValue = Number(event.data.signalValue ?? 1);
+      console.log("[Unity] UNITY_POPUP_ARRIVAL received, signalValue:", signalValue, "queueSize:", arrivalQueueRef.current.length);
+      for (let i = 0; i < signalValue; i += 1) {
+        applyOneArrival();
+      }
+    };
+
+    window.addEventListener("message", handleUnityMessage);
+    return () => window.removeEventListener("message", handleUnityMessage);
+  }, []);
 
   const applyGameState = (state: GameStateResponse) => {
     const hasCustomerPlan =
       Array.isArray(state.customerPlanByHour) && state.customerPlanByHour.length > 0;
-    // 이전 값이 있으면 delta 계산
+
     if (prevGuestsRef.current !== null) {
       const gd = state.customerCount - prevGuestsRef.current;
-      const sd = state.inventory.totalStock - prevStockRef.current!;
-      const bd = state.cash - prevBalanceRef.current!;
-      if (gd !== 0) setGuestsDelta(gd);
-      if (sd !== 0) setStockDelta(sd);
-      if (bd !== 0) setBalanceDelta(bd);
-      if (!hasCustomerPlan && gd > 0) {
-        const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
 
-        if (popupStoreIndex !== null) {
-          spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+      // 이전 큐 클리어
+      arrivalQueueRef.current = [];
+
+      // 새 손님이 있으면: 재고/잔액은 이전 값 유지, 큐로 점진 반영
+      if (gd > 0) {
+        const { soldUnits, unitPrice } = state.customerTick;
+        for (const units of soldUnits) {
+          arrivalQueueRef.current.push({
+            stockDelta: -units,
+            balanceDelta: units * unitPrice,
+          });
         }
+
+        if (!hasCustomerPlan) {
+          const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
+
+          if (popupStoreIndex !== null) {
+            spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+          }
+        }
+      } else {
+        // 새 손님 없으면 백엔드 값으로 직접 동기화
+        setStock(state.inventory.totalStock);
+        setBalance(state.cash);
       }
+    } else {
+      // 최초 폴링: 백엔드 값으로 초기화
+      setGuests(state.customerCount);
+      setStock(state.inventory.totalStock);
+      setBalance(state.cash);
     }
 
     // 현재 값을 ref에 저장 (다음 비교용)
     prevGuestsRef.current = state.customerCount;
     prevStockRef.current = state.inventory.totalStock;
     prevBalanceRef.current = state.cash;
-
-    setBalance(state.cash);
-    setStock(state.inventory.totalStock);
-    setGuests(state.customerCount);
     setTrafficStatus(state.traffic?.status ?? null);
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
     syncUnityCongestionLevel(state.traffic?.status);
     schedulePlannedVisitors(state.customerPlanByHour, state.customerCount);
-    const estimatedEmergencyArriveAt = getEstimatedEmergencyArrivalTime(
-      state.serverTime,
-      state.traffic?.delaySeconds,
-    );
-    setEstimatedEmergencyArriveAt(estimatedEmergencyArriveAt);
+    setEstimatedEmergencyDelaySeconds(state.traffic?.delaySeconds ?? null);
     setEmergencyArriveAt((current) => {
       if (state.actionStatus.emergencyOrderArriveAt) {
         return state.actionStatus.emergencyOrderArriveAt;
@@ -1006,7 +1050,7 @@ function PlayPageSession({
         setTrafficStatus(null);
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
-        setEstimatedEmergencyArriveAt(null);
+        setEstimatedEmergencyDelaySeconds(null);
         latestCustomerPlanRef.current = [];
         latestBackendCustomerCountRef.current = 0;
         dispatchedVisitorsByHourRef.current.clear();
@@ -1397,9 +1441,9 @@ function PlayPageSession({
         guests={guests}
         stock={stock}
         balance={balance}
-        guestsDelta={guestsDelta}
-        stockDelta={stockDelta}
-        balanceDelta={balanceDelta}
+        guestsDelta={null}
+        stockDelta={null}
+        balanceDelta={null}
       />
 
       <main className="relative flex flex-1 overflow-hidden">

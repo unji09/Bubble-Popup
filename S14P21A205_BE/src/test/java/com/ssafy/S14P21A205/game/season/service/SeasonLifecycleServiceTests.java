@@ -214,7 +214,6 @@ class SeasonLifecycleServiceTests {
         inOrder.verify(dailyEventRepository).saveAll(savedEventsCaptor.capture());
         inOrder.verify(newsService).generateSeasonNews(41L);
         verify(sparkEtlScheduler).runEtl();
-        verify(newsService, never()).generateEventPreviewNewsIfMissing(41L);
 
         assertThat(savedEventsCaptor.getValue()).hasSize(15);
         assertThat(savedEventsCaptor.getValue())

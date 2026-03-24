@@ -70,12 +70,10 @@ function getDefaultSalePrice(
 ) {
   const isCurrentMenu = menu.menuId === currentMenuId;
   const appliedCurrentPricing = isCurrentMenu ? currentMenuPricing : null;
-  const originalCostPrice = appliedCurrentPricing?.costPrice ?? menu.ingredientPrice;
-  const recommendedPrice =
-    appliedCurrentPricing?.recommendedPrice ?? getRecommendedPrice(originalCostPrice);
-  const maxSellingPrice =
-    appliedCurrentPricing?.maxSellingPrice ?? roundToHundreds(recommendedPrice * 2);
-  const minSellingPrice = appliedCurrentPricing?.costPrice ?? originalCostPrice;
+  const originalCostPrice = menu.ingredientPrice;
+  const recommendedPrice = getRecommendedPrice(originalCostPrice);
+  const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
+  const minSellingPrice = originalCostPrice;
 
   return clampPrice(
     appliedCurrentPricing?.sellingPrice ?? recommendedPrice,
@@ -199,16 +197,15 @@ export default function EmergencyOrderModal({
   const appliedCurrentPricing = isCurrentMenu ? currentMenuPricing : null;
   const ingredientDiscountMultiplier = selectedMenu.ingredientDiscountMultiplier;
   const hasItemDiscount = ingredientDiscountMultiplier < 1;
-  const originalCostPrice = appliedCurrentPricing?.costPrice ?? selectedMenu.ingredientPrice;
+  // 판매가 범위는 메뉴 기본 원가 기준 (정규 발주와 동일)
+  const originalCostPrice = selectedMenu.ingredientPrice;
   const discountedCostPrice = applyDiscount(
     originalCostPrice,
     ingredientDiscountMultiplier,
   );
-  const recommendedPrice =
-    appliedCurrentPricing?.recommendedPrice ?? getRecommendedPrice(originalCostPrice);
-  const maxSellingPrice =
-    appliedCurrentPricing?.maxSellingPrice ?? roundToHundreds(recommendedPrice * 2);
-  const minSellingPrice = appliedCurrentPricing?.costPrice ?? originalCostPrice;
+  const recommendedPrice = getRecommendedPrice(originalCostPrice);
+  const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
+  const minSellingPrice = originalCostPrice;
   const defaultSalePrice = getDefaultSalePrice(
     selectedMenu,
     currentMenuId,
@@ -428,6 +425,9 @@ export default function EmergencyOrderModal({
                 <h3 className="text-sm font-bold text-slate-800">배송 정보</h3>
                 <p className="mt-1 text-xs text-slate-400">
                   현재 교통량과 예상 도착 시간을 실시간으로 안내합니다.
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                  교통 상황에 따라 예상 도착 시간과 실제 도착 시간은 달라질 수 있습니다.
                 </p>
               </div>
 

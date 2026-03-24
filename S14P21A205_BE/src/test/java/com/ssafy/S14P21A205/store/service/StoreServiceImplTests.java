@@ -130,6 +130,37 @@ class StoreServiceImplTests {
     }
 
     @Test
+    void getStoreReturnsBankruptStoreDuringReportPhase() {
+        Store store = store(15L, 3L, 6, 7);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+
+        StoreResponse response = storeService.getStore(1);
+
+        assertThat(response.location()).isEqualTo("Seongsu");
+        assertThat(response.popupName()).isEqualTo("Default Store");
+        assertThat(response.day()).isEqualTo(6);
+    }
+
+    @Test
+    void getStoreRejectsBankruptStoreDuringBusinessPhase() {
+        Store store = store(15L, 3L, 6, 7, 100L);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+
+        assertThatThrownBy(() -> storeService.getStore(1))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.STORE_NOT_FOUND));
+    }
+
+    @Test
     void getLocationsReturnsListWithoutCurrentSeasonStore() {
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.RENT))
                 .thenReturn(Optional.of(new BigDecimal("0.80")));
@@ -148,6 +179,10 @@ class StoreServiceImplTests {
     }
 
     private Store store(Long storeId, Long locationId, int currentDay, int totalDays) {
+        return store(storeId, locationId, currentDay, totalDays, 170L);
+    }
+
+    private Store store(Long storeId, Long locationId, int currentDay, int totalDays, long currentDayElapsedSeconds) {
         Location location = location(locationId, "Seongsu", 100_000, 150_000);
         Menu menu = menu(5L, "Cookie");
 
@@ -157,7 +192,7 @@ class StoreServiceImplTests {
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
         LocalDateTime now = LocalDateTime.of(2026, 3, 9, 14, 33, 0);
-        LocalDateTime seasonStartAt = now.minusSeconds(120L + (currentDay - 1L) * 180L + 170L);
+        LocalDateTime seasonStartAt = now.minusSeconds(120L + (currentDay - 1L) * 180L + currentDayElapsedSeconds);
         ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
         ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
 
