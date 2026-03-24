@@ -43,6 +43,15 @@ def find_column(columns, keyword, exact=False):
     return None
 
 
+def is_missing_sheet_error(exc):
+    text = str(exc)
+    return (
+        "MissingSheetException" in text
+        or "Unknown sheet" in text
+        or "Failed to find sheet" in text
+    )
+
+
 delete_hdfs_path_if_exists(TEMP_OUTPUT_PATH)
 processed_any = False
 
@@ -104,6 +113,11 @@ for path in xlsx_files:
             break
         except Exception as exc:
             last_error = exc
+            if is_missing_sheet_error(exc):
+                continue
+            raise RuntimeError(
+                f"Traffic workbook processing failed path={path}, dataAddress={data_address}, error={exc}"
+            ) from exc
 
     if not loaded:
         raise RuntimeError(f"Failed to load traffic workbook path={path}, candidates={candidate_sheets}, error={last_error}")
