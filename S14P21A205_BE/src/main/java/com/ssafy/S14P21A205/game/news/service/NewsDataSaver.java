@@ -57,22 +57,27 @@ public class NewsDataSaver {
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Transactional
-    public void saveNewsData(Long seasonId, Season season, int totalDays,
-                             Map<Integer, List<MenuMentionCount>> dayMentions) {
+    public void saveNewsData(
+            Long seasonId,
+            Season season,
+            int totalDays,
+            Map<Integer, List<MenuMentionCount>> dayMentions,
+            String sourceBatchKey
+    ) {
         // 기존 뉴스 전체 삭제 (FK child → parent 순서)
         newsArticleRepository.deleteAllInBatch();
         newsReportRepository.deleteAllInBatch();
         log.info("Cleared all news before regeneration for season {}", seasonId);
 
-        List<LocalDate> trafficDates = populationRepository.findDistinctDatesOrdered();
+        List<LocalDate> trafficDates = populationRepository.findDistinctDatesOrderedBySourceBatchKey(sourceBatchKey);
         log.info("[NEWS] Step 3/4: Generating news for {} days via AI", totalDays);
 
         for (int day = 1; day <= totalDays; day++) {
             List<MenuMentionCount> mentions = dayMentions.getOrDefault(day, List.of());
 
             String trafficRanking = (day <= trafficDates.size())
-                    ? buildAreaTrafficRankingForDate(trafficDates.get(day - 1))
-                    : buildAreaTrafficRanking();
+                    ? buildAreaTrafficRankingForDate(trafficDates.get(day - 1), sourceBatchKey)
+                    : buildAreaTrafficRanking(sourceBatchKey);
             String trendRanking = convertMentionsToJson(mentions);
             NewsReport report = NewsReport.create(
                     season, day, "[]", trafficRanking, "[]", trendRanking, "[]");
@@ -599,8 +604,8 @@ public class NewsDataSaver {
 
     // ---- Ranking build methods ----
 
-    private String buildAreaTrafficRanking() {
-        List<Object[]> rows = populationRepository.avgPopulationByLocation();
+    private String buildAreaTrafficRanking(String sourceBatchKey) {
+        List<Object[]> rows = populationRepository.avgPopulationByLocationAndSourceBatchKey(sourceBatchKey);
         List<Map<String, Object>> ranking = rows.stream()
                 .map(row -> {
                     Map<String, Object> item = new LinkedHashMap<>();
@@ -612,8 +617,8 @@ public class NewsDataSaver {
         return toJson(ranking);
     }
 
-    private String buildAreaTrafficRankingForDate(LocalDate date) {
-        List<Object[]> rows = populationRepository.avgPopulationByLocationAndDate(date);
+    private String buildAreaTrafficRankingForDate(LocalDate date, String sourceBatchKey) {
+        List<Object[]> rows = populationRepository.avgPopulationByLocationAndDateAndSourceBatchKey(date, sourceBatchKey);
         List<Map<String, Object>> ranking = rows.stream()
                 .map(row -> {
                     Map<String, Object> item = new LinkedHashMap<>();

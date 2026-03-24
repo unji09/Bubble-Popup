@@ -10,6 +10,8 @@ public interface TrafficRepository extends JpaRepository<Traffic, Long> {
 
     List<Traffic> findByLocationIdOrderByDateAsc(Long locationId);
 
+    List<Traffic> findByLocationIdAndSourceBatchKeyOrderByDateAsc(Long locationId, String sourceBatchKey);
+
     Optional<Traffic> findFirstByLocation_IdAndDate(Long locationId, LocalDateTime date);
 
     List<Traffic> findByLocation_IdAndDateBetweenOrderByDateAsc(

@@ -10,15 +10,21 @@ import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
 import com.ssafy.S14P21A205.game.news.dto.NewsListResponse;
 import com.ssafy.S14P21A205.game.news.dto.NewsRankingResponse;
 import com.ssafy.S14P21A205.game.news.entity.NewsArticle;
+import com.ssafy.S14P21A205.game.news.entity.NewsMenuMention;
 import com.ssafy.S14P21A205.game.news.entity.NewsReport;
 import com.ssafy.S14P21A205.game.news.repository.NewsArticleRepository;
+import com.ssafy.S14P21A205.game.news.repository.NewsMenuMentionRepository;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
+import com.ssafy.S14P21A205.game.season.entity.EtlJobRequest;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.EtlJobRequestRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +34,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * 뉴스 생성 오케스트레이터.
- * Spark ETL(트랜잭션 밖)과 DB 저장(NewsDataSaver, 트랜잭션 안)을 분리.
+ * 준비된 ETL 결과를 사용해 DB 저장(NewsDataSaver, 트랜잭션 안)을 분리.
  */
 @Service
 @RequiredArgsConstructor
@@ -38,32 +44,28 @@ public class NewsService {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final SparkNewsDataService sparkNewsDataService;
     private final NewsDataSaver newsDataSaver;
     private final NewsArticleRepository newsArticleRepository;
+    private final NewsMenuMentionRepository newsMenuMentionRepository;
     private final NewsReportRepository newsReportRepository;
+    private final EtlJobRequestRepository etlJobRequestRepository;
     private final SeasonRepository seasonRepository;
 
-    /**
-     * 시즌 뉴스 생성 (Spark ETL → DB 저장 + AI 호출).
-     * Spark ETL은 트랜잭션 밖에서 실행하고,
-     * DB 저장은 NewsDataSaver를 통해 별도 트랜잭션으로 처리.
-     */
     public void generateSeasonNews(Long seasonId) {
         Season season = seasonRepository.findById(seasonId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
         int totalDays = season.getTotalDays();
+        EtlJobRequest etlJobRequest = etlJobRequestRepository.findBySeasonId(seasonId)
+                .filter(EtlJobRequest::isSucceeded)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND, "ETL source is not ready."));
+        String sourceBatchKey = etlJobRequest.getSourceBatchKey();
 
-        // Spark ETL 실행 (트랜잭션 밖 — 1~2분 소요)
-        log.info("[NEWS] Step 1/4: Running Spark ETL for season {}", seasonId);
-        sparkNewsDataService.runNewsEtl();
-        log.info("[NEWS] Step 2/4: Reading menu mentions for {} days", totalDays);
-        Map<Integer, List<MenuMentionCount>> dayMentions =
-                sparkNewsDataService.getMenuMentionsForDays(totalDays);
-        log.info("[NEWS] Step 2/4 done: got mentions for {} days", dayMentions.size());
+        log.info("[NEWS] Step 1/3: Reading menu mentions from DB for season {}", seasonId);
+        Map<Integer, List<MenuMentionCount>> dayMentions = loadDayMentions(sourceBatchKey, totalDays);
+        log.info("[NEWS] Step 1/3 done: got mentions for {} days", dayMentions.size());
 
         // DB 저장 + AI 호출 (별도 빈 → @Transactional 프록시 정상 동작)
-        newsDataSaver.saveNewsData(seasonId, season, totalDays, dayMentions);
+        newsDataSaver.saveNewsData(seasonId, season, totalDays, dayMentions, sourceBatchKey);
     }
 
     /**
@@ -205,5 +207,26 @@ public class NewsService {
             log.warn("Failed to parse ranking JSON: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    private Map<Integer, List<MenuMentionCount>> loadDayMentions(String sourceBatchKey, int totalDays) {
+        List<NewsMenuMention> mentions = newsMenuMentionRepository
+                .findBySourceBatchKeyOrderByDayAscMentionCountDescMenuNameAsc(sourceBatchKey);
+
+        Map<Integer, List<MenuMentionCount>> dayMentions = new LinkedHashMap<>();
+        for (int day = 1; day <= totalDays; day++) {
+            dayMentions.put(day, new ArrayList<>());
+        }
+
+        mentions.stream()
+                .filter(mention -> mention.getDay() != null && mention.getDay() >= 1 && mention.getDay() <= totalDays)
+                .sorted(Comparator
+                        .comparing(NewsMenuMention::getDay)
+                        .thenComparing(NewsMenuMention::getMentionCount, Comparator.reverseOrder())
+                        .thenComparing(NewsMenuMention::getMenuName))
+                .forEach(mention -> dayMentions.get(mention.getDay()).add(
+                        new MenuMentionCount(mention.getMenuName(), mention.getMentionCount())
+                ));
+        return dayMentions;
     }
 }

@@ -3,6 +3,7 @@ spring:
     activate:
       on-profile: prod
   jpa:
+    defer-datasource-initialization: true
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:validate}
     properties:
@@ -12,7 +13,7 @@ spring:
     show-sql: ${JPA_SHOW_SQL:false}
   sql:
     init:
-      mode: ${SQL_INIT_MODE:never}
+      mode: ${SQL_INIT_MODE:always}
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}

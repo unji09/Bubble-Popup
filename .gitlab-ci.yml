@@ -157,6 +157,17 @@ deploy-data:
     - rsync -az "$BACKEND_DIR/docker-compose.data.yml" "$BACKEND_DIR/hadoop.env" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/"
     - rsync -az "$BACKEND_DIR/data/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/data/"
     - rsync -az "$BACKEND_DIR/spark/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/spark/"
+    - |
+      if [ -n "${PROD_ENV_FILE:-}" ]; then
+        printf '%s\n' "$PROD_ENV_FILE" > .env.data
+      elif [ -n "${PROD_ENV_FILE_B64:-}" ]; then
+        printf '%s' "$PROD_ENV_FILE_B64" | base64 -d > .env.data
+      else
+        echo "Missing PROD_ENV_FILE or PROD_ENV_FILE_B64"
+        exit 1
+      fi
+    - sed -i 's/\r$//' .env.data
+    - scp .env.data "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/.env"
     - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -f docker-compose.data.yml down && docker compose -f docker-compose.data.yml up -d --build --force-recreate --remove-orphans && docker image prune -f"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'

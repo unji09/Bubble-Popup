@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 
+from db_env import resolve_db_config
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, lit, round as spark_round, least, concat_ws,
@@ -37,16 +38,12 @@ K = 2432.42
 SCALE = 1.29
 MAX_SCORE = 20
 
-DB_HOST = os.environ.get("DB_HOST")
-DB_PORT = os.environ.get("DB_PORT")
-DB_NAME = os.environ.get("DB_NAME")
-DB_USERNAME = os.environ.get("DB_USERNAME")
-DB_PASSWORD = os.environ.get("DB_PASSWORD")
+db_config = resolve_db_config()
 
-MYSQL_URL = f"jdbc:mysql://{DB_HOST}:{DB_PORT}/{DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul"
+MYSQL_URL = db_config["db_url"]
 MYSQL_PROPS = {
-    "user": DB_USERNAME,
-    "password": DB_PASSWORD,
+    "user": db_config["db_username"],
+    "password": db_config["db_password"],
     "driver": "com.mysql.cj.jdbc.Driver",
 }
 

@@ -5,7 +5,6 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
-import com.ssafy.S14P21A205.game.scheduler.SparkEtlScheduler;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
@@ -26,8 +25,10 @@ import com.ssafy.S14P21A205.game.event.entity.EventStartTime;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
 import com.ssafy.S14P21A205.game.event.repository.RandomEventRepository;
+import com.ssafy.S14P21A205.game.season.entity.EtlJobRequest;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.EtlJobRequestRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
@@ -88,7 +89,7 @@ public class SeasonLifecycleService {
     private final FestivalRepository festivalRepository;
     private final NewsReportRepository newsReportRepository;
     private final NewsService newsService;
-    private final SparkEtlScheduler sparkEtlScheduler;
+    private final EtlJobRequestRepository etlJobRequestRepository;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private final Clock clock;
@@ -183,13 +184,11 @@ public class SeasonLifecycleService {
         if (newsPrepared && dailyEventsPrepared) return;
 
         try {
-            if (!newsPrepared && scheduledSeason.getSourceBatchKey() == null) {
-                sparkEtlScheduler.runEtl();
-            }
+            EtlJobRequest etlJobRequest = ensurePendingEtlJobRequest(scheduledSeason);
             if (!dailyEventsPrepared) {
                 prepareDailyEventsIfMissing(scheduledSeason, requireLocations());
             }
-            if (!newsPrepared) {
+            if (!newsPrepared && etlJobRequest.isSucceeded()) {
                 newsService.generateSeasonNews(seasonId);
             }
         } catch (Exception e) {
@@ -410,7 +409,10 @@ public class SeasonLifecycleService {
         List<LocalDate> expectedSourceDates = null;
 
         for (Location location : locations) {
-            List<Population> sourceRows = populationRepository.findByLocationIdOrderByDateAsc(location.getId());
+            List<Population> sourceRows = populationRepository.findByLocationIdAndSourceBatchKeyOrderByDateAsc(
+                    location.getId(),
+                    expectedSourceBatchKey
+            );
             ensureSourceBatchKey(location.getId(), "population", sourceRows, Population::getSourceBatchKey, expectedSourceBatchKey);
             List<List<Population>> dailyGroups = groupRowsByDate(sourceRows, Population::getDate);
             List<LocalDate> sourceDates = extractDistinctDates(sourceRows, Population::getDate);
@@ -438,7 +440,10 @@ public class SeasonLifecycleService {
         List<LocalDate> expectedSourceDates = null;
 
         for (Location location : locations) {
-            List<Traffic> sourceRows = trafficRepository.findByLocationIdOrderByDateAsc(location.getId());
+            List<Traffic> sourceRows = trafficRepository.findByLocationIdAndSourceBatchKeyOrderByDateAsc(
+                    location.getId(),
+                    expectedSourceBatchKey
+            );
             ensureSourceBatchKey(location.getId(), "traffic", sourceRows, Traffic::getSourceBatchKey, expectedSourceBatchKey);
             List<List<Traffic>> dailyGroups = groupRowsByDate(sourceRows, Traffic::getDate);
             List<LocalDate> sourceDates = extractDistinctDates(sourceRows, Traffic::getDate);
@@ -679,11 +684,22 @@ public class SeasonLifecycleService {
     }
 
     private String resolveStartableSourceBatchKey(Season scheduledSeason, List<Location> locations) {
+        EtlJobRequest etlJobRequest = etlJobRequestRepository.findBySeasonId(scheduledSeason.getId())
+                .filter(EtlJobRequest::isSucceeded)
+                .orElse(null);
+        if (etlJobRequest == null || etlJobRequest.getSourceBatchKey() == null) {
+            return null;
+        }
+
+        String expectedSourceBatchKey = etlJobRequest.getSourceBatchKey();
         String populationBatchKey = resolveSharedSourceBatchKey(
                 locations,
                 "population",
                 scheduledSeason.getTotalDays(),
-                location -> populationRepository.findByLocationIdOrderByDateAsc(location.getId()),
+                location -> populationRepository.findByLocationIdAndSourceBatchKeyOrderByDateAsc(
+                        location.getId(),
+                        expectedSourceBatchKey
+                ),
                 Population::getSourceBatchKey,
                 Population::getDate
         );
@@ -691,12 +707,25 @@ public class SeasonLifecycleService {
                 locations,
                 "traffic",
                 scheduledSeason.getTotalDays(),
-                location -> trafficRepository.findByLocationIdOrderByDateAsc(location.getId()),
+                location -> trafficRepository.findByLocationIdAndSourceBatchKeyOrderByDateAsc(
+                        location.getId(),
+                        expectedSourceBatchKey
+                ),
                 Traffic::getSourceBatchKey,
                 Traffic::getDate
         );
 
         if (populationBatchKey == null || trafficBatchKey == null) {
+            return null;
+        }
+        if (!expectedSourceBatchKey.equals(populationBatchKey) || !expectedSourceBatchKey.equals(trafficBatchKey)) {
+            log.info(
+                    "Season {} is waiting for requested spark batch. expectedBatchKey={}, populationBatchKey={}, trafficBatchKey={}",
+                    scheduledSeason.getId(),
+                    expectedSourceBatchKey,
+                    populationBatchKey,
+                    trafficBatchKey
+            );
             return null;
         }
         if (!populationBatchKey.equals(trafficBatchKey)) {
@@ -812,6 +841,13 @@ public class SeasonLifecycleService {
             }
         }
         return expectedBatchKey;
+    }
+
+    private EtlJobRequest ensurePendingEtlJobRequest(Season season) {
+        return etlJobRequestRepository.findBySeasonId(season.getId())
+                .orElseGet(() -> etlJobRequestRepository.save(
+                        EtlJobRequest.createPending(season.getId(), LocalDateTime.now(clock))
+                ));
     }
 
     private <T> void ensureSourceBatchKey(

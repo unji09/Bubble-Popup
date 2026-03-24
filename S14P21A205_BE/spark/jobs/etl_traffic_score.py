@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 
+from db_env import resolve_db_config
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, lit, when, concat_ws, to_timestamp, create_map,
@@ -31,23 +32,12 @@ SPOT_TO_NAME = {
     "D-17": "홍대",
 }
 
-DB_HOST = os.environ.get("DB_HOST")
-DB_PORT = os.environ.get("DB_PORT")
-DB_NAME = os.environ.get("DB_NAME")
-DB_USERNAME = os.environ.get("DB_USERNAME")
-DB_PASSWORD = os.environ.get("DB_PASSWORD")
+db_config = resolve_db_config()
 
-_required = {"DB_HOST": DB_HOST, "DB_PORT": DB_PORT, "DB_NAME": DB_NAME,
-             "DB_USERNAME": DB_USERNAME, "DB_PASSWORD": DB_PASSWORD}
-_missing = [k for k, v in _required.items() if not v]
-if _missing:
-    print(f"필수 환경변수 미설정: {', '.join(_missing)}")
-    sys.exit(1)
-
-MYSQL_URL = f"jdbc:mysql://{DB_HOST}:{DB_PORT}/{DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul"
+MYSQL_URL = db_config["db_url"]
 MYSQL_PROPS = {
-    "user": DB_USERNAME,
-    "password": DB_PASSWORD,
+    "user": db_config["db_username"],
+    "password": db_config["db_password"],
     "driver": "com.mysql.cj.jdbc.Driver",
 }
 

@@ -47,8 +47,6 @@ services:
   hdfs-init:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: hdfs-init
-    profiles:
-      - hdfs-init
     depends_on:
       - namenode
       - datanode
@@ -96,6 +94,33 @@ services:
       - SPARK_WORKER_CORES=2
     volumes:
       - ./spark/jobs:/opt/spark-jobs
+
+  etl-runner:
+    build:
+      context: ./spark
+      target: master
+    container_name: etl-runner
+    depends_on:
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+      hdfs-init:
+        condition: service_completed_successfully
+    env_file:
+      - ./.env
+      - ./hadoop.env
+    environment:
+      - PYTHONPATH=/opt/spark-jobs
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=${DB_NAME}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./spark/jobs:/opt/spark-jobs
+    command: python3 /opt/spark-jobs/etl_runner.py
+    restart: unless-stopped
 
   spark-etl:
     build:
