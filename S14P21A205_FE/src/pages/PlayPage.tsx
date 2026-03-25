@@ -936,6 +936,17 @@ function PlayPageSession({
 
   const [rankings, setRankings] = useState<RankEntry[]>([]);
 
+  // Unity ready 시그널 수신 (postMessage "unityReady" — 3초 대기 후)
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "unityReady") {
+        setUnityReady(true);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
   useEffect(() => {
     let isActive = true;
 
@@ -966,17 +977,6 @@ function PlayPageSession({
       window.clearInterval(timer);
     };
   }, [nickname]);
-
-  // Unity ready 시그널 수신 (postMessage "unityReady" — 3초 대기 후)
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === "unityReady") {
-        setUnityReady(true);
-      }
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, []);
 
   useEffect(() => {
     let isActive = true;

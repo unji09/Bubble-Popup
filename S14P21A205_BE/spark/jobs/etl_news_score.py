@@ -551,7 +551,7 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 df = spark.read.parquet("hdfs://namenode:9000/processed/news/")
-print(f"1차 정제 뉴스 로드 완료. 총 {df.count()}건")
+print("1차 정제 뉴스 로드 완료.")
 
 # 텍스트 전처리
 df_clean = df.withColumn(
@@ -572,8 +572,6 @@ df_with_menus = df_clean.withColumn(
 from pyspark.sql.functions import size
 df_matched = df_with_menus.filter(size(col("matched_menus")) > 0)
 
-print(f"메뉴 키워드 매칭된 기사: {df_matched.count()}건 / 전체 {df.count()}건")
-
 df_exploded = df_matched.withColumn(
     "menu_name",
     explode(col("matched_menus"))
@@ -584,22 +582,11 @@ df_mentions = df_exploded.groupBy(
     col("menu_name"),
 ).count().withColumnRenamed("count", "mention_count")
 
-# 날짜별 메뉴별 집계 결과
-print("\n=== 날짜별 메뉴 언급량 ===")
-df_mentions.orderBy("date", "menu_name").show(100, truncate=False)
-
 df_mentions.write.mode("overwrite").parquet(
     "hdfs://namenode:9000/processed/news_mentions/"
 )
 
-total_rows = df_mentions.count()
-distinct_dates = df_mentions.select("date").distinct().count()
-distinct_menus = df_mentions.select("menu_name").distinct().count()
-
-print(f"\nNews Score ETL 완료.")
-print(f"  저장 경로: /processed/news_mentions/")
-print(f"  총 행 수: {total_rows}")
-print(f"  날짜 수: {distinct_dates}")
-print(f"  메뉴 수: {distinct_menus}")
+print("\nNews Score ETL 완료.")
+print("  저장 경로: /processed/news_mentions/")
 
 spark.stop()
