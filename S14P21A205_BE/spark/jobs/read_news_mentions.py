@@ -14,7 +14,7 @@ import sys
 from datetime import datetime, timedelta
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, lit
 
 spark = SparkSession.builder \
     .appName("Read_News_Mentions") \
@@ -28,25 +28,37 @@ if len(sys.argv) < 3:
 
 start_date = datetime.strptime(sys.argv[1], "%Y%m%d").date()
 total_days = int(sys.argv[2])
-selected_dates = [(start_date + timedelta(days=offset)).strftime("%Y%m%d") for offset in range(total_days)]
+selected_dates = [start_date + timedelta(days=offset) for offset in range(total_days)]
+result = {str(day_idx): [] for day_idx in range(1, total_days + 1)}
 
 try:
     df = spark.read.parquet("hdfs://namenode:9000/processed/news_mentions/")
 except Exception:
-    print(json.dumps({}))
+    print(json.dumps(result, ensure_ascii=False))
     spark.stop()
     sys.exit(0)
 
-result = {}
-for day_idx, date_val in enumerate(selected_dates, start=1):
-    rows = df.filter(col("date") == date_val) \
-        .orderBy(col("mention_count").desc()) \
+if selected_dates:
+    day_key_by_date = {
+        date_value: str(day_idx)
+        for day_idx, date_value in enumerate(selected_dates, start=1)
+    }
+    rows = (
+        df.filter(
+            (col("date") >= lit(selected_dates[0].isoformat()))
+            & (col("date") <= lit(selected_dates[-1].isoformat()))
+        )
+        .select("date", "menu_name", "mention_count")
+        .orderBy(col("date").asc(), col("mention_count").desc(), col("menu_name").asc())
         .collect()
-    mentions = [
-        {"menuName": row["menu_name"], "mentionCount": int(row["mention_count"])}
-        for row in rows
-    ]
-    result[str(day_idx)] = mentions
+    )
+    for row in rows:
+        day_key = day_key_by_date.get(row["date"])
+        if day_key is None:
+            continue
+        result[day_key].append(
+            {"menuName": row["menu_name"], "mentionCount": int(row["mention_count"])}
+        )
 
 print(json.dumps(result, ensure_ascii=False))
 

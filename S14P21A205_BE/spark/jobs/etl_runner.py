@@ -3,6 +3,7 @@ import random
 import subprocess
 import sys
 import time
+import traceback
 from datetime import datetime, timedelta
 
 import pymysql
@@ -12,6 +13,14 @@ from db_env import resolve_db_config
 POLL_INTERVAL_SECONDS = 10
 SPARK_MASTER_URL = 'spark://spark-master:7077'
 RUN_ETL_COMMAND = ['bash', '/opt/spark-jobs/run-etl.sh']
+
+
+def log(message):
+    print(f"[etl-runner] {datetime.now().isoformat(timespec='seconds')} {message}", flush=True)
+
+
+def ensure_connection(connection):
+    connection.ping(reconnect=True)
 
 
 def db_connection(db):
@@ -47,6 +56,7 @@ def spark_submit(script_name, *args):
 
 
 def fetch_pending_request(connection):
+    ensure_connection(connection)
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -61,6 +71,7 @@ def fetch_pending_request(connection):
 
 
 def claim_request(connection, request_id):
+    ensure_connection(connection)
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -74,6 +85,7 @@ def claim_request(connection, request_id):
 
 
 def load_total_days(connection, season_id):
+    ensure_connection(connection)
     with connection.cursor() as cursor:
         cursor.execute('SELECT total_days FROM season WHERE season_id = %s', (season_id,))
         row = cursor.fetchone()
@@ -117,6 +129,7 @@ def parse_mentions_json(output):
 
 
 def save_mentions(connection, batch_key, start_date_str, mentions_by_day):
+    ensure_connection(connection)
     with connection.cursor() as cursor:
         cursor.execute('DELETE FROM news_menu_mention WHERE source_batch_key = %s', (batch_key,))
         rows = []
@@ -140,9 +153,11 @@ def save_mentions(connection, batch_key, start_date_str, mentions_by_day):
                 """,
                 rows,
             )
+        return len(rows)
 
 
 def mark_request_succeeded(connection, request_id, start_date_str, batch_key):
+    ensure_connection(connection)
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -157,6 +172,7 @@ def mark_request_succeeded(connection, request_id, start_date_str, batch_key):
 
 def mark_request_failed(connection, request_id, message):
     truncated = (message or 'unknown error')[:1000]
+    ensure_connection(connection)
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -170,21 +186,46 @@ def mark_request_failed(connection, request_id, message):
 
 def process_request(connection, request):
     season_id = request['season_id']
+    request_id = request['request_id']
+    log(f"Processing requestId={request_id} seasonId={season_id}")
     total_days = load_total_days(connection, season_id)
+    log(f"Loaded totalDays={total_days}")
 
+    log("Running raw ETL pipeline")
     run_command(RUN_ETL_COMMAND)
+    log("Raw ETL pipeline completed")
+
+    log("Listing available ETL dates")
     available_dates_output = spark_submit('list_available_dates.py')
     available_dates = parse_available_dates(available_dates_output)
+    log(f"Resolved availableDates={len(available_dates)}")
     start_date = pick_start_date(available_dates, total_days, season_id)
     batch_key = f"spark-{start_date}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    log(f"Selected startDate={start_date} batchKey={batch_key}")
 
+    log("Running etl_population_score.py")
     spark_submit('etl_population_score.py', start_date, batch_key)
+    log("Completed etl_population_score.py")
+
+    log("Running etl_traffic_score.py")
     spark_submit('etl_traffic_score.py', start_date, batch_key)
+    log("Completed etl_traffic_score.py")
+
+    log("Running etl_news_score.py")
     spark_submit('etl_news_score.py')
+    log("Completed etl_news_score.py")
+
+    log("Running read_news_mentions.py")
     mentions_output = spark_submit('read_news_mentions.py', start_date, total_days)
     mentions_by_day = parse_mentions_json(mentions_output)
-    save_mentions(connection, batch_key, start_date, mentions_by_day)
-    mark_request_succeeded(connection, request['request_id'], start_date, batch_key)
+    mention_row_count = sum(len(mentions) for mentions in mentions_by_day.values())
+    log(f"Parsed news mentions days={len(mentions_by_day)} rows={mention_row_count}")
+
+    saved_row_count = save_mentions(connection, batch_key, start_date, mentions_by_day)
+    log(f"Saved news_menu_mention rows={saved_row_count}")
+
+    mark_request_succeeded(connection, request_id, start_date, batch_key)
+    log(f"Marked requestId={request_id} as SUCCEEDED")
 
 
 def main():
@@ -205,9 +246,12 @@ def main():
             try:
                 process_request(connection, pending)
             except Exception as exc:
+                log(f"Request failed. requestId={pending['request_id']} error={exc}")
+                traceback.print_exc()
                 mark_request_failed(connection, pending['request_id'], str(exc))
         except Exception as exc:
-            print(f'[etl-runner] {exc}', file=sys.stderr)
+            log(f"Runner loop error: {exc}")
+            traceback.print_exc()
             time.sleep(POLL_INTERVAL_SECONDS)
         finally:
             if connection is not None:
