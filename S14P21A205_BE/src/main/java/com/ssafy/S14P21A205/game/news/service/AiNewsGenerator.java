@@ -71,15 +71,18 @@ public class AiNewsGenerator {
 
     public NewsGenerationResult generateTrendNews(long seasonId, int day, List<MenuMentionCount> rankedMenus) {
         String style = getRandomStyle();
+        String focusMenu = selectTrendFocusMenu(day, rankedMenus);
         String rankingText = IntStream.range(0, rankedMenus.size())
                 .mapToObj(i -> (i + 1) + "위 " + rankedMenus.get(i).menuName())
                 .collect(Collectors.joining(", "));
 
         String prompt = ("현재 버블팝업 상권 인기 메뉴 순위: %s. "
+                + "오늘 기사에서는 %s를 중심 소재로 삼되, 상위 메뉴 전반의 흐름과 거리 분위기를 함께 엮어 써줘. "
                 + "순위를 숫자로 직접 말하지 말고, 거리 풍경이나 줄 서는 모습 등으로 인기도를 간접 표현해. "
                 + "상위 메뉴들을 모두 자연스럽게 언급하되, 각 메뉴의 맛이나 분위기를 오감으로 묘사해. "
-                + "제목에 가장 인기 있는 메뉴명을 포함해. 스타일: %s")
-                .formatted(rankingText, style);
+                + "제목은 특정 메뉴 하나만 반복적으로 밀지 말고 오늘 거리의 분위기와 변화를 먼저 드러내며, "
+                + "필요하면 메뉴명은 자연스럽게 녹여 써줘. 스타일: %s")
+                .formatted(rankingText, focusMenu, style);
         try {
             return callAi(prompt);
         } catch (Exception e) {
@@ -89,12 +92,25 @@ public class AiNewsGenerator {
     }
 
     private NewsGenerationResult fallbackTrendNews(int day, List<MenuMentionCount> rankedMenus) {
-        String topMenu = rankedMenus.isEmpty() ? "음식" : rankedMenus.get(0).menuName();
+        String focusMenu = selectTrendFocusMenu(day, rankedMenus);
         return new NewsGenerationResult(
-                "거리에서 감지된 새로운 미식 트렌드",
-                "최근 버블팝업 상권 곳곳에서 " + topMenu + "을(를) 찾는 발걸음이 부쩍 늘었다는 소식이 들려오고 있다. "
+                focusMenu + " 향이 번지는 거리, 오늘의 미식 풍경",
+                "최근 버블팝업 상권 곳곳에서 " + focusMenu + "을(를) 찾는 발걸음이 부쩍 늘었다는 소식이 들려오고 있다. "
                 + "업계 관계자들은 \"SNS에서의 반응이 심상치 않다\"며 주목하고 있으며, "
                 + "일부 점주들은 이미 관련 메뉴 도입을 검토 중인 것으로 알려졌다.");
+    }
+
+    private String selectTrendFocusMenu(int day, List<MenuMentionCount> rankedMenus) {
+        List<String> candidates = rankedMenus.stream()
+                .map(MenuMentionCount::menuName)
+                .filter(menuName -> menuName != null && !menuName.isBlank())
+                .distinct()
+                .limit(3)
+                .toList();
+        if (candidates.isEmpty()) {
+            return "음식";
+        }
+        return candidates.get(Math.floorMod(day - 1, candidates.size()));
     }
 
     // ---- Menu Entry News ----

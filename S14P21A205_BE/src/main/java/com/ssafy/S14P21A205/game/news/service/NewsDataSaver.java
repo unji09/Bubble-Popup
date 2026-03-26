@@ -64,10 +64,9 @@ public class NewsDataSaver {
             Map<Integer, List<MenuMentionCount>> dayMentions,
             String sourceBatchKey
     ) {
-        // 기존 뉴스 전체 삭제 (FK child → parent 순서)
-        newsArticleRepository.deleteAllInBatch();
-        newsReportRepository.deleteAllInBatch();
-        log.info("Cleared all news before regeneration for season {}", seasonId);
+        newsArticleRepository.deleteBySeasonId(seasonId);
+        newsReportRepository.deleteBySeasonId(seasonId);
+        log.info("Cleared season-scoped news before regeneration for season {}", seasonId);
 
         List<LocalDate> trafficDates = populationRepository.findDistinctDatesOrderedBySourceBatchKey(sourceBatchKey);
         log.info("[NEWS] Step 3/4: Generating news for {} days via AI", totalDays);

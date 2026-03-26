@@ -56,6 +56,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @Slf4j
@@ -164,9 +166,7 @@ public class SeasonLifecycleService {
         }
 
         prepareDailyEventsIfMissing(scheduledSeason, locations);
-        if (!newsReportRepository.existsBySeasonId(scheduledSeason.getId())) {
-            newsService.generateSeasonNews(scheduledSeason.getId());
-        }
+        boolean shouldGenerateNewsAfterStart = !newsReportRepository.existsBySeasonId(scheduledSeason.getId());
 
         scheduledSeason.startAt(now, sourceBatchKey);
         scheduledSeason.applyReservedDemoSkip();
@@ -178,6 +178,9 @@ public class SeasonLifecycleService {
         preloadWeatherDay(scheduledSeason.getId(), weatherSchedule, 1);
         preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
+        if (shouldGenerateNewsAfterStart) {
+            registerSeasonNewsGenerationAfterCommit(scheduledSeason.getId());
+        }
 
         synchronizeInProgressSeason(scheduledSeason, now);
         return SeasonStartResult.STARTED;
@@ -1250,6 +1253,30 @@ public class SeasonLifecycleService {
                     ErrorCode.RESOURCE_NOT_FOUND,
                     "Expected exactly " + requiredDays + " " + sourceName + " source days for location " + locationId
             );
+        }
+    }
+
+    private void registerSeasonNewsGenerationAfterCommit(Long seasonId) {
+        if (seasonId == null) {
+            return;
+        }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            triggerSeasonNewsGeneration(seasonId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                triggerSeasonNewsGeneration(seasonId);
+            }
+        });
+    }
+
+    private void triggerSeasonNewsGeneration(Long seasonId) {
+        try {
+            newsService.generateSeasonNews(seasonId);
+        } catch (Exception e) {
+            log.error("Failed to generate season news after season start. seasonId={}", seasonId, e);
         }
     }
 

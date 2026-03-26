@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +45,7 @@ public class NewsService {
     private static final Logger log = LoggerFactory.getLogger(NewsService.class);
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private final Set<Long> generatingSeasonIds = ConcurrentHashMap.newKeySet();
 
     private final NewsDataSaver newsDataSaver;
     private final NewsArticleRepository newsArticleRepository;
@@ -52,20 +55,36 @@ public class NewsService {
     private final SeasonRepository seasonRepository;
 
     public void generateSeasonNews(Long seasonId) {
+        if (seasonId == null) {
+            return;
+        }
+        if (!generatingSeasonIds.add(seasonId)) {
+            log.info("[NEWS] Generation already in progress for season {}. Skipping duplicate request.", seasonId);
+            return;
+        }
         Season season = seasonRepository.findById(seasonId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
-        int totalDays = season.getTotalDays();
-        EtlJobRequest etlJobRequest = etlJobRequestRepository.findBySeasonId(seasonId)
-                .filter(EtlJobRequest::isSucceeded)
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND, "ETL source is not ready."));
-        String sourceBatchKey = etlJobRequest.getSourceBatchKey();
+        try {
+            if (newsReportRepository.existsBySeasonId(seasonId)) {
+                log.info("[NEWS] Season {} already has news. Skipping regeneration.", seasonId);
+                return;
+            }
 
-        log.info("[NEWS] Step 1/3: Reading menu mentions from DB for season {}", seasonId);
-        Map<Integer, List<MenuMentionCount>> dayMentions = loadDayMentions(sourceBatchKey, totalDays);
-        log.info("[NEWS] Step 1/3 done: got mentions for {} days", dayMentions.size());
+            int totalDays = season.getTotalDays();
+            EtlJobRequest etlJobRequest = etlJobRequestRepository.findBySeasonId(seasonId)
+                    .filter(EtlJobRequest::isSucceeded)
+                    .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND, "ETL source is not ready."));
+            String sourceBatchKey = etlJobRequest.getSourceBatchKey();
 
-        // DB 저장 + AI 호출 (별도 빈 → @Transactional 프록시 정상 동작)
-        newsDataSaver.saveNewsData(seasonId, season, totalDays, dayMentions, sourceBatchKey);
+            log.info("[NEWS] Step 1/3: Reading menu mentions from DB for season {}", seasonId);
+            Map<Integer, List<MenuMentionCount>> dayMentions = loadDayMentions(sourceBatchKey, totalDays);
+            log.info("[NEWS] Step 1/3 done: got mentions for {} days", dayMentions.size());
+
+            // DB 저장 + AI 호출 (별도 빈 → @Transactional 프록시 정상 동작)
+            newsDataSaver.saveNewsData(seasonId, season, totalDays, dayMentions, sourceBatchKey);
+        } finally {
+            generatingSeasonIds.remove(seasonId);
+        }
     }
 
     /**

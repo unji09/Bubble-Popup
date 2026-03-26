@@ -23,6 +23,8 @@ import org.hibernate.annotations.CreationTimestamp;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class NewsArticle {
 
+    private static final int NEWS_TITLE_MAX_LENGTH = 200;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "news_id", nullable = false, updatable = false)
@@ -60,6 +62,40 @@ public class NewsArticle {
 
     public static NewsArticle create(NewsReport newsReport, int day, NewsCategory category, String title,
             String content) {
-        return new NewsArticle(newsReport, day, category, title, content);
+        return new NewsArticle(
+                newsReport,
+                day,
+                category,
+                normalizeTitle(title),
+                normalizeContent(content)
+        );
+    }
+
+    private static String normalizeTitle(String title) {
+        String normalized = normalizeText(title);
+        if (normalized.isBlank()) {
+            return "제목 없음";
+        }
+        if (normalized.length() <= NEWS_TITLE_MAX_LENGTH) {
+            return normalized;
+        }
+        return normalized.substring(0, NEWS_TITLE_MAX_LENGTH);
+    }
+
+    private static String normalizeContent(String content) {
+        String normalized = normalizeText(content);
+        return normalized.isBlank() ? "내용 없음" : normalized;
+    }
+
+    private static String normalizeText(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("```json", "")
+                .replace("```", "")
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .trim();
     }
 }
