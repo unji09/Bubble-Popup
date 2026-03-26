@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 export type AlertType = "event" | "bad_event" | "deadline" | "stock" | "action";
 
@@ -73,10 +73,36 @@ const descriptionClampStyle: CSSProperties = {
   WebkitLineClamp: 2,
 };
 
+const slideInBounceStyle = `
+@keyframes slideInBounce {
+  0% { transform: translateX(100%); opacity: 0; }
+  50% { transform: translateX(-8px); opacity: 1; }
+  70% { transform: translateX(4px); }
+  100% { transform: translateX(0); opacity: 1; }
+}
+.alert-slide-in {
+  animation: slideInBounce 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+`;
+
 export default function EventSidebar({ alerts }: EventSidebarProps) {
   const [expanded, setExpanded] = useState(false);
   const [, setTick] = useState(0);
+  const [newAlertIds, setNewAlertIds] = useState<Set<number>>(new Set());
+  const prevAlertCountRef = useRef(alerts.length);
   const latest = alerts[0];
+
+  // 새 알림 감지 → 애니메이션 트리거
+  useEffect(() => {
+    if (alerts.length > prevAlertCountRef.current) {
+      const newIds = new Set(alerts.slice(0, alerts.length - prevAlertCountRef.current).map((a) => a.id));
+      setNewAlertIds(newIds);
+      const timer = window.setTimeout(() => setNewAlertIds(new Set()), 600);
+      prevAlertCountRef.current = alerts.length;
+      return () => window.clearTimeout(timer);
+    }
+    prevAlertCountRef.current = alerts.length;
+  }, [alerts]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setTick((t) => t + 1), 5_000);
@@ -85,6 +111,7 @@ export default function EventSidebar({ alerts }: EventSidebarProps) {
 
   return (
     <aside className="absolute top-20 right-4 z-10 w-72 pointer-events-none">
+      <style>{slideInBounceStyle}</style>
       <div className="glass-panel rounded-2xl shadow-lg pointer-events-auto overflow-hidden">
         <button
           type="button"
@@ -101,7 +128,7 @@ export default function EventSidebar({ alerts }: EventSidebarProps) {
         </button>
 
         {latest && !expanded && (
-          <div className="px-4 pb-3">
+          <div className={`px-4 pb-3 ${newAlertIds.has(latest.id) ? "alert-slide-in" : ""}`}>
             <AlertCard alert={latest} />
           </div>
         )}
@@ -109,7 +136,9 @@ export default function EventSidebar({ alerts }: EventSidebarProps) {
         {expanded && (
           <div className="px-4 pb-3 space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
             {alerts.map((alert) => (
-              <AlertCard key={alert.id} alert={alert} />
+              <div key={alert.id} className={newAlertIds.has(alert.id) ? "alert-slide-in" : ""}>
+                <AlertCard alert={alert} />
+              </div>
             ))}
           </div>
         )}

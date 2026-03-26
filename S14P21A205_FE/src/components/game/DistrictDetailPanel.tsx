@@ -23,13 +23,25 @@ interface DistrictDetailPanelProps {
 
 const BRAND_NAME_MAX_LENGTH = 10;
 
-const congestionTone: Record<string, { label: string; text: string }> = {
-  "매우 혼잡": { label: "매우 혼잡", text: "text-rose-500" },
-  혼잡: { label: "혼잡", text: "text-amber-600" },
-  보통: { label: "보통", text: "text-primary-dark" },
-  여유: { label: "여유", text: "text-sky-600" },
-  "매우 여유": { label: "매우 여유", text: "text-slate-500" },
-};
+function getCongestionStyle(congestion: string): { label: string; text: string } {
+  // 유동인구 순위 형식 ("유동인구 1위" 등)
+  const rankMatch = congestion.match(/(\d+)위/);
+  if (rankMatch) {
+    const rank = Number(rankMatch[1]);
+    if (rank <= 2) return { label: congestion, text: "text-rose-500" };
+    if (rank <= 5) return { label: congestion, text: "text-amber-600" };
+    return { label: congestion, text: "text-sky-600" };
+  }
+  // 레거시 fallback
+  const toneMap: Record<string, { label: string; text: string }> = {
+    "매우 혼잡": { label: "매우 혼잡", text: "text-rose-500" },
+    혼잡: { label: "혼잡", text: "text-amber-600" },
+    보통: { label: "보통", text: "text-primary-dark" },
+    여유: { label: "여유", text: "text-sky-600" },
+    "매우 여유": { label: "매우 여유", text: "text-slate-500" },
+  };
+  return toneMap[congestion] ?? { label: congestion, text: "text-primary-dark" };
+}
 
 const gradeTone: Record<string, string> = {
   S: "border-accent-rose bg-accent-rose text-white",
@@ -49,7 +61,7 @@ export default function DistrictDetailPanel({
 }: DistrictDetailPanelProps) {
   const [brandName, setBrandName] = useState("");
   const [visible, setVisible] = useState(false);
-  const congestionMeta = congestionTone[district.congestion] ?? congestionTone.보통;
+  const congestionMeta = getCongestionStyle(district.congestion);
   const grade = district.grade.charAt(0);
   const hasRentDiscount =
     Boolean(discountedRent) && discountedRent !== district.rent && Boolean(rentDiscountLabel);
@@ -114,23 +126,22 @@ export default function DistrictDetailPanel({
           </button>
 
           <div className="border-b border-slate-100 bg-[#F8FBF8] px-6 pb-6 pt-7 sm:px-7">
-            <div className="mb-4 flex flex-wrap items-center gap-2 pr-14">
-              <span
-                className={`rounded-full border px-3 py-1 text-[11px] font-bold ${
-                  gradeTone[grade] ?? gradeTone.B
-                }`}
-              >
-                {district.grade}
-              </span>
-            </div>
-
             <div className="pr-12">
               <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
                 Selected District
               </p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">
-                {district.name}
-              </h2>
+              <div className="mt-2 flex items-center gap-3">
+                <h2 className="text-3xl font-black tracking-tight text-slate-900">
+                  {district.name}
+                </h2>
+                <span
+                  className={`rounded-full border px-4 py-1.5 text-sm font-extrabold ${
+                    gradeTone[grade] ?? gradeTone.B
+                  }`}
+                >
+                  {district.grade}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -174,7 +185,7 @@ export default function DistrictDetailPanel({
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
                 <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  혼잡도
+                  유동인구 순위
                 </span>
                 <span className={`text-lg font-bold ${congestionMeta.text}`}>
                   {congestionMeta.label}

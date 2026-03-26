@@ -13,6 +13,7 @@ export interface GameWaitingResponse {
   tick: number | null;
   joinEnabled: boolean | null;
   joinPlayableFromDay: number | null;
+  participantCount: number | null;
 }
 
 export interface SeasonJoinRequest {

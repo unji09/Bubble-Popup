@@ -3,87 +3,109 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useEffectLifecycle } from "../useEffectLifecycle";
 
-/**
- * 포켓몬 능력치 상승/하락 이펙트 (최종)
- * - 화면 전체에 반투명 컬러 틴트가 빠르게 펄스
- * - 큼직한 화살표가 화면 중앙부에서 빠르게 위/아래로 스윕
- * - 반복 웨이브: 번쩍 + 화살표 스윕이 1초 간격으로 반복
- */
-
 const ARROW_COUNT = 8;
+const TRAIL_COUNT = 40;
 
 interface Props {
   durationMs: number;
   direction?: "up" | "down";
 }
 
-/** 꽉 찬 화살표 텍스처 (이미지 화살표처럼 + 글로우 + 라운드) */
-function createArrowTexture(color: string): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 128;
-  c.height = 128;
-  const ctx = c.getContext("2d")!;
+/* ── easing helpers ── */
+function easeOutCubic(t: number) {
+  return 1 - (1 - t) ** 3;
+}
 
-  ctx.clearRect(0, 0, 128, 128);
+/* ── 화살표 텍스처 (256x256) ── */
+function createArrowTexture(color: string): THREE.CanvasTexture {
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
 
   const r = parseInt(color.slice(1, 3), 16);
   const g = parseInt(color.slice(3, 5), 16);
   const b = parseInt(color.slice(5, 7), 16);
 
-  // 화살표 패스 (꽉 찬 형태: 넓은 삼각형 머리 + 두꺼운 몸통, 둥근 느낌)
+  const s = size / 128; // scale factor from old 128 coords
+
   const drawArrow = () => {
     ctx.beginPath();
-    // 삼각형 머리 (넓고 뭉툭)
-    ctx.moveTo(64, 6);       // 꼭대기 중앙
-    ctx.lineTo(118, 58);     // 오른쪽 끝
-    ctx.lineTo(84, 58);      // 오른쪽 안쪽 (몸통 시작)
-    // 몸통 (둥근 모서리)
-    ctx.quadraticCurveTo(84, 62, 84, 64);
-    ctx.lineTo(84, 118);
-    ctx.quadraticCurveTo(84, 122, 80, 122);
-    ctx.lineTo(48, 122);
-    ctx.quadraticCurveTo(44, 122, 44, 118);
-    ctx.lineTo(44, 64);
-    ctx.quadraticCurveTo(44, 62, 44, 58);
-    // 왼쪽 안쪽 (몸통 끝)
-    ctx.lineTo(10, 58);      // 왼쪽 끝
+    ctx.moveTo(64 * s, 6 * s);
+    ctx.lineTo(118 * s, 58 * s);
+    ctx.lineTo(84 * s, 58 * s);
+    ctx.quadraticCurveTo(84 * s, 62 * s, 84 * s, 64 * s);
+    ctx.lineTo(84 * s, 118 * s);
+    ctx.quadraticCurveTo(84 * s, 122 * s, 80 * s, 122 * s);
+    ctx.lineTo(48 * s, 122 * s);
+    ctx.quadraticCurveTo(44 * s, 122 * s, 44 * s, 118 * s);
+    ctx.lineTo(44 * s, 64 * s);
+    ctx.quadraticCurveTo(44 * s, 62 * s, 44 * s, 58 * s);
+    ctx.lineTo(10 * s, 58 * s);
     ctx.closePath();
   };
 
   // 외곽 글로우
   ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.7)`;
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = 24;
   drawArrow();
   ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.25)`;
   ctx.fill();
 
-  // 메인 화살표 (그라데이션)
-  ctx.shadowBlur = 10;
+  // 메인 화살표
+  ctx.shadowBlur = 14;
   drawArrow();
-  const grad = ctx.createLinearGradient(64, 6, 64, 122);
+  const grad = ctx.createLinearGradient(64 * s, 6 * s, 64 * s, 122 * s);
   grad.addColorStop(0, `rgba(${Math.min(r + 80, 255)}, ${Math.min(g + 80, 255)}, ${Math.min(b + 80, 255)}, 1)`);
   grad.addColorStop(0.3, color);
   grad.addColorStop(1, `rgba(${Math.max(r - 40, 0)}, ${Math.max(g - 40, 0)}, ${Math.max(b - 40, 0)}, 1)`);
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // 하이라이트 (왼쪽 밝은 면)
+  // 하이라이트
   ctx.shadowBlur = 0;
   ctx.save();
   ctx.clip();
-  const hlGrad = ctx.createLinearGradient(20, 0, 80, 0);
-  hlGrad.addColorStop(0, "rgba(255, 255, 255, 0.3)");
-  hlGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.08)");
+  const hlGrad = ctx.createLinearGradient(20 * s, 0, 80 * s, 0);
+  hlGrad.addColorStop(0, "rgba(255, 255, 255, 0.35)");
+  hlGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.1)");
   hlGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = hlGrad;
-  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillRect(0, 0, size, size);
   ctx.restore();
 
-  // 테두리 (살짝 어두운 윤곽)
+  // 테두리
   drawArrow();
   ctx.strokeStyle = `rgba(${Math.max(r - 60, 0)}, ${Math.max(g - 60, 0)}, ${Math.max(b - 60, 0)}, 0.4)`;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
   ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/* ── 트레일 텍스처 (부드러운 점) ── */
+function createTrailTexture(color: string): THREE.CanvasTexture {
+  const size = 64;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
+
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+
+  const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.9)`);
+  grad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, 0.3)`);
+  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
 
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
@@ -95,75 +117,140 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
 
   const isUp = direction === "up";
   const color = isUp ? "#ff4444" : "#4499ff";
-  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dir = isUp ? 1 : -1;
+
+  const arrowRef = useRef<THREE.InstancedMesh>(null);
+  const trailRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
   const arrowTex = useMemo(() => createArrowTexture(color), [color]);
+  const trailTex = useMemo(() => createTrailTexture(color), [color]);
 
+  /* ── 화살표 데이터 ── */
   const arrowData = useMemo(() => {
-    // 8개를 균등 배치, 중앙(x: -2~+2) 회피, y축도 분산
-    const span = 14; // -7 ~ +7
+    const span = 14;
     const slotWidth = span / ARROW_COUNT;
     return Array.from({ length: ARROW_COUNT }, (_, i) => {
       let x = -7 + slotWidth * (i + 0.5) + (Math.random() - 0.5) * slotWidth * 0.6;
-      // 중앙 회피: |x| < 2이면 바깥으로 밀기
       if (Math.abs(x) < 2) x += x >= 0 ? 2 : -2;
       return {
         x,
-        yOffset: (Math.random() - 0.5) * 3, // y축 분산 (-1.5 ~ +1.5)
+        yOffset: (Math.random() - 0.5) * 3,
         waveGroup: Math.floor(i / 4),
         size: 0.8 + Math.random() * 0.4,
-        extraDelay: Math.random() * 0.2,
+        extraDelay: Math.random() * 0.3,
+        cycle: 2.2 + Math.random() * 0.8, // 2.2~3.0초 주기 (느긋하게)
+        wobblePhase: Math.random() * Math.PI * 2,
       };
     });
   }, []);
+
+  /* ── 트레일 데이터 ── */
+  const trailData = useMemo(() =>
+    Array.from({ length: TRAIL_COUNT }, () => ({
+      x: (Math.random() - 0.5) * 16,
+      yOffset: (Math.random() - 0.5) * 5,
+      size: 0.15 + Math.random() * 0.25,
+      speed: 0.3 + Math.random() * 0.4,
+      cycle: 1.0 + Math.random() * 0.8,
+      delay: Math.random() * 2.0,
+    })),
+  []);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     const o = opacity.current;
 
-    if (!meshRef.current) return;
+    /* ── 화살표 애니메이션 ── */
+    if (arrowRef.current) {
+      for (let i = 0; i < ARROW_COUNT; i++) {
+        const d = arrowData[i];
+        const cycle = t % d.cycle;
+        const groupDelay = d.waveGroup * 0.3 + d.extraDelay;
+        const localT = cycle - groupDelay;
+        const sweepDuration = d.cycle * 0.8;
 
-    const dir = isUp ? 1 : -1;
-    // 1초 주기 반복 웨이브
-    const cycle = t % 1.0;
+        if (localT < 0 || localT > sweepDuration) {
+          dummy.scale.setScalar(0);
+        } else {
+          const progress = localT / sweepDuration;
+          const easedProgress = easeOutCubic(progress);
 
-    for (let i = 0; i < ARROW_COUNT; i++) {
-      const d = arrowData[i];
-      // 각 웨이브 그룹 시차 + 개별 시차
-      const groupDelay = d.waveGroup * 0.15 + d.extraDelay;
-      const localT = cycle - groupDelay;
+          // 페이드: 부드러운 등장 → 부드러운 소멸
+          const alpha = progress < 0.15
+            ? progress / 0.15
+            : 1 - ((progress - 0.15) / 0.85) ** 2;
 
-      if (localT < 0 || localT > 0.6) {
-        // 보이지 않는 구간
-        dummy.scale.setScalar(0);
-      } else {
-        // 0~0.6초 동안: 빠르게 나타나서 이동 후 사라짐
-        const progress = localT / 0.6;
-        // 빠르게 페이드인/아웃
-        const alpha = progress < 0.3
-          ? progress / 0.3
-          : 1 - (progress - 0.3) / 0.7;
+          // 스케일: 살짝 커졌다 안정 (과하지 않게)
+          const bounce = progress < 0.15
+            ? 1.0 + 0.12 * (1 - progress / 0.15)
+            : 1.0;
 
-        const moveDistance = 3;
-        const y = dir * (-0.5 + progress * moveDistance) + d.yOffset;
+          const moveDistance = 4.5;
+          const y = dir * (-1.0 + easedProgress * moveDistance) + d.yOffset;
+          // 미세 좌우 흔들림 (느리고 작게)
+          const wobbleX = Math.sin(t * 1.5 + d.wobblePhase) * 0.06;
 
-        dummy.position.set(d.x, y, 0);
-        dummy.rotation.set(0, 0, isUp ? 0 : Math.PI);
-        dummy.scale.setScalar(d.size * Math.max(0, alpha));
+          dummy.position.set(d.x + wobbleX, y, 0);
+          dummy.rotation.set(0, 0, isUp ? 0 : Math.PI);
+          dummy.scale.setScalar(d.size * bounce * Math.max(0, alpha));
+        }
+
+        dummy.updateMatrix();
+        arrowRef.current.setMatrixAt(i, dummy.matrix);
       }
-
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+      arrowRef.current.instanceMatrix.needsUpdate = true;
+      (arrowRef.current.material as THREE.MeshBasicMaterial).opacity = o * 0.85;
     }
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    (meshRef.current.material as THREE.MeshBasicMaterial).opacity = o * 0.8;
 
+    /* ── 트레일 애니메이션 ── */
+    if (trailRef.current) {
+      for (let i = 0; i < TRAIL_COUNT; i++) {
+        const tr = trailData[i];
+        const cycle = (t - tr.delay) % tr.cycle;
+        const sweepDuration = tr.cycle * 0.8;
+
+        if (cycle < 0 || cycle > sweepDuration) {
+          dummy.scale.setScalar(0);
+        } else {
+          const progress = cycle / sweepDuration;
+          // 트레일은 천천히 나타나고 더 천천히 사라짐 (잔상 효과)
+          const alpha = progress < 0.15
+            ? progress / 0.15
+            : (1 - progress) / 0.85;
+          const moveDistance = 1.8 * tr.speed;
+          const y = dir * (-0.5 + progress * moveDistance) + tr.yOffset;
+
+          dummy.position.set(tr.x, y, -0.2);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.setScalar(tr.size * Math.max(0, alpha));
+        }
+
+        dummy.updateMatrix();
+        trailRef.current.setMatrixAt(i, dummy.matrix);
+      }
+      trailRef.current.instanceMatrix.needsUpdate = true;
+      (trailRef.current.material as THREE.MeshBasicMaterial).opacity = o * 0.6;
+    }
   });
 
   return (
     <group>
-      <instancedMesh ref={meshRef} args={[undefined, undefined, ARROW_COUNT]}>
+      {/* 트레일 (가장 뒤) */}
+      <instancedMesh ref={trailRef} args={[undefined, undefined, TRAIL_COUNT]}>
+        <planeGeometry args={[0.4, 0.4]} />
+        <meshBasicMaterial
+          map={trailTex}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </instancedMesh>
+
+      {/* 화살표 (가장 앞) */}
+      <instancedMesh ref={arrowRef} args={[undefined, undefined, ARROW_COUNT]}>
         <planeGeometry args={[0.7, 1.4]} />
         <meshBasicMaterial
           map={arrowTex}
@@ -173,7 +260,6 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
           alphaTest={0.05}
         />
       </instancedMesh>
-
     </group>
   );
 }

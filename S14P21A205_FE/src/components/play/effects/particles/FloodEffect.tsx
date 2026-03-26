@@ -123,12 +123,11 @@ export default function FloodEffect({ durationMs }: Props) {
       surfaceMatRef.current.opacity = o * Math.min(visible * 0.2, 0.9);
     }
 
-    // 수면 하이라이트
+    // 수면 하이라이트 — 수면 밴드와 동일한 웨이브
     if (surfaceHlRef.current && surfaceHlMatRef.current) {
       surfaceHlRef.current.position.y = waterTop - 0.1;
       const geo = surfaceHlRef.current.geometry as THREE.PlaneGeometry;
       const posAttr = geo.getAttribute("position");
-      // 원래 Y 좌표 저장 (최초 1회)
       if (!surfaceHlOrigY.current) {
         surfaceHlOrigY.current = new Float32Array(posAttr.count);
         for (let i = 0; i < posAttr.count; i++) {
@@ -137,8 +136,9 @@ export default function FloodEffect({ durationMs }: Props) {
       }
       for (let i = 0; i < posAttr.count; i++) {
         const x = posAttr.getX(i);
-        const wave = Math.sin(x * 0.5 + elapsed * 2.0 + 0.3) * 0.6
-          + Math.sin(x * 1.2 + elapsed * 3.0 + 0.5) * 0.25;
+        const wave = Math.sin(x * 0.5 + elapsed * 2.0) * 0.7
+          + Math.sin(x * 1.2 + elapsed * 3.0) * 0.35
+          + Math.sin(x * 2.0 + elapsed * 4.5) * 0.15;
         posAttr.setY(i, surfaceHlOrigY.current[i] + wave);
       }
       posAttr.needsUpdate = true;
@@ -191,7 +191,7 @@ export default function FloodEffect({ durationMs }: Props) {
 
       {/* 수면 밴드 — 밝은 색으로 물결 강조 */}
       <mesh ref={surfaceRef} position={[0, SCREEN_BOT, 1]}>
-        <planeGeometry args={[30, 1.5, 192, 4]} />
+        <planeGeometry args={[30, 3.0, 192, 4]} />
         <meshBasicMaterial
           ref={surfaceMatRef}
           color="#b8dcff"
@@ -204,7 +204,7 @@ export default function FloodEffect({ durationMs }: Props) {
 
       {/* 수면 하이라이트 — 흰색 거품 라인 */}
       <mesh ref={surfaceHlRef} position={[0, SCREEN_BOT, 1.1]}>
-        <planeGeometry args={[30, 0.6, 192, 2]} />
+        <planeGeometry args={[30, 2.0, 192, 4]} />
         <meshBasicMaterial
           ref={surfaceHlMatRef}
           color="#ffffff"

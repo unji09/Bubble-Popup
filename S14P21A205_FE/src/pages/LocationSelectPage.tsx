@@ -4,6 +4,7 @@ import { useNavigate, useOutletContext } from "react-router-dom";
 import type { GameGuardContext } from "../router/GameGuard";
 import { getGameWaitingStatus, joinCurrentSeason, type GameWaitingResponse } from "../api/game";
 import { getLocationList } from "../api/store";
+import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
 import CountdownTimer from "../components/common/CountdownTimer";
 import DistrictDetailPanel from "../components/game/DistrictDetailPanel";
 import SeoulMap3D from "../components/game/SeoulMap3D";
@@ -151,14 +152,21 @@ function resolveJoinErrorMessage(error: unknown) {
   return "시즌 참여 요청을 완료하지 못했습니다. 입력한 정보와 시즌 상태를 다시 확인해주세요.";
 }
 
+/** 유동인구 순위 → 등급 변환 (1~2위: S, 3~5위: A, 6~8위: B) */
+function rankToGrade(rank: number): string {
+  if (rank <= 2) return "S등급";
+  if (rank <= 5) return "A등급";
+  return "B등급";
+}
+
 /** seoulDistricts의 name과 서버 locationName을 매칭하는 맵 */
 const LOCATION_NAME_MAP: Record<string, string> = {
   "홍대": "홍대",
   "여의도": "여의도",
   "명동": "명동",
   "이태원": "이태원",
-  "성수": "서울숲/성수",
-  "건대": "건대",
+  "서울숲/성수": "서울숲/성수",
+  "신도림": "신도림",
   "강남": "강남",
   "잠실": "잠실",
 };
@@ -173,29 +181,37 @@ export default function LocationSelectPage() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [selectedDashboardItems] = useState(getStoredSelectedDashboardItems);
   const [serverLocations, setServerLocations] = useState<Array<{locationId: number; locationName: string; rent: number; interiorCost: number; discount: number}>>([]);
+  const [trafficRanking, setTrafficRanking] = useState<AreaRankingItemResponse[]>([]);
   const navigate = useNavigate();
 
-  // 서버 지역 데이터 로드
+  // 서버 지역 데이터 + 유동인구 순위 로드
   useEffect(() => {
     getLocationList()
       .then((data) => setServerLocations(data.locations))
       .catch(() => {});
-  }, []);
+    getNewsRanking(guardContext.day)
+      .then((data) => setTrafficRanking(data.areaTrafficRanking))
+      .catch(() => {});
+  }, [guardContext.day]);
 
-  // seoulDistricts에 서버 rent 반영 (id는 FE 유지, join 시 서버 id로 변환)
+  // seoulDistricts에 서버 rent + 유동인구 순위 기반 등급/혼잡도 반영
   const mergedDistricts = useMemo(() => {
     if (serverLocations.length === 0) return seoulDistricts;
     return seoulDistricts.map((district) => {
       const serverName = LOCATION_NAME_MAP[district.name] ?? district.name;
       const serverLoc = serverLocations.find((s) => s.locationName === serverName);
-      if (!serverLoc) return district;
-      return {
-        ...district,
-        // id는 FE 유지 (3D 맵과 동기화), rent만 서버 값 반영
-        rent: `₩${serverLoc.rent.toLocaleString()}`,
-      };
+      const rankItem = trafficRanking.find((r) => r.areaName === serverName);
+      const merged = { ...district };
+      if (serverLoc) {
+        merged.rent = `₩${serverLoc.rent.toLocaleString()}`;
+      }
+      if (rankItem) {
+        merged.grade = rankToGrade(rankItem.rank);
+        merged.congestion = `${rankItem.rank}위`;
+      }
+      return merged;
     });
-  }, [serverLocations]);
+  }, [serverLocations, trafficRanking]);
 
   // FE district name → 서버 locationId 변환 (서버 데이터 없으면 FE id fallback)
   const getServerLocationId = (feDistrict: { id: number; name: string }): number => {
@@ -206,9 +222,13 @@ export default function LocationSelectPage() {
   };
 
   const selectedDistrict = mergedDistricts.find((district) => district.id === selectedId);
-  const selectedInteriorCost = selectedDistrict
-    ? Math.round(parseCurrency(selectedDistrict.rent) * 7 * 0.1)
-    : null;
+  const selectedInteriorCost = useMemo(() => {
+    if (!selectedDistrict) return null;
+    const serverName = LOCATION_NAME_MAP[selectedDistrict.name] ?? selectedDistrict.name;
+    const serverLoc = serverLocations.find((s) => s.locationName === serverName);
+    if (serverLoc) return serverLoc.interiorCost;
+    return Math.round(parseCurrency(selectedDistrict.rent) * 7 * 0.1);
+  }, [selectedDistrict, serverLocations]);
   const rentDiscountMultiplier = useMemo(
     () => getSelectedDiscountMultiplier(selectedDashboardItems, "RENT"),
     [selectedDashboardItems],

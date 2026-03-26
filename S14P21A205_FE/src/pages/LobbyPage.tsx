@@ -14,12 +14,14 @@ const landingBubbles = [
 export default function LobbyPage() {
   const [seasonNumber, setSeasonNumber] = useState<number | null>(null);
   const [seasonStatus, setSeasonStatus] = useState<GameWaitingStatus | null>(null);
+  const [participantCount, setParticipantCount] = useState<number | null>(null);
 
   useEffect(() => {
     getGameWaitingStatus()
       .then((data) => {
         setSeasonNumber(data.nextSeasonNumber);
         setSeasonStatus(data.status);
+        setParticipantCount(data.participantCount);
       })
       .catch(() => {});
   }, []);
@@ -37,8 +39,7 @@ export default function LobbyPage() {
           <div className="lg:col-span-5 flex flex-col justify-center order-1 lg:order-2 mb-8 lg:mb-0">
             <HeroCTA seasonNumber={seasonNumber} status={seasonStatus} />
             <div className="mt-8">
-              {/* TODO: 참여자 수 API 연동 (BE 추가 필요) */}
-              <AnimatedParticipants count={1203} />
+              <AnimatedParticipants count={participantCount ?? 0} />
             </div>
           </div>
         </div>

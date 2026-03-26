@@ -33,9 +33,9 @@ interface AnimatedAvatar {
 /* ─── Slide 1: 스토어 카드 ─── */
 const storeCards = [
   { name: "성수 버블티 하우스", emoji: "🧋", rev: "₩234만", cust: "187명", rank: "3위" },
-  { name: "홍대 쿠키 팩토리", emoji: "🍪", rev: "₩312만", cust: "245명", rank: "1위" },
-  { name: "강남 마라탕 하우스", emoji: "🍜", rev: "₩198만", cust: "142명", rank: "5위" },
-  { name: "명동 핫도그 스탠드", emoji: "🌭", rev: "₩267만", cust: "203명", rank: "2위" },
+  { name: "홍대 떡볶이 팝업", emoji: "🍽️", rev: "₩312만", cust: "245명", rank: "1위" },
+  { name: "강남 마라꼬치 스탠드", emoji: "🍢", rev: "₩198만", cust: "142명", rank: "5위" },
+  { name: "명동 닭강정 팝업", emoji: "🍗", rev: "₩267만", cust: "203명", rank: "2위" },
 ];
 
 function StoreSlide() {
@@ -87,8 +87,8 @@ function LocationSlide() {
   const [hov, setHov] = useState<string|null>(null);
   const spots: LocationSpot[] = [
     { name:"홍대", x:"15%", y:"30%", grade:"A", d:0 },{ name:"여의도", x:"13%", y:"55%", grade:"B", d:.1 },
-    { name:"명동", x:"35%", y:"26%", grade:"S", d:.15 },{ name:"이태원", x:"38%", y:"50%", grade:"B", d:.2 },
-    { name:"성수", x:"58%", y:"24%", grade:"S", d:.25, active:true },{ name:"건대", x:"72%", y:"40%", grade:"B", d:.3 },
+    { name:"명동", x:"35%", y:"26%", grade:"S", d:.15 },{ name:"이태원", x:"38%", y:"50%", grade:"A", d:.2 },
+    { name:"서울숲/성수", x:"58%", y:"24%", grade:"S", d:.25, active:true },{ name:"신도림", x:"72%", y:"40%", grade:"B", d:.3 },
     { name:"강남", x:"50%", y:"68%", grade:"S", d:.35 },{ name:"잠실", x:"78%", y:"60%", grade:"A", d:.4 },
   ];
   const gc: Record<LocationGrade, string> = { S:"bg-rose-400", A:"bg-amber-400", B:"bg-slate-400" };
@@ -124,18 +124,18 @@ function LocationSlide() {
 function RankingSlide() {
   const [hov, setHov] = useState<number|null>(null);
   const data = [
-    { rank:1, name:"김사장", revenue:"₩12.4M", w:"95%", color:"bg-[#F5C542]", medal:"🥇" },
-    { rank:2, name:"이대표", revenue:"₩11.8M", w:"82%", color:"bg-[#B8C4CE]", medal:"🥈" },
-    { rank:3, name:"박대표", revenue:"₩10.2M", w:"68%", color:"bg-[#CD8032]", medal:"🥉" },
-    { rank:4, name:"최점장", revenue:"₩9.7M", w:"58%", color:"bg-slate-200" },
-    { rank:5, name:"정사장", revenue:"₩8.3M", w:"48%", color:"bg-slate-200" },
+    { rank:1, name:"김사장", revenue:"324%", w:"95%", color:"bg-[#F5C542]", medal:"🥇" },
+    { rank:2, name:"이대표", revenue:"287%", w:"82%", color:"bg-[#B8C4CE]", medal:"🥈" },
+    { rank:3, name:"박대표", revenue:"251%", w:"68%", color:"bg-[#CD8032]", medal:"🥉" },
+    { rank:4, name:"최점장", revenue:"218%", w:"58%", color:"bg-slate-200" },
+    { rank:5, name:"정사장", revenue:"195%", w:"48%", color:"bg-slate-200" },
   ];
 
   return (
     <div className="h-full flex flex-col px-8 py-5 justify-center">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Live Ranking</span>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Live ROI Ranking</span>
       </div>
       <div className="flex flex-col gap-2.5">
         {data.map((d, i) => (
@@ -187,7 +187,7 @@ function DataSlide() {
       </div>
 
       <div className="flex gap-2">
-        {["공공데이터 API", "빅데이터 분석", "AI 수요 예측"].map((t, i) => (
+        {["공공데이터 API", "빅데이터 분석", "실시간 랭킹"].map((t, i) => (
           <span key={i} className="text-[10px] font-medium text-slate-400 bg-white/60 px-2.5 py-1 rounded-full border border-white/80">{t}</span>
         ))}
       </div>
@@ -200,7 +200,7 @@ interface SlideConfig { badge:string; title:string; desc:string; gradient:string
 const slides: SlideConfig[] = [
   { badge:"Popup Store Simulation", title:"나만의 팝업스토어를 운영하세요", desc:"메뉴 선택부터 가격 전략까지, 경영의 모든 것을 체험해보세요.", gradient:"from-[#F0F7F0] to-[#FEFCE8]", accentColor:"text-emerald-600", component:StoreSlide },
   { badge:"Seoul Hot Place", title:"서울 핫플에서 최고의 입지를 선점하세요", desc:"성수, 홍대, 강남, 명동 — 8개 인기 지역에서 가게를 열어보세요.", gradient:"from-[#EEF2FF] to-[#F0F9FF]", accentColor:"text-indigo-600", component:LocationSlide },
-  { badge:"Real-time Ranking", title:"실시간 랭킹으로 치열하게 경쟁하세요", desc:"다른 플레이어와 매출을 비교하고 1위에 도전하세요.", gradient:"from-[#FFFBEB] to-[#FEF3C7]", accentColor:"text-amber-600", component:RankingSlide },
+  { badge:"Real-time Ranking", title:"실시간 랭킹으로 치열하게 경쟁하세요", desc:"다른 플레이어와 ROI를 비교하고 1위에 도전하세요.", gradient:"from-[#FFFBEB] to-[#FEF3C7]", accentColor:"text-amber-600", component:RankingSlide },
   { badge:"Real Data Driven", title:"실제 데이터 기반 경영 시뮬레이션", desc:"서울시 공공 데이터와 빅데이터 분석으로 현실감 있는 경영을 체험하세요.", gradient:"from-[#F0FDFA] to-[#ECFDF5]", accentColor:"text-teal-600", component:DataSlide },
 ];
 

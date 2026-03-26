@@ -520,12 +520,9 @@ function buildPromotionOptions(prices?: Partial<Record<PromotionType, number>>):
 const LOCATION_ICON_MAP: Record<string, string> = {
   홍대: "🎸",
   신도림: "🚉",
-  성수: "🏭",
   "서울숲/성수": "🌳",
-  성수동: "🏭",
   명동: "🛍️",
   이태원: "🌍",
-  건대: "🎓",
   강남: "💎",
   여의도: "💼",
   잠실: "🎡",
