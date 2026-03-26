@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.game.day.service;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -88,6 +89,25 @@ class SeasonDayClosingServiceTests {
 
         verify(gameDayReportService, times(2)).recordClosedDayReport(any(Store.class), eq(7));
         verify(seasonFinalRankingService).saveFinalRankings(season);
+    }
+
+    @Test
+    void handleBusinessEndContinuesWhenSingleStoreReportFails() {
+        Season season = season(9L, 7);
+        Store firstStore = store(15L, season);
+        Store secondStore = store(16L, season);
+
+        when(seasonRepository.findByIdAndStatus(9L, SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
+        doThrow(new IllegalStateException("boom"))
+                .when(gameDayReportService)
+                .recordClosedDayReport(firstStore, 4);
+
+        seasonDayClosingService.handleBusinessEnd(9L, 4);
+
+        verify(gameDayReportService).recordClosedDayReport(firstStore, 4);
+        verify(gameDayReportService).recordClosedDayReport(secondStore, 4);
+        verify(seasonFinalRankingService, never()).saveFinalRankings(any(Season.class));
     }
 
     private Season season(Long seasonId, int totalDays) {

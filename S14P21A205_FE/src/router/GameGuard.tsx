@@ -5,6 +5,7 @@ import { getStore, type StoreResponse } from "../api/store";
 import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
 import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
+import { clearSeasonJoinIntent, hasSeasonJoinIntent } from "../utils/seasonJoinIntent";
 
 /** GameGuard가 하위 페이지에 전달하는 context */
 export interface GameGuardContext {
@@ -65,7 +66,11 @@ function isAllowedForJoinedUser(
 }
 
 /** 미참여 유저의 경로 허용 판정 */
-function isAllowedForNewUser(pathname: string): boolean {
+function isAllowedForNewUser(phase: SeasonPhase, pathname: string): boolean {
+  // 시즌 종료 후에는 누구나 랭킹 조회 가능
+  if ((phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") && pathname === "/ranking") {
+    return true;
+  }
   return pathname.startsWith("/game/setup") || pathname === "/game/waiting";
 }
 
@@ -118,8 +123,8 @@ function resolveJoinedUserTarget(
 }
 
 /** 미참여 유저의 리다이렉트 대상 */
-function resolveNewUserTarget(joinEnabled: boolean): RedirectTarget {
-  return { path: joinEnabled ? "/game/setup/location" : "/" };
+function resolveNewUserTarget(canEnterSetup: boolean): RedirectTarget {
+  return { path: canEnterSetup ? "/game/setup/location" : "/" };
 }
 
 type GuardState =
@@ -147,6 +152,7 @@ export default function GameGuard() {
       const day = timeData.currentDay;
       const remaining = timeData.phaseRemainingSeconds;
       const joinEnabled = timeData.joinEnabled;
+      const joinIntent = hasSeasonJoinIntent();
 
       // 참여 여부 확인
       let { joined, storeData } = await resolveJoinedStoreAccess(phase, day);
@@ -168,6 +174,10 @@ export default function GameGuard() {
         useGameStore.getState().clearGame();
       }
 
+      if (joined || !joinEnabled) {
+        clearSeasonJoinIntent();
+      }
+
 
       const pathname = location.pathname;
       let allowed = false;
@@ -177,9 +187,14 @@ export default function GameGuard() {
         allowed = isAllowedForJoinedUser(phase, day, pathname, waitingForPlayableDay);
         target = resolveJoinedUserTarget(phase, day, waitingForPlayableDay, timeData, storeData);
       } else {
-        if (joinEnabled) {
-          allowed = isAllowedForNewUser(pathname);
-          target = resolveNewUserTarget(joinEnabled);
+        allowed = isAllowedForNewUser(phase, pathname);
+        if (!allowed) {
+          const canEnterSetup = Boolean(joinEnabled && joinIntent);
+          if (canEnterSetup) {
+            target = resolveNewUserTarget(true);
+          } else {
+            target = { path: "/" };
+          }
         }
       }
 
@@ -228,6 +243,7 @@ export default function GameGuard() {
         const day = timeData.currentDay;
 
         const { joined, storeData } = await resolveJoinedStoreAccess(phase, day);
+        const canEnterSetup = Boolean(timeData.joinEnabled && hasSeasonJoinIntent());
 
         const pfd = storeData?.playableFromDay ?? null;
         const waiting = joined && pfd != null && day < pfd;
@@ -236,12 +252,12 @@ export default function GameGuard() {
         if (joined) {
           target = resolveJoinedUserTarget(phase, day, waiting, timeData, storeData);
         } else {
-          target = resolveNewUserTarget(timeData.joinEnabled);
+          target = resolveNewUserTarget(canEnterSetup);
         }
 
         const stillAllowed = joined
           ? isAllowedForJoinedUser(phase, day, location.pathname, waiting)
-          : false;
+          : isAllowedForNewUser(phase, location.pathname);
 
         if (!stillAllowed) {
           navigate(target.path, { replace: true, state: target.state });

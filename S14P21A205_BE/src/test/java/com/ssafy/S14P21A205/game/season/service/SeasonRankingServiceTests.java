@@ -299,6 +299,7 @@ class SeasonRankingServiceTests {
         when(season.getId()).thenReturn(seasonId);
         when(season.getStatus()).thenReturn(SeasonStatus.FINISHED);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
         return season;
     }
 
@@ -307,6 +308,7 @@ class SeasonRankingServiceTests {
         when(season.getId()).thenReturn(seasonId);
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
         return season;
     }
 

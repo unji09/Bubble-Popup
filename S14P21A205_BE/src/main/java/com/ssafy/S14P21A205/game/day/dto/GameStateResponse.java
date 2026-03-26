@@ -15,6 +15,7 @@ public record GameStateResponse(
         Long cash,
         Integer customerCount,
         CustomerTick customerTick,
+        List<GameDayStartResponse.EventSchedule> todayEventSchedule,
         Inventory inventory,
         ActionStatus actionStatus,
         List<AppliedEvent> appliedEvents

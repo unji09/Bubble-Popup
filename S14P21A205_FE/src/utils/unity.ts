@@ -1,16 +1,16 @@
 import type { RefObject } from "react";
 
-const WEATHER_MAP: Record<string, string> = {
+const WEATHER_NAME_MAP: Record<string, string> = {
   SUNNY: "Clear",
-  RAIN: "Rain,2",
-  SNOW: "Snow,1",
+  RAIN: "Rain",
+  SNOW: "Snow",
   HEATWAVE: "Clear",
-  COLDWAVE: "Wind,2",
-  FOG: "Fog,1",
+  COLDWAVE: "Clear",
+  FOG: "Fog",
 };
 
 export function mapWeatherToUnity(weatherType: string): string {
-  return WEATHER_MAP[weatherType] ?? "Clear";
+  return WEATHER_NAME_MAP[weatherType] ?? "Clear";
 }
 
 export function sendToUnity(
@@ -64,12 +64,14 @@ export function spawnShopAtIndex(
   sendToUnity(iframeRef, "SpawnShopAtIndex", String(regionIndex));
 }
 
-/** 날씨 설정 (백엔드 weatherType을 자동 변환) */
+/** 날씨 설정 (백엔드 weatherType을 자동 변환, 카메라 지역 인덱스 포함) */
 export function setWeather(
   iframeRef: RefObject<HTMLIFrameElement | null>,
   weatherType: string,
+  regionIndex: number,
 ) {
-  sendToUnity(iframeRef, "SetWeather", mapWeatherToUnity(weatherType));
+  const weatherName = mapWeatherToUnity(weatherType);
+  sendToUnity(iframeRef, "SetWeather", `${weatherName},${regionIndex}`);
 }
 
 /** 낮으로 설정 */

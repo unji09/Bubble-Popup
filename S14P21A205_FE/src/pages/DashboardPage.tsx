@@ -4,7 +4,16 @@ import { getCurrentSeasonTopRankings, getGameWaitingStatus, getSeasonTime, type 
 import { getShopItems, type ShopItemResponse } from "../api/shop";
 import { getStore } from "../api/store";
 import { getUserPoints } from "../api/user";
-import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
+import {
+  BUSINESS_SECONDS,
+  DAY_SECONDS,
+  NEXT_SEASON_WAIT_SECONDS,
+  REPORT_SECONDS,
+  SEASON_SUMMARY_SECONDS,
+  TOTAL_DAYS,
+  phaseToRoute,
+  type SeasonPhase,
+} from "../constants/gameTime";
 import AnimatedNumber from "../components/common/AnimatedNumber";
 import AppHeader from "../components/common/AppHeader";
 import BankruptWarning from "../components/common/BankruptWarning";
@@ -12,6 +21,8 @@ import FloatingBubbles from "../components/common/FloatingBubbles";
 import ItemSelector from "../components/common/ItemSelector";
 import Modal from "../components/common/Modal";
 import SeasonCTA from "../components/common/SeasonCTA";
+import { useGameStore } from "../stores/useGameStore";
+import { setSeasonJoinIntent } from "../utils/seasonJoinIntent";
 import {
   getDiscountLabel,
   getStoredSelectedDashboardItemIds,
@@ -45,13 +56,7 @@ const dashBubbles = [
   },
 ];
 
-const TOTAL_DAYS = 7;
-const PREP_SECONDS = 50;
-const BUSINESS_SECONDS = 120;
-const REPORT_SECONDS = 10;
-const DAY_SECONDS = PREP_SECONDS + BUSINESS_SECONDS + REPORT_SECONDS;
-const SUMMARY_SECONDS = 120;
-const NEXT_SEASON_WAIT_SECONDS = 300;
+const SUMMARY_SECONDS = SEASON_SUMMARY_SECONDS;
 const SEASON_POLLING_INTERVAL_MS = 1000;
 
 const SHOP_ITEM_UI_BY_ID: Partial<
@@ -70,7 +75,6 @@ const SHOP_ITEM_UI_BY_ID: Partial<
 };
 
 interface DashboardRouteState {
-  showBankruptWarning?: boolean;
   showMidSeasonSetupExpiredModal?: boolean;
 }
 
@@ -197,7 +201,6 @@ function parseDashboardRouteState(value: unknown): DashboardRouteState {
   const state = value as DashboardRouteState;
 
   return {
-    showBankruptWarning: Boolean(state.showBankruptWarning),
     showMidSeasonSetupExpiredModal: Boolean(state.showMidSeasonSetupExpiredModal),
   };
 }
@@ -218,6 +221,17 @@ function resolveSeasonCardData(
   }
 
   if (waitingStatus.status === "WAITING") {
+    if ((waitingStatus.phaseRemainingSeconds ?? 0) <= 0) {
+      return {
+        title: `${waitingStatus.nextSeasonNumber ?? 1}번째 시즌`,
+        badgeText: "STARTING",
+        timerLabel: "시즌 시작 준비 중",
+        ctaLabel: "잠시만 기다려주세요",
+        tone: "waiting" as const,
+        disabled: true,
+      };
+    }
+
     return {
       title: `${waitingStatus.nextSeasonNumber ?? 1}번째 시즌`,
       badgeText: "WAITING",
@@ -278,15 +292,18 @@ export default function DashboardPage() {
   );
   const [waitingStatus, setWaitingStatus] = useState<GameWaitingResponse | null>(null);
   const [currentSeasonNumber, setCurrentSeasonNumber] = useState<number | null>(null);
+  const [isResolvingCurrentSeasonNumber, setIsResolvingCurrentSeasonNumber] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [gameReturnPath, setGameReturnPath] = useState<string | null>(null);
+  const [isBankruptWarningVisible, setIsBankruptWarningVisible] = useState(false);
+  const bankruptNoticeSeasonNumber = useGameStore((state) => state.bankruptNoticeSeasonNumber);
+  const clearBankruptNotice = useGameStore((state) => state.clearBankruptNotice);
 
   const routeState = useMemo(
     () => parseDashboardRouteState(location.state),
     [location.state],
   );
-  const showBankruptWarning = Boolean(routeState.showBankruptWarning);
   const showMidSeasonSetupExpiredModal = Boolean(routeState.showMidSeasonSetupExpiredModal);
   const selectedItems = useMemo(
     () => hydrateSelectedDashboardItems(selectedItemIds, shopItems),
@@ -414,23 +431,27 @@ export default function DashboardPage() {
 
       // 게임 참여 중이면 돌아가기 경로 계산
       try {
-        const storeData = await getStore(); // 성공하면 참여 중
-        const timeData = await getSeasonTime();
-        const phase = timeData.seasonPhase as SeasonPhase;
-        const day = timeData.currentDay;
+        const storeData = await getStore(); // 성공하면 현재 시즌 store를 읽을 수 있음
+        try {
+          const timeData = await getSeasonTime();
+          const phase = timeData.seasonPhase as SeasonPhase;
+          const day = timeData.currentDay;
 
-        // playableFromDay > currentDay면 아직 대기 중 → /game/waiting으로
-        const pfd = storeData.playableFromDay;
-        if (typeof pfd === "number" && day < pfd) {
-          setGameReturnPath("/game/waiting");
-        } else {
-          const path = phaseToRoute(phase, day);
-          if (path && path !== "/") {
-            setGameReturnPath(path);
+          // playableFromDay > currentDay면 아직 대기 중 → /game/waiting으로
+          const pfd = storeData.playableFromDay;
+          if (typeof pfd === "number" && day < pfd) {
+            setGameReturnPath("/game/waiting");
+          } else {
+            const path = phaseToRoute(phase, day);
+            if (path && path !== "/") {
+              setGameReturnPath(path);
+            }
           }
+        } catch {
+          setGameReturnPath(null);
         }
       } catch {
-        // getStore 실패 = 미참여 → 무시
+        setGameReturnPath(null);
       }
     }
 
@@ -446,8 +467,12 @@ export default function DashboardPage() {
 
     async function loadCurrentSeasonNumber() {
       if (waitingStatus?.status !== "IN_PROGRESS") {
+        setCurrentSeasonNumber(null);
+        setIsResolvingCurrentSeasonNumber(false);
         return;
       }
+
+      setIsResolvingCurrentSeasonNumber(true);
 
       try {
         const topRankings = await getCurrentSeasonTopRankings();
@@ -456,7 +481,13 @@ export default function DashboardPage() {
           setCurrentSeasonNumber(topRankings.seasonId);
         }
       } catch {
-        // Keep the season card generic when the ranking cache is unavailable.
+        if (!isCancelled) {
+          setCurrentSeasonNumber(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsResolvingCurrentSeasonNumber(false);
+        }
       }
     }
 
@@ -466,6 +497,48 @@ export default function DashboardPage() {
       isCancelled = true;
     };
   }, [waitingStatus?.status]);
+
+  useEffect(() => {
+    if (bankruptNoticeSeasonNumber === null) {
+      setIsBankruptWarningVisible(false);
+      return;
+    }
+
+    if (!waitingStatus) {
+      return;
+    }
+
+    if (waitingStatus.status !== "IN_PROGRESS") {
+      clearBankruptNotice();
+      setIsBankruptWarningVisible(false);
+      return;
+    }
+
+    if (isResolvingCurrentSeasonNumber) {
+      return;
+    }
+
+    if (currentSeasonNumber === null) {
+      return;
+    }
+
+    const isBankruptSeason = currentSeasonNumber === bankruptNoticeSeasonNumber;
+    const isBeforeDaySix = (waitingStatus.currentDay ?? 0) < 6;
+
+    if (isBankruptSeason && isBeforeDaySix) {
+      setIsBankruptWarningVisible(true);
+      return;
+    }
+
+    clearBankruptNotice();
+    setIsBankruptWarningVisible(false);
+  }, [
+    bankruptNoticeSeasonNumber,
+    clearBankruptNotice,
+    currentSeasonNumber,
+    isResolvingCurrentSeasonNumber,
+    waitingStatus,
+  ]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -487,6 +560,21 @@ export default function DashboardPage() {
       window.clearTimeout(timer);
     };
   }, [waitingStatus]);
+
+  const handleSeasonCountdownComplete = async () => {
+    try {
+      const latestStatus = await getGameWaitingStatus();
+      setWaitingStatus(latestStatus);
+    } catch {
+      // Keep the last known season state when refresh fails.
+    }
+  };
+
+  const handleSeasonCtaClick = () => {
+    if (seasonCard.ctaTo === "/game/setup/location") {
+      setSeasonJoinIntent();
+    }
+  };
 
   const handleToggle = (id: number) => {
     const item = shopItems.find((entry) => entry.id === id);
@@ -541,7 +629,15 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-col gap-6">
-            <SeasonCTA {...seasonCard} />
+            <SeasonCTA
+              {...seasonCard}
+              onCtaClick={handleSeasonCtaClick}
+              onCountdownComplete={
+                waitingStatus?.status === "WAITING"
+                  ? handleSeasonCountdownComplete
+                  : undefined
+              }
+            />
 
             {gameReturnPath && (
               <button
@@ -550,6 +646,16 @@ export default function DashboardPage() {
               >
                 <span className="material-symbols-outlined text-xl">sports_esports</span>
                 게임으로 돌아가기
+              </button>
+            )}
+
+            {(waitingStatus?.seasonPhase === "SEASON_SUMMARY" || waitingStatus?.seasonPhase === "NEXT_SEASON_WAITING") && (
+              <button
+                onClick={() => navigate("/ranking")}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-6 py-4 text-white font-bold shadow-lg hover:bg-slate-900 transition-all hover:-translate-y-0.5"
+              >
+                <span className="material-symbols-outlined text-xl">leaderboard</span>
+                최종 랭킹 조회하기
               </button>
             )}
 
@@ -570,7 +676,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {showBankruptWarning && <BankruptWarning />}
+            {isBankruptWarningVisible && <BankruptWarning />}
           </div>
         </div>
       </main>

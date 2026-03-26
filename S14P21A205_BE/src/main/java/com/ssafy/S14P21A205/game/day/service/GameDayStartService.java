@@ -38,6 +38,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -121,6 +122,50 @@ public class GameDayStartService {
         return upsertCurrentDayState(store, now, seasonTimePoint, true);
     }
 
+    @Transactional
+    public Optional<GameDayLiveState> restoreDayState(Store store, int day, LocalDateTime requestedAt) {
+        if (store == null || requestedAt == null || day < 1 || store.getSeason() == null) {
+            return Optional.empty();
+        }
+
+        int totalDays = store.getSeason().resolveRuntimePlayableDays();
+        if (day > totalDays) {
+            return Optional.empty();
+        }
+        if (!isPlayableDay(store, day)) {
+            return Optional.empty();
+        }
+
+        GameDayLiveState existingState = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
+        if (existingState != null
+                && existingState.startedAt() != null
+                && existingState.startResponse() != null) {
+            return Optional.of(existingState);
+        }
+
+        ensurePurchaseQueueInitialized(store);
+        DayWindow currentTimeline = seasonTimelineService.day(store.getSeason(), day);
+        DayStartBuild build = buildDayStartResponse(store, day, requestedAt, currentTimeline.businessStart());
+        writeInitialState(
+                store,
+                day,
+                build.openingState(),
+                build.response(),
+                currentTimeline.dayStart(),
+                currentTimeline.businessStart(),
+                build.openingSalePrice(),
+                build.openingStock()
+        );
+        log.info(
+                "start-day-restored storeId={} seasonId={} day={} requestedAt={}",
+                store.getId(),
+                store.getSeason().getId(),
+                day,
+                requestedAt
+        );
+        return gameDayStoreStateRedisRepository.find(store.getId(), day);
+    }
+
     private Optional<GameDayLiveState> upsertCurrentDayState(
             Store store,
             LocalDateTime now,
@@ -170,7 +215,7 @@ public class GameDayStartService {
 
     private int resolveCurrentDay(Season season, SeasonTimePoint seasonTimePoint) {
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > season.getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > season.resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;
@@ -198,6 +243,11 @@ public class GameDayStartService {
             LocalDateTime openingReferenceTime
     ) {
         STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, openingReferenceTime);
+        Menu plannedMenu = store.getMenu();
+        Integer plannedPrice = resolveBaseSellingPrice(store, day);
+        if (!Objects.equals(store.getPrice(), plannedPrice)) {
+            store.changePrice(plannedPrice);
+        }
 
         EnvironmentScheduleResolver.ResolvedEnvironment resolvedEnvironment = environmentScheduleResolver.resolve(
                 store.getSeason().getId(),
@@ -205,15 +255,13 @@ public class GameDayStartService {
                 day
         );
         DaySchedule daySchedule = resolvedEnvironment.daySchedule();
-        List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
-        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(seasonStores, openingReferenceTime);
-        Menu plannedMenu = store.getMenu();
-        Integer plannedPrice = store.getPrice();
         List<Order> emergencyOrders = orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
                 store.getId(),
                 OrderType.EMERGENCY
         );
         applyArrivedEmergencyMenuAndPrice(store, emergencyOrders, openingReferenceTime);
+        List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(seasonStores, openingReferenceTime);
         NewsRankingResolver.PreviousDayRanking previousDayRanking = newsRankingResolver.resolve(store, day);
         List<GameDayStartResponse.EventSchedule> eventSchedule = eventScheduleResolver.resolve(
                 store.getSeason().getId(),
@@ -282,6 +330,17 @@ public class GameDayStartService {
                 now
         );
         return new DayStartBuild(response, openingState, openingSalePrice, openingInventory.stock());
+    }
+
+    private Integer resolveBaseSellingPrice(Store store, int day) {
+        return orderRepository
+                .findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                        store.getId(),
+                        day,
+                        OrderType.NORMAL
+                )
+                .map(Order::getSalePrice)
+                .orElseGet(() -> store.getPrice() != null ? store.getPrice() : store.getMenu().getOriginPrice());
     }
 
     private void writeInitialState(

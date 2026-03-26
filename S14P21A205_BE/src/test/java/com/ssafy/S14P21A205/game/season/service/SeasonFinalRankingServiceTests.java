@@ -60,6 +60,7 @@ class SeasonFinalRankingServiceTests {
         Season season = org.mockito.Mockito.mock(Season.class);
         when(season.getId()).thenReturn(11L);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
 
         List<Store> stores = new ArrayList<>();
         List<DailyReport> reports = new ArrayList<>();
@@ -124,6 +125,34 @@ class SeasonFinalRankingServiceTests {
         verify(dailyReportRepository, never()).findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(anyLong(), anyInt());
         verify(gameDayReportService, never()).recordClosedDayReport(any(Store.class), anyInt());
         verify(seasonRankingRecordRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void saveFinalRankingsKeepsStoreBankruptWhenLaterReportIsNonBankrupt() {
+        Season season = org.mockito.Mockito.mock(Season.class);
+        when(season.getId()).thenReturn(33L);
+        when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
+
+        Store store = createStore(301L, 1, "user-1");
+        DailyReport bankruptDayThree = createDailyReport(store, 3, 100, 200, 10, new BigDecimal("0.10"), true);
+        DailyReport incorrectLateReport = createDailyReport(store, 7, 0, 0, 0, new BigDecimal("0.10"), false);
+
+        when(seasonRankingRecordRepository.existsByStore_Season_Id(33L)).thenReturn(false);
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(33L)).thenReturn(List.of(store));
+        when(dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(33L, 8))
+                .thenReturn(List.of(bankruptDayThree, incorrectLateReport));
+
+        seasonFinalRankingService.saveFinalRankings(season);
+
+        ArgumentCaptor<List> recordsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(seasonRankingRecordRepository).saveAll(recordsCaptor.capture());
+
+        List<SeasonRankingRecord> savedRecords = (List<SeasonRankingRecord>) recordsCaptor.getValue();
+        assertThat(savedRecords).hasSize(1);
+        assertThat(savedRecords.get(0).getIsBankruptcy()).isTrue();
+        assertThat(savedRecords.get(0).getFinalRank()).isZero();
     }
 
     private Store createStore(Long storeId, Integer userId, String nickname) {

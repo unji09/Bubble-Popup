@@ -168,6 +168,95 @@ class EventEffectResolverTests {
                 .containsExactly("TACO_PRICE_DOWN", "TACO_PRICE_UP");
     }
 
+    @Test
+    void resolveSuppressesDuplicateEffectForSameLogicalEvent() {
+        EventEffectResolver resolver = new EventEffectResolver(dailyEventRepository);
+        Season season = season();
+        DailyEvent firstEvent = dailyEvent(
+                season,
+                11L,
+                101L,
+                1,
+                EventCategory.SUBSTITUTE_HOLIDAY,
+                "Substitute Holiday",
+                "1.10",
+                "0.00",
+                "1.00",
+                0,
+                EventStartTime.NEXT_DAY,
+                EventEndTime.SAME_DAY,
+                null,
+                null
+        );
+        DailyEvent duplicatedEvent = dailyEvent(
+                season,
+                12L,
+                102L,
+                1,
+                EventCategory.SUBSTITUTE_HOLIDAY,
+                "Substitute Holiday",
+                "1.10",
+                "0.00",
+                "1.00",
+                0,
+                EventStartTime.NEXT_DAY,
+                EventEndTime.SAME_DAY,
+                null,
+                null
+        );
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(1L, 1, 2))
+                .thenReturn(List.of(firstEvent, duplicatedEvent));
+
+        EventEffectResolver.EventEffect effect = resolver.resolve(
+                season,
+                2,
+                LocalDateTime.of(2026, 3, 17, 9, 3, 30),
+                3L,
+                7L
+        );
+
+        assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("1.10");
+        assertThat(effect.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
+                .containsExactly("SUBSTITUTE_HOLIDAY");
+    }
+
+    @Test
+    void resolveInfectiousDiseaseLowersPopulationWithoutChangingStock() {
+        EventEffectResolver resolver = new EventEffectResolver(dailyEventRepository);
+        Season season = season();
+        DailyEvent infectiousDisease = dailyEvent(
+                season,
+                1,
+                EventCategory.INFECTIOUS_DISEASE,
+                "Infectious Disease",
+                "0.70",
+                "0.00",
+                "1.00",
+                0,
+                EventStartTime.IMMEDIATE,
+                EventEndTime.SAME_DAY,
+                null,
+                null
+        );
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(1L, 1, 1))
+                .thenReturn(List.of(infectiousDisease));
+
+        EventEffectResolver.EventEffect effect = resolver.resolve(
+                season,
+                1,
+                LocalDateTime.of(2026, 3, 17, 9, 1, 30),
+                3L,
+                7L
+        );
+
+        assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("0.70");
+        assertThat(effect.stockChange()).isZero();
+        assertThat(effect.ingredientCostMultiplier()).isEqualByComparingTo("1.00");
+        assertThat(effect.capitalChange()).isZero();
+        assertThat(effect.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
+                .containsExactly("INFECTIOUS_DISEASE");
+    }
+
     private Season season() {
         Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", 1L);
@@ -190,8 +279,42 @@ class EventEffectResolverTests {
             Long targetLocationId,
             Long targetMenuId
     ) {
+        return dailyEvent(
+                season,
+                10L + day,
+                2L,
+                day,
+                category,
+                eventName,
+                populationRate,
+                stockFlat,
+                costRate,
+                capitalFlat,
+                startTime,
+                endTime,
+                targetLocationId,
+                targetMenuId
+        );
+    }
+
+    private DailyEvent dailyEvent(
+            Season season,
+            Long dailyEventId,
+            Long randomEventId,
+            int day,
+            EventCategory category,
+            String eventName,
+            String populationRate,
+            String stockFlat,
+            String costRate,
+            Integer capitalFlat,
+            EventStartTime startTime,
+            EventEndTime endTime,
+            Long targetLocationId,
+            Long targetMenuId
+    ) {
         RandomEvent randomEvent = instantiate(RandomEvent.class);
-        ReflectionTestUtils.setField(randomEvent, "id", 2L);
+        ReflectionTestUtils.setField(randomEvent, "id", randomEventId);
         ReflectionTestUtils.setField(randomEvent, "eventCategory", category);
         ReflectionTestUtils.setField(randomEvent, "eventName", eventName);
         ReflectionTestUtils.setField(randomEvent, "startTime", startTime);
@@ -202,7 +325,7 @@ class EventEffectResolverTests {
         ReflectionTestUtils.setField(randomEvent, "capitalFlat", capitalFlat);
 
         DailyEvent dailyEvent = instantiate(DailyEvent.class);
-        ReflectionTestUtils.setField(dailyEvent, "id", 10L + day);
+        ReflectionTestUtils.setField(dailyEvent, "id", dailyEventId);
         ReflectionTestUtils.setField(dailyEvent, "season", season);
         ReflectionTestUtils.setField(dailyEvent, "event", randomEvent);
         ReflectionTestUtils.setField(dailyEvent, "day", day);

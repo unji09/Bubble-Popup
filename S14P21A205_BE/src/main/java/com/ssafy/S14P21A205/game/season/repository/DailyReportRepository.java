@@ -27,6 +27,9 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, Long> 
     Optional<DailyReport> findFirstByStore_IdOrderByDayDesc(Long storeId);
 
     @EntityGraph(attributePaths = {"store", "store.season", "store.location", "store.menu"})
+    Optional<DailyReport> findFirstByStore_IdAndDayLessThanOrderByDayDesc(Long storeId, Integer day);
+
+    @EntityGraph(attributePaths = {"store", "store.season", "store.location", "store.menu"})
     List<DailyReport> findByStore_IdOrderByDayAsc(Long storeId);
 
     boolean existsByStoreIdAndDay(Long storeId, Integer day);

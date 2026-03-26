@@ -39,7 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ShopService {
 
-    private static final String PURCHASE_AVAILABLE_MESSAGE = "Item purchase for the current season is available only through day 5.";
+    private static final String PURCHASE_AVAILABLE_MESSAGE = "Item purchase for the current season is no longer available.";
 
     private final ItemRepository itemRepository;
     private final ItemUserRepository itemUserRepository;

@@ -7,6 +7,7 @@ import Podium from "../components/ranking/Podium";
 import RankingList from "../components/ranking/RankingList";
 import RankingRow from "../components/ranking/RankingRow";
 import { getCurrentSeasonFinalRankings, type CurrentSeasonFinalRankingsResponse } from "../api/game";
+import { useUserStore } from "../stores/useUserStore";
 
 export default function RankingPage() {
   const navigate = useNavigate();
@@ -16,7 +17,12 @@ export default function RankingPage() {
 
   useEffect(() => {
     getCurrentSeasonFinalRankings()
-      .then(setData)
+      .then((res) => {
+        console.log("[RankingPage] API response:", res);
+        console.log("[RankingPage] rankings:", res.rankings);
+        console.log("[RankingPage] myRankings:", res.myRankings);
+        setData(res);
+      })
       .catch(() => setError("랭킹 정보를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, []);
@@ -38,8 +44,16 @@ export default function RankingPage() {
     );
   }
 
-  // myRankings의 userId로 rankings 내 본인 항목 표시
+  // 내 userId 판별: myRankings + rankings 양쪽에서 수집
   const myUserIds = new Set(data.myRankings.map((m) => m.userId));
+  // myRankings에 항목이 없어도 rankings에 내 매장이 있을 수 있음 (파산 매장이 rankings에 포함된 경우)
+  // → nickname으로 추가 판별
+  const myNickname = useUserStore.getState().nickname;
+  if (myNickname) {
+    for (const r of data.rankings) {
+      if (r.nickname === myNickname) myUserIds.add(r.userId);
+    }
+  }
 
   const podiumEntries = data.rankings
     .filter((r) => r.rank != null && r.rank <= 3)
@@ -49,7 +63,12 @@ export default function RankingPage() {
     .filter((r) => r.rank != null && r.rank >= 4)
     .map((r) => ({ ...r, isMe: myUserIds.has(r.userId) }));
 
-  // 10위 밖인 나의 기록만 별도 표시
+  // 파산 매장 (rank가 null인 항목) — rankings에 있지만 podium/list에 걸리지 않는 것들
+  const bankruptEntries = data.rankings
+    .filter((r) => r.rank === null && r.isBankrupt)
+    .map((r) => ({ ...r, isMe: myUserIds.has(r.userId) }));
+
+  // 10위 밖인 나의 기록 (myRankings에만 있는 것)
   const myOutsideEntries = data.myRankings.filter(
     (m) => m.rank === null || m.rank > 10
   );
@@ -85,7 +104,20 @@ export default function RankingPage() {
           {/* Full ranking list (4위~) */}
           <RankingList entries={listEntries} />
 
-          {/* 나의 기록 (10위 밖 or 파산) */}
+          {/* 파산 매장 */}
+          {bankruptEntries.length > 0 && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-lg font-bold text-slate-500 flex items-center gap-2">
+                <span className="material-symbols-outlined text-rose-400">dangerous</span>
+                파산 매장
+              </h2>
+              {bankruptEntries.map((entry, idx) => (
+                <RankingRow key={`bankrupt-${idx}`} entry={{ ...entry, rank: entry.rank }} animationDelay={600 + idx * 100} />
+              ))}
+            </div>
+          )}
+
+          {/* 나의 기록 (10위 밖) */}
           {myOutsideEntries.length > 0 && (
             <div className="flex flex-col gap-4 pb-12">
               <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
@@ -93,7 +125,7 @@ export default function RankingPage() {
                 나의 기록
               </h2>
               {myOutsideEntries.map((entry, idx) => (
-                <RankingRow key={idx} entry={{ ...entry, rank: entry.rank, isMe: true }} animationDelay={800 + idx * 100} />
+                <RankingRow key={`my-${idx}`} entry={{ ...entry, rank: entry.rank, isMe: true }} animationDelay={800 + idx * 100} />
               ))}
             </div>
           )}

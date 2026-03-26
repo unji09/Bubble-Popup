@@ -5,6 +5,8 @@ import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTimeResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
+import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
@@ -98,6 +100,49 @@ public interface SeasonControllerDoc {
             @Parameter(hidden = true) Authentication authentication,
             @Parameter(description = "Current season join request")
             SeasonJoinRequest request
+    );
+
+    @Operation(
+            summary = "Reserve demo skip for a scheduled season",
+            description = "Admin-only API. The target season keeps 7-day preparation data but runs as a 3-day demo season when it starts.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Demo skip reservation success",
+                    content = @Content(schema = @Schema(implementation = SeasonDemoSkipResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Admin role required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Scheduled season not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Season already started or demo skip already reserved",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SeasonDemoSkipResponse> reserveDemoSkip(
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(description = "Demo skip reservation request")
+            SeasonDemoSkipRequest request
     );
 
     @Operation(

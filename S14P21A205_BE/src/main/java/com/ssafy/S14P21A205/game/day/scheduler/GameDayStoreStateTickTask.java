@@ -72,12 +72,16 @@ public class GameDayStoreStateTickTask implements GameTickTask {
 
         int day = season.getCurrentDay() == null ? 1 : season.getCurrentDay();
 
-        // 영업 중 뉴스: 해당 day에 한 번만 생성
+        // 영업 중 뉴스: 해당 day에 한 번만 생성 (데이터 부족 시 다음 틱에서 재시도)
         if (openingNewsGeneratedDay.getAndSet(day) != day) {
             try {
-                newsService.generateOpeningNews(season.getId(), day);
+                boolean generated = newsService.generateOpeningNews(season.getId(), day);
+                if (!generated) {
+                    openingNewsGeneratedDay.set(-1);
+                }
             } catch (Exception e) {
-                log.error("Failed to generate opening news. seasonId={} day={}", season.getId(), day, e);
+                openingNewsGeneratedDay.set(-1);
+                log.error("Failed to generate opening news, will retry next tick. seasonId={} day={}", season.getId(), day, e);
             }
         }
 

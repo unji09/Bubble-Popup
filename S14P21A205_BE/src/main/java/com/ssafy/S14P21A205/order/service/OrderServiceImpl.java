@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.order.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
@@ -9,6 +10,7 @@ import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.support.StoreStateCarryOverSupport;
+import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
@@ -18,6 +20,7 @@ import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
 import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
 import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
 import com.ssafy.S14P21A205.order.entity.Order;
+import com.ssafy.S14P21A205.order.entity.OrderType;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.entity.Menu;
@@ -31,6 +34,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -59,11 +63,11 @@ public class OrderServiceImpl implements OrderService {
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     @Override
-    public CurrentOrderResponse getCurrentOrder(Integer userId) {
+    public CurrentOrderResponse getCurrentOrder(Integer userId, Integer menuId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
         int currentDay = resolveRegularOrderDay(store);
-        Menu menu = store.getMenu();
+        Menu menu = resolvePreviewMenu(store, menuId);
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
 
         BigDecimal ingredientDiscountRate = getIngredientDiscountRate(store.getUser().getId());
@@ -75,15 +79,23 @@ public class OrderServiceImpl implements OrderService {
                 ingredientCostMultiplier,
                 menuTrendRank
         );
-        Integer stock = resolveStock(storeId, currentDay);
+        Integer stock = resolveStock(store, currentDay);
+        Integer baseSellingPrice = resolveBaseSellingPrice(store, currentDay);
+        Integer sellingPrice = resolveSellingPrice(
+                null,
+                Objects.equals(store.getMenu().getId(), menu.getId()),
+                baseSellingPrice,
+                pricingPolicy
+        );
 
         return CurrentOrderResponse.builder()
                 .menuId(Math.toIntExact(menu.getId()))
                 .menuName(menu.getMenuName())
                 .costPrice(pricingPolicy.costPrice())
+                .minimumSellingPrice(pricingPolicy.minimumSellingPrice())
                 .recommendedPrice(pricingPolicy.recommendedPrice())
                 .maxSellingPrice(pricingPolicy.maxSellingPrice())
-                .sellingPrice(store.getPrice())
+                .sellingPrice(sellingPrice)
                 .stock(stock)
                 .build();
     }
@@ -115,11 +127,12 @@ public class OrderServiceImpl implements OrderService {
                 ingredientCostMultiplier,
                 menuTrendRank
         );
-        Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, store.getPrice(), pricingPolicy);
+        Integer baseSellingPrice = resolveBaseSellingPrice(store, regularOrderDay);
+        Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, baseSellingPrice, pricingPolicy);
         validateSellingPrice(sellingPrice, pricingPolicy);
         Integer totalCost = Math.multiplyExact(pricingPolicy.costPrice(), request.quantity());
 
-        validateAffordableOrder(store, regularOrderDay, totalCost, seasonStores);
+        validateAffordableOrder(store, regularOrderDay, totalCost);
 
         if (!Objects.equals(store.getPrice(), sellingPrice)) {
             store.changePrice(sellingPrice);
@@ -133,6 +146,20 @@ public class OrderServiceImpl implements OrderService {
                 Order.create(menu, store, request.quantity(), totalCost, sellingPrice, regularOrderDay)
         );
         gameDayStartService.synchronizeCurrentDayState(store, now, seasonTimePoint);
+        gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                storeId,
+                regularOrderDay,
+                resolveDebugTick(seasonTimePoint),
+                new TickDebugActionNote(
+                        "정규발주(%d개)".formatted(request.quantity()),
+                        0L,
+                        0L,
+                        0L,
+                        0L,
+                        0L,
+                        0
+                )
+        );
 
         return RegularOrderResponse.builder()
                 .orderId(savedOrder.getId())
@@ -155,13 +182,15 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new BaseException(ErrorCode.MENU_NOT_FOUND));
     }
 
-    private BigDecimal getIngredientDiscountRate(Integer userId) {
-        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
-                .orElse(BigDecimal.ONE);
+    private Menu resolvePreviewMenu(Store store, Integer menuId) {
+        if (menuId == null || Objects.equals(store.getMenu().getId(), Long.valueOf(menuId))) {
+            return store.getMenu();
+        }
+        return getMenuById(menuId);
     }
 
-    private BigDecimal getRentDiscountRate(Integer userId) {
-        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.RENT)
+    private BigDecimal getIngredientDiscountRate(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
                 .orElse(BigDecimal.ONE);
     }
 
@@ -217,6 +246,17 @@ public class OrderServiceImpl implements OrderService {
         return pricingPolicy.recommendedPrice();
     }
 
+    private Integer resolveBaseSellingPrice(Store store, int day) {
+        return orderRepository
+                .findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                        store.getId(),
+                        day,
+                        OrderType.NORMAL
+                )
+                .map(Order::getSalePrice)
+                .orElseGet(() -> store.getPrice() != null ? store.getPrice() : store.getMenu().getOriginPrice());
+    }
+
     private BigDecimal resolveRegularOrderIngredientCostMultiplier(Store store, int day, Menu menu) {
         LocalDateTime effectiveAtOpening = seasonTimelineService.day(store.getSeason(), day).businessStart();
         return eventEffectResolver.resolve(
@@ -247,7 +287,7 @@ public class OrderServiceImpl implements OrderService {
         if (!REGULAR_ORDER_DAYS.contains(currentDay)) {
             throw new BaseException(
                     ErrorCode.ORDER_NOT_AVAILABLE_DAY,
-                    "Regular orders are only available on days 1, 3, 5, and 7."
+                    "Regular orders are only available on eligible order days."
             );
         }
     }
@@ -264,10 +304,17 @@ public class OrderServiceImpl implements OrderService {
 
     private int resolveRegularOrderDay(Store store, SeasonTimePoint seasonTimePoint) {
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;
+    }
+
+    private Integer resolveDebugTick(SeasonTimePoint seasonTimePoint) {
+        if (seasonTimePoint == null || seasonTimePoint.tick() == null) {
+            return 0;
+        }
+        return Math.max(0, seasonTimePoint.tick());
     }
 
     private SeasonTimePoint resolveSeasonTimePoint(Store store) {
@@ -286,17 +333,10 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private void validateAffordableOrder(Store store, int day, int totalCost, List<Store> seasonStores) {
+    private void validateAffordableOrder(Store store, int day, int totalCost) {
         int carriedBalance = resolveCarriedBalance(store, day);
-        int locationRank = resolveAreaEntryRank(store, day, seasonStores);
-        int dailyRentApplied = marketRankingPolicy.apply(
-                store.getLocation().getRent(),
-                marketRankingPolicy.resolveRentMultiplier(locationRank),
-                getRentDiscountRate(store.getUser().getId())
-        );
-
-        // Interior costs are already deducted from the live balance when they are incurred.
-        if (carriedBalance - dailyRentApplied < totalCost) {
+        // Daily rent is settled at closing, so regular orders only need to fit within carried cash.
+        if (carriedBalance < totalCost) {
             throw new BaseException(ErrorCode.ORDER_INSUFFICIENT_BALANCE);
         }
     }
@@ -330,7 +370,7 @@ public class OrderServiceImpl implements OrderService {
             return StoreStateCarryOverSupport.resolveInitialBalance(store);
         }
 
-        Integer reportedBalance = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+        Integer reportedBalance = findLatestReportBefore(store.getId(), day)
                 .map(report -> report.getBalance() == null ? 0 : report.getBalance())
                 .orElse(null);
         if (reportedBalance != null) {
@@ -346,35 +386,53 @@ public class OrderServiceImpl implements OrderService {
         return StoreStateCarryOverSupport.resolveInitialBalance(store);
     }
 
-    private Integer resolveStock(Long storeId, int day) {
+    private Integer resolveStock(Store store, int day) {
+        Long storeId = store.getId();
         return gameDayStoreStateRedisRepository.find(storeId, day)
-                .map(state -> state.stock() == null ? 0 : state.stock())
-                .orElseGet(() -> resolveStartingStock(storeId, day));
+                .map(state -> normalizeStock(state.stock()))
+                .orElseGet(() -> resolveStartingStock(store, day));
     }
 
-    private Integer resolveStartingStock(Long storeId, int day) {
+    private Integer resolveStartingStock(Store store, int day) {
+        Long storeId = store.getId();
         int carriedStock;
         if (day <= 1) {
-            carriedStock = StoreStateCarryOverSupport.resolveInitialStock();
+            carriedStock = normalizeStock(StoreStateCarryOverSupport.resolveInitialStock());
         } else {
-            Integer reportedStock = dailyReportRepository.findByStoreIdAndDay(storeId, day - 1)
-                    .map(report -> report.getStockRemaining() == null ? 0 : report.getStockRemaining())
+            Integer reportedStock = findLatestReportBefore(storeId, day)
+                    .map(report -> normalizeStock(report.getStockRemaining()))
                     .orElse(null);
             if (reportedStock != null) {
                 carriedStock = reportedStock;
             } else {
                 carriedStock = gameDayStoreStateRedisRepository.find(storeId, day - 1)
-                        .map(state -> state.stock() == null ? 0 : state.stock())
-                        .orElse(StoreStateCarryOverSupport.resolveInitialStock());
+                        .map(state -> normalizeStock(state.stock()))
+                        .orElse(normalizeStock(StoreStateCarryOverSupport.resolveInitialStock()));
             }
+        }
+        if (REGULAR_ORDER_DAYS.contains(day)) {
+            carriedStock = 0;
         }
 
         int orderedStock = orderRepository.findDailyStartOrder(storeId, day)
                 .map(Order::getQuantity)
+                .map(this::normalizeStock)
                 .orElse(0);
 
-        return Math.addExact(carriedStock, orderedStock);
+        return normalizeStock(Math.addExact(carriedStock, orderedStock));
     }
+
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
+    }
+
+    private Optional<DailyReport> findLatestReportBefore(Long storeId, int day) {
+        if (storeId == null || day <= 1) {
+            return Optional.empty();
+        }
+        return dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(storeId, day);
+    }
+
     private record PricingPolicy(
             int costPrice,
             int minimumSellingPrice,

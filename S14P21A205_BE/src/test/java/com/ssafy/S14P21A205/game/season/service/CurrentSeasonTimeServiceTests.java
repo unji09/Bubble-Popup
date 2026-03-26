@@ -161,8 +161,9 @@ class CurrentSeasonTimeServiceTests {
     ) {
         Season season = Mockito.mock(Season.class);
         Mockito.lenient().when(season.getCurrentDay()).thenReturn(currentDay);
-        when(season.getTotalDays()).thenReturn(totalDays);
-        when(season.getStartTime()).thenReturn(startTime);
+        Mockito.lenient().when(season.getTotalDays()).thenReturn(totalDays);
+        Mockito.lenient().when(season.resolveRuntimePlayableDays()).thenReturn(totalDays);
+        Mockito.lenient().when(season.getStartTime()).thenReturn(startTime);
         return season;
     }
 }

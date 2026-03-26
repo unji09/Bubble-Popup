@@ -737,9 +737,10 @@ const SCENE_MAP: Record<WeatherCondition, () => React.JSX.Element> = {
 interface WeatherCardProps {
   condition: string | null;
   disabled?: boolean;
+  disabledMessage?: string;
 }
 
-export default function WeatherCard({ condition, disabled = false }: WeatherCardProps) {
+export default function WeatherCard({ condition, disabled = false, disabledMessage }: WeatherCardProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true));
@@ -984,7 +985,7 @@ export default function WeatherCard({ condition, disabled = false }: WeatherCard
             {noWeather
               ? "마지막 영업일이 끝났습니다."
               : disabled
-                ? "파산으로 매장이 폐업되었습니다."
+                ? (disabledMessage ?? "파산으로 매장이 폐업되었습니다.")
                 : "내일의 날씨 예보입니다."}
           </p>
         </div>

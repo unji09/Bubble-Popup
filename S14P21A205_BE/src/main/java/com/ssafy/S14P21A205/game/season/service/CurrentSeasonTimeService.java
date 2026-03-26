@@ -96,14 +96,14 @@ public class CurrentSeasonTimeService {
             return syncedCurrentDay;
         }
 
-        return season.getTotalDays();
+        return season.resolveRuntimePlayableDays();
     }
 
     private boolean isValidDay(Season season, Integer day) {
         return day != null
-                && season.getTotalDays() != null
+                && season.resolveRuntimePlayableDays() > 0
                 && day >= 1
-                && day <= season.getTotalDays();
+                && day <= season.resolveRuntimePlayableDays();
     }
 
     private int safeInt(long value) {

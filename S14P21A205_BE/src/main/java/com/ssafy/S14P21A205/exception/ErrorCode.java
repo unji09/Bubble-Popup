@@ -12,6 +12,7 @@ public enum ErrorCode {
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON-001", "Server error occurred."),
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "COMMON-002", "Invalid input value."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON-003", "Requested resource was not found."),
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "COMMON-004", "Service is temporarily unavailable."),
 
     // Auth
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "AUTH-001", "Authentication is required."),
@@ -27,6 +28,7 @@ public enum ErrorCode {
     ALREADY_JOINED_CURRENT_SEASON(HttpStatus.CONFLICT, "GAME-007", "Current season is already joined."),
     NEWS_NOT_FOUND(HttpStatus.NOT_FOUND, "GAME-008", "News not found for the requested day."),
     FINAL_RANKING_NOT_READY(HttpStatus.CONFLICT, "GAME-009", "Current final ranking is not ready."),
+    SEASON_STATE_CONFLICT(HttpStatus.CONFLICT, "GAME-010", "Season state conflict."),
 
     // Store
     STORE_NOT_FOUND(HttpStatus.NOT_FOUND, "STORE-001", "Store was not found."),

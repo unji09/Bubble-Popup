@@ -407,7 +407,7 @@ export default function EmergencyOrderModal({
                 price={price}
                 min={minSellingPrice}
                 max={maxSellingPrice}
-                step={100}
+                step={10}
                 originalCostPrice={originalCostPrice}
                 discountedCostPrice={discountedCostPrice}
                 hasItemDiscount={hasItemDiscount}

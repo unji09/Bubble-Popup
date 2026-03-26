@@ -71,6 +71,24 @@ class SeasonWaitingServiceTests {
     }
 
     @Test
+    void getWaitingStatusKeepsOneSecondUntilSeasonActuallyStarts() {
+        SeasonWaitingService seasonWaitingService = createService(
+                Clock.fixed(Instant.parse("2026-03-16T00:59:59.200Z"), ZoneId.of("Asia/Seoul"))
+        );
+
+        Season scheduledSeason = season(4L, SeasonStatus.SCHEDULED, null, 7, LocalDateTime.of(2026, 3, 16, 10, 0));
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+
+        GameWaitingResponse response = seasonWaitingService.getWaitingStatus();
+
+        assertEquals(GameWaitingStatus.WAITING, response.status());
+        assertEquals(1, response.phaseRemainingSeconds());
+    }
+
+    @Test
     void getWaitingStatusReturnsFallbackWaitingWhenNoSeasonExists() {
         SeasonWaitingService seasonWaitingService = createService(Clock.system(ZoneId.of("Asia/Seoul")));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
@@ -105,6 +123,7 @@ class SeasonWaitingServiceTests {
         when(season.getStatus()).thenReturn(status);
         when(season.getCurrentDay()).thenReturn(currentDay);
         when(season.getTotalDays()).thenReturn(totalDays);
+        when(season.resolveRuntimePlayableDays()).thenReturn(totalDays);
         when(season.getStartTime()).thenReturn(startTime);
         return season;
     }

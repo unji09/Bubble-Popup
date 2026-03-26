@@ -57,22 +57,26 @@ public class SeasonJoinService {
         Season currentSeason = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
 
-        if (hasActiveStoreInCurrentSeason(user.getId(), currentSeason.getId())) {
+        Store currentSeasonStore = storeRepository.findFirstByUser_IdAndSeason_IdOrderByIdDesc(user.getId(), currentSeason.getId())
+                .orElse(null);
+        if (hasActiveStoreInCurrentSeason(currentSeasonStore)) {
             throw new BaseException(ErrorCode.ALREADY_JOINED_CURRENT_SEASON);
         }
 
         Integer playableFromDay = resolvePlayableFromDay(currentSeason);
         if (playableFromDay == null) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Joining the current season is available only through day 5.");
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Joining the current season is no longer available.");
         }
 
         Location location = locationRepository.findById(request.locationId().longValue())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND, "Location was not found."));
 
-        Store previousStore = storeRepository.findFirstByUser_IdOrderBySeason_IdDescIdDesc(user.getId())
-                .orElse(null);
-        Menu initialMenu = resolveInitialMenu(previousStore);
-        Integer initialPrice = resolveInitialPrice(previousStore, initialMenu);
+        boolean rejoiningCurrentSeason = currentSeasonStore != null;
+        Store previousStore = rejoiningCurrentSeason
+                ? null
+                : storeRepository.findFirstByUser_IdOrderBySeason_IdDescIdDesc(user.getId()).orElse(null);
+        Menu initialMenu = rejoiningCurrentSeason ? resolveDefaultMenu() : resolveInitialMenu(previousStore);
+        Integer initialPrice = rejoiningCurrentSeason ? initialMenu.getOriginPrice() : resolveInitialPrice(previousStore, initialMenu);
         String normalizedStoreName = request.storeName().trim();
 
         Store savedStore = storeRepository.save(Store.create(
@@ -100,13 +104,16 @@ public class SeasonJoinService {
         return seasonTimelineService.resolveJoinPlayableFromDay(season, LocalDateTime.now(clock));
     }
 
-    private boolean hasActiveStoreInCurrentSeason(Integer userId, Long seasonId) {
-        return storeRepository.findFirstByUser_IdAndSeason_IdOrderByIdDesc(userId, seasonId)
-                .filter(store -> !seasonRankingRecordRepository.existsByStore_Id(store.getId()))
-                .filter(store -> dailyReportRepository.findFirstByStore_IdOrderByDayDesc(store.getId())
-                        .map(report -> !Boolean.TRUE.equals(report.getIsBankrupt()))
-                        .orElse(true))
-                .isPresent();
+    private boolean hasActiveStoreInCurrentSeason(Store store) {
+        if (store == null || store.getId() == null) {
+            return false;
+        }
+        if (seasonRankingRecordRepository.existsByStore_Id(store.getId())) {
+            return false;
+        }
+        return dailyReportRepository.findFirstByStore_IdOrderByDayDesc(store.getId())
+                .map(report -> !Boolean.TRUE.equals(report.getIsBankrupt()))
+                .orElse(true);
     }
 
     private void validateRequest(SeasonJoinRequest request) {
@@ -137,6 +144,10 @@ public class SeasonJoinService {
             return previousStore.getMenu();
         }
 
+        return resolveDefaultMenu();
+    }
+
+    private Menu resolveDefaultMenu() {
         return menuRepository.findFirstByOrderByIdAsc()
                 .orElseThrow(() -> new BaseException(ErrorCode.MENU_NOT_FOUND));
     }

@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ssafy.S14P21A205.action.dto.ActionResponse;
 import com.ssafy.S14P21A205.action.dto.ActionStatusResponse;
 import com.ssafy.S14P21A205.action.dto.DiscountRequest;
 import com.ssafy.S14P21A205.action.dto.DiscountResponse;
@@ -16,12 +18,16 @@ import com.ssafy.S14P21A205.action.dto.EmergencyOrderRequest;
 import com.ssafy.S14P21A205.action.dto.EmergencyOrderResponse;
 import com.ssafy.S14P21A205.action.entity.Action;
 import com.ssafy.S14P21A205.action.entity.ActionCategory;
+import com.ssafy.S14P21A205.action.entity.ActionLog;
 import com.ssafy.S14P21A205.action.entity.PromotionType;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
+import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
+import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
@@ -57,9 +63,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class ActionServiceImplTests {
 
     @Mock
@@ -92,6 +101,12 @@ class ActionServiceImplTests {
     @Mock
     private NewsRankingResolver newsRankingResolver;
 
+    @Mock
+    private GameDayStateService gameDayStateService;
+
+    @Mock
+    private GameDayStartService gameDayStartService;
+
     private ActionServiceImpl actionService;
     private Clock fixedClock;
 
@@ -111,33 +126,42 @@ class ActionServiceImplTests {
                 new StoreRankingPolicy(),
                 newsRankingResolver,
                 new CaptureRatePolicy(),
+                gameDayStateService,
+                gameDayStartService,
                 fixedClock
         );
+        org.mockito.Mockito.lenient()
+                .when(gameDayStateService.refreshGameState(any()))
+                .thenReturn(Optional.empty());
     }
 
     @Test
-    void getActionStatusTreatsLegacyPromotionKeysAsPromotionUsed() {
+    void getActionStatusIgnoresRedisFlagsWithoutMatchingActionLogs() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of("sns", true));
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2))
+                .thenReturn(Map.of("sns", true, "donation", true, "emergency", true, "discount", true));
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 2)).thenReturn(List.of());
 
         ActionStatusResponse response = actionService.getActionStatus(1);
 
         assertThat(response.discountUsed()).isFalse();
         assertThat(response.donationUsed()).isFalse();
         assertThat(response.emergencyUsed()).isFalse();
-        assertThat(response.promotionUsed()).isTrue();
+        assertThat(response.promotionUsed()).isFalse();
     }
 
     @Test
-    void executePromotionBlocksWhenAnyLegacyPromotionKeyIsAlreadyUsed() {
+    void executePromotionBlocksWhenPromotionActionLogAlreadyExists() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+        Action usedPromotionAction = promotionAction(PromotionType.LEAFLET, 500, new BigDecimal("1.10"));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of("leaflet", true));
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 2))
+                .thenReturn(List.of(actionLog(usedPromotionAction, store, 2)));
 
         assertThatThrownBy(() -> actionService.executePromotion(
                 1,
@@ -151,7 +175,7 @@ class ActionServiceImplTests {
     @Test
     void executePromotionMarksSharedPromotionFlagAndLegacyTypeFlag() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
-        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("0.10"));
+        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("1.15"));
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
@@ -166,10 +190,63 @@ class ActionServiceImplTests {
                 new com.ssafy.S14P21A205.action.dto.PromotionRequest(PromotionType.SNS)
         );
 
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5500");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5750");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "promotion");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "sns");
         verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 499_500L);
+    }
+
+    @Test
+    void executePromotionReturnsSuccessWhenRedisSyncFailsAfterActionLogSave() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("1.15"));
+        GameDayLiveState state = state(500_000L);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(actionRepository.findByCategoryAndPromotionType(ActionCategory.PROMOTION, PromotionType.SNS))
+                .thenReturn(Optional.of(promotionAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+        doThrow(new RuntimeException("redis down"))
+                .when(gameDayStoreStateRedisRepository)
+                .updateField(15L, 2, "capture_rate", "0.5750");
+
+        ActionResponse response = actionService.executePromotion(
+                1,
+                new com.ssafy.S14P21A205.action.dto.PromotionRequest(PromotionType.SNS)
+        );
+
+        assertThat(response.actionType()).isEqualTo("PROMOTION_SNS");
+        assertThat(response.message()).isEqualTo("Promotion executed.");
+        verify(actionLogRepository).save(any(ActionLog.class));
+    }
+
+    @Test
+    void executePromotionThrowsWhenSeasonIsNotInBusinessPhase() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+        LocalDateTime now = LocalDateTime.ofInstant(fixedClock.instant(), fixedClock.getZone());
+        LocalDateTime seasonStartAt = now.minusSeconds(120L + 180L + 20L);
+
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", seasonStartAt);
+        ReflectionTestUtils.setField(
+                store.getSeason(),
+                "endTime",
+                seasonStartAt.plusSeconds(120L + store.getSeason().getTotalDays() * 180L + 120L)
+        );
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+
+        assertThatThrownBy(() -> actionService.executePromotion(
+                1,
+                new com.ssafy.S14P21A205.action.dto.PromotionRequest(PromotionType.SNS)
+        ))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> {
+                    BaseException baseException = (BaseException) exception;
+                    assertThat(baseException.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                    assertThat(baseException.getMessage()).isEqualTo("Actions are only available during business hours.");
+                });
     }
 
     @Test
@@ -300,14 +377,15 @@ class ActionServiceImplTests {
     }
 
     @Test
-    void executeDonationAppliesFixedOnePointOneMultiplierAndReducesStock() {
+    void executeDonationIgnoresStaleRedisUsedFlagAndReducesStock() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
         Action donationAction = action(ActionCategory.DONATION, 0);
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of("donation", true));
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 2)).thenReturn(List.of());
         when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
 
@@ -319,6 +397,66 @@ class ActionServiceImplTests {
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5500");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "donation");
         verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 500_000L);
+    }
+
+    @Test
+    void executeDonationAllowsQuantityAboveFiftyWhenCurrentStockIsEnough() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
+        Action donationAction = action(ActionCategory.DONATION, 0);
+        GameDayLiveState state = state(500_000L, 120);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
+        when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+
+        DonationResponse response = actionService.executeDonation(1, new DonationRequest(80));
+
+        assertThat(response.quantity()).isEqualTo(80);
+        assertThat(response.captureRateBonus()).isEqualByComparingTo("0.10");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "40");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5500");
+        verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "donation");
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 500_000L);
+    }
+
+    @Test
+    void executeDonationTreatsNegativeCurrentStockAsZero() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
+        Action donationAction = action(ActionCategory.DONATION, 0);
+        GameDayLiveState state = state(500_000L, -10);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+
+        assertThatThrownBy(() -> actionService.executeDonation(1, new DonationRequest(1)))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.INSUFFICIENT_STOCK));
+    }
+
+    @Test
+    void executeDonationRefreshesCurrentGameStateBeforeCheckingStock() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
+        Action donationAction = action(ActionCategory.DONATION, 0);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state(500_000L, 0)));
+        when(gameDayStateService.refreshGameState(store)).thenAnswer(invocation -> {
+            when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state(500_000L, 130)));
+            return Optional.of(org.mockito.Mockito.mock(GameStateResponse.class));
+        });
+
+        DonationResponse response = actionService.executeDonation(1, new DonationRequest(1));
+
+        assertThat(response.quantity()).isEqualTo(1);
+        verify(gameDayStateService).refreshGameState(store);
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "129");
     }
 
     @Test
@@ -382,7 +520,54 @@ class ActionServiceImplTests {
     }
 
     @Test
-    void executeEmergencyOrderThrowsWhenLiveStateIsMissing() {
+    void executeEmergencyOrderInitializesCurrentDayStateWhenLiveStateIsMissing() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+        Action emergencyAction = action(ActionCategory.EMERGENCY_ORDER, 500);
+        GameDayLiveState initializedState = state(500_000L);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(store.getMenu()));
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
+        when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
+        when(gameDayStartService.ensureCurrentDayState(eq(store), any(LocalDateTime.class), any()))
+                .thenReturn(Optional.of(initializedState));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(eventEffectResolver.resolve(
+                eq(store.getSeason()),
+                eq(2),
+                any(LocalDateTime.class),
+                eq(3L),
+                eq(7L)
+        )).thenReturn(new EventEffectResolver.EventEffect(
+                0L,
+                0,
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                List.of(),
+                List.of()
+        ));
+        when(trafficDelayResolver.resolve(
+                eq(9L),
+                eq(3L),
+                eq(2),
+                eq(7),
+                eq(initializedState.startedAt()),
+                any(LocalDateTime.class)
+        )).thenReturn(resolvedTraffic(2, 10, TrafficStatus.NORMAL, 20));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        EmergencyOrderResponse response = actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(7, 10, 4_000));
+
+        assertThat(response.quantity()).isEqualTo(10);
+        verify(gameDayStartService).ensureCurrentDayState(eq(store), any(LocalDateTime.class), any());
+    }
+
+    @Test
+    void executeEmergencyOrderThrowsWhenCurrentDayStateCannotBeInitialized() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
         Action emergencyAction = action(ActionCategory.EMERGENCY_ORDER, 500);
 
@@ -392,6 +577,8 @@ class ActionServiceImplTests {
         when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
+        when(gameDayStartService.ensureCurrentDayState(eq(store), any(LocalDateTime.class), any()))
+                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(7, 10, 4_000)))
                 .isInstanceOf(BaseException.class)
@@ -443,6 +630,8 @@ class ActionServiceImplTests {
                 new StoreRankingPolicy(),
                 newsRankingResolver,
                 new CaptureRatePolicy(),
+                gameDayStateService,
+                gameDayStartService,
                 fixedClock
         );
 
@@ -527,6 +716,10 @@ class ActionServiceImplTests {
     }
 
     private GameDayLiveState state(long balance) {
+        return state(balance, 50);
+    }
+
+    private GameDayLiveState state(long balance, int stock) {
         return new GameDayLiveState(
                 LocalDateTime.of(2026, 3, 17, 10, 0),
                 List.of(1, 2, 3),
@@ -558,7 +751,7 @@ class ActionServiceImplTests {
                 0L,
                 0L,
                 balance,
-                50,
+                stock,
                 LocalDateTime.of(2026, 3, 17, 10, 0)
         );
     }
@@ -577,6 +770,10 @@ class ActionServiceImplTests {
         ReflectionTestUtils.setField(action, "promotionType", promotionType);
         ReflectionTestUtils.setField(action, "captureRate", captureRate);
         return action;
+    }
+
+    private ActionLog actionLog(Action action, Store store, int day) {
+        return new ActionLog(action, store, day, null);
     }
 
     private Store store(

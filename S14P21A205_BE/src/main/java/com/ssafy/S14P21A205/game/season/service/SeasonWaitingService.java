@@ -93,7 +93,16 @@ public class SeasonWaitingService {
         if (startTime == null) {
             return 0L;
         }
-        return Math.max(Duration.between(now, startTime).toSeconds(), 0L);
+        Duration remaining = Duration.between(now, startTime);
+        if (remaining.isNegative() || remaining.isZero()) {
+            return 0L;
+        }
+
+        long truncatedSeconds = remaining.toSeconds();
+        if (remaining.minusSeconds(truncatedSeconds).isZero()) {
+            return truncatedSeconds;
+        }
+        return truncatedSeconds + 1L;
     }
 
     private Integer resolveSeasonNumber(Long seasonId) {

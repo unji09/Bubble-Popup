@@ -84,9 +84,10 @@ public class NewsService {
 
     /**
      * 영업 중 뉴스 생성 (메뉴 입점수 + 지역 입점수).
+     * @return true if at least one article was generated
      */
-    public void generateOpeningNews(Long seasonId, int day) {
-        newsDataSaver.generateOpeningNews(seasonId, day);
+    public boolean generateOpeningNews(Long seasonId, int day) {
+        return newsDataSaver.generateOpeningNews(seasonId, day);
     }
 
 

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-// statDeltaFade 애니메이션은 제거됨 (누적 delta는 항상 표시)
 
 type CongestionLevel = "very_crowded" | "crowded" | "normal" | "relaxed" | "very_relaxed";
 
@@ -14,9 +13,6 @@ interface PlayHeaderProps {
   guests: number;
   stock: number;
   balance: number;
-  guestsDelta?: number | null;
-  stockDelta?: number | null;
-  balanceDelta?: number | null;
 }
 
 const TOTAL_PLAY_SECONDS = 120;
@@ -72,9 +68,6 @@ export default function PlayHeader({
   guests,
   stock,
   balance,
-  guestsDelta,
-  stockDelta,
-  balanceDelta,
 }: PlayHeaderProps) {
   const congestionInfo = congestionMap[congestion];
   const formattedBalance = `${balance.toLocaleString()}원`;
@@ -99,11 +92,6 @@ export default function PlayHeader({
           0% { box-shadow: 0 0 0 0 rgba(168,191,169,0.5); }
           50% { box-shadow: 0 0 8px 4px rgba(168,191,169,0.3); }
           100% { box-shadow: 0 0 0 0 rgba(168,191,169,0); }
-        }
-        @keyframes statDeltaFade {
-          0% { opacity: 1; transform: translateY(0); }
-          70% { opacity: 1; transform: translateY(-4px); }
-          100% { opacity: 0; transform: translateY(-10px); }
         }
       `}</style>
       {/* 좌측: 매장 정보 */}
@@ -153,11 +141,11 @@ export default function PlayHeader({
       <div className="flex items-center gap-3 sm:gap-5 rounded-xl border border-white/50 bg-white/60 px-3 sm:px-5 py-1.5 shadow-sm backdrop-blur-sm shrink-0">
         <StatItem label="유동인구" icon="groups" value={congestionInfo.label} valueColor={congestionInfo.color} />
         <div className="h-6 w-px bg-slate-200" />
-        <StatItem label="손님" icon="person" value={String(guests)} delta={guestsDelta} />
+        <StatItem label="손님" icon="person" value={String(guests)} />
         <div className="h-6 w-px bg-slate-200" />
-        <StatItem label="재고" icon="inventory_2" value={String(stock)} delta={stockDelta} />
+        <StatItem label="재고" icon="inventory_2" value={String(stock)} />
         <div className="h-6 w-px bg-slate-200" />
-        <StatItem label="잔액" icon="account_balance_wallet" value={formattedBalance} delta={balanceDelta} />
+        <StatItem label="잔액" icon="account_balance_wallet" value={formattedBalance} />
       </div>
     </header>
   );
@@ -280,16 +268,12 @@ function StatItem({
   icon,
   value,
   valueColor,
-  delta,
 }: {
   label: string;
   icon: string;
   value: string;
   valueColor?: string;
-  delta?: number | null;
 }) {
-  const [showDelta, setShowDelta] = useState(false);
-  const [displayDelta, setDisplayDelta] = useState<number>(0);
   const [animKey, setAnimKey] = useState(0);
   const prevValueRef = useRef(value);
 
@@ -300,26 +284,8 @@ function StatItem({
     }
   }, [value]);
 
-  useEffect(() => {
-    if (delta != null && delta !== 0) {
-      setDisplayDelta(delta);
-      setShowDelta(true);
-      const timer = setTimeout(() => setShowDelta(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [delta]);
-
   return (
     <div className="flex min-w-[3.75rem] flex-col items-center relative">
-      {showDelta && displayDelta !== 0 && (
-        <span
-          className={`absolute -top-3 text-[10px] font-bold animate-[statDeltaFade_3s_ease-out_forwards] ${
-            displayDelta > 0 ? "text-red-500" : "text-blue-500"
-          }`}
-        >
-          {displayDelta > 0 ? `+${displayDelta.toLocaleString()}` : displayDelta.toLocaleString()}
-        </span>
-      )}
       <span className="text-[10px] font-bold tracking-[0.14em] text-slate-400">{label}</span>
       <div className="flex items-center gap-1 whitespace-nowrap">
         <span className="material-symbols-outlined text-[14px] text-slate-400">{icon}</span>

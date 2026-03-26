@@ -8,6 +8,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
+import com.ssafy.S14P21A205.action.entity.Action;
+import com.ssafy.S14P21A205.action.entity.ActionCategory;
+import com.ssafy.S14P21A205.action.entity.ActionLog;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
@@ -18,6 +21,7 @@ import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -129,6 +133,7 @@ class GameDayStateServiceTests {
 
     private GameDayStateService createService(Clock clock) {
         EventEffectResolver eventEffectResolver = new EventEffectResolver(dailyEventRepository);
+        EventScheduleResolver eventScheduleResolver = new EventScheduleResolver(dailyEventRepository);
         StockEngine stockEngine = new StockEngine();
         PopulationPolicy populationPolicy = new PopulationPolicy(null, null);
         CustomerScorePolicy customerScorePolicy = new CustomerScorePolicy();
@@ -146,6 +151,7 @@ class GameDayStateServiceTests {
                 captureRatePolicy,
                 costPolicy,
                 trafficDelayResolver,
+                eventScheduleResolver,
                 gameDayStoreStateRedisRepository,
                 gameDayStartService,
                 clock
@@ -160,7 +166,7 @@ class GameDayStateServiceTests {
                 store.getSeason(),
                 1,
                 EventCategory.CELEBRITY_APPEARANCE,
-                "?곗삁???깆옣",
+                "?怨쀬굙???源놁삢",
                 "1.50",
                 200,
                 2,
@@ -175,7 +181,7 @@ class GameDayStateServiceTests {
                 store.getSeason(),
                 1,
                 EventCategory.TACO_PRICE_UP,
-                "?肄??먯옱猷?媛寃??곸듅",
+                "?????癒?삺??揶쎛野??怨몃뱟",
                 "2.00",
                 999,
                 7,
@@ -191,7 +197,8 @@ class GameDayStateServiceTests {
                 List.of(1, 0, 2, 1, 1, 0),
                 1_000,
                 10,
-                LocalDateTime.of(2026, 3, 9, 14, 30, 0)
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                List.of()
         );
 
         when(userService.getCurrentUser(any())).thenReturn(user);
@@ -215,9 +222,13 @@ class GameDayStateServiceTests {
         assertThat(response.inventory().totalStock()).isEqualTo(7);
         assertThat(response.population()).isEqualTo("\uB9E4\uC6B0 \uD63C\uC7A1");
         assertThat(response.traffic()).isEqualTo(new GameStateResponse.Traffic(TrafficStatus.NORMAL, 3, 12, 15));
+        assertThat(response.todayEventSchedule()).hasSize(2);
+        assertThat(response.todayEventSchedule().get(0).scope()).isNull();
+        assertThat(response.todayEventSchedule().get(1).scope()).isNotNull();
+        assertThat(response.todayEventSchedule().get(1).scope().menu()).isEqualTo(99L);
         assertThat(response.appliedEvents()).hasSize(1);
         assertThat(response.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY_APPEARANCE");
-        assertThat(response.appliedEvents().get(0).eventName()).isEqualTo("?곗삁???깆옣");
+        assertThat(response.appliedEvents().get(0).eventName()).isEqualTo("?怨쀬굙???源놁삢");
 
         verify(trafficDelayResolver).resolve(
                 9L,
@@ -233,6 +244,53 @@ class GameDayStateServiceTests {
         assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(6);
         assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(2_500L);
         assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(300L);
+    }
+
+    @Test
+    void getGameStateShowsTodayEventScheduleByCreatedDayEvenForNextDayEvents() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 500);
+        DailyEvent nextDayEvent = dailyEvent(
+                store.getSeason(),
+                1,
+                EventCategory.SUBSTITUTE_HOLIDAY,
+                "Substitute Holiday",
+                "1.10",
+                0,
+                0,
+                EventStartTime.NEXT_DAY,
+                EventEndTime.SAME_DAY,
+                80,
+                120,
+                null,
+                null
+        );
+        GameDayLiveState state = state(
+                500,
+                List.of(1, 0, 2, 1, 1, 0),
+                1_000,
+                10,
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                List.of()
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.of(state));
+        when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
+        when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(15L, OrderType.EMERGENCY))
+                .thenReturn(List.of());
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 1)).thenReturn(List.of());
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1))
+                .thenReturn(List.of(nextDayEvent));
+
+        GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
+
+        assertThat(response.todayEventSchedule()).hasSize(1);
+        assertThat(response.todayEventSchedule().get(0).type()).isEqualTo("Substitute Holiday");
+        assertThat(response.appliedEvents()).isEmpty();
     }
 
     @Test
@@ -263,6 +321,66 @@ class GameDayStateServiceTests {
         Optional<GameStateResponse> response = gameDayStateService.refreshGameState(store);
 
         assertThat(response).isEmpty();
+    }
+
+    @Test
+    void getGameStateClampsNegativeStockToZero() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 500);
+        GameDayLiveState baseState = state(
+                500,
+                List.of(),
+                1_000,
+                20,
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0)
+        );
+        GameDayLiveState negativeStockState = new GameDayLiveState(
+                baseState.startedAt(),
+                baseState.purchaseList(),
+                baseState.purchaseCursor(),
+                baseState.startResponse(),
+                baseState.tick(),
+                baseState.regionStoreCount(),
+                baseState.populationPerStore(),
+                baseState.captureRate(),
+                baseState.salePrice(),
+                baseState.tickCustomerCount(),
+                baseState.tickSoldUnits(),
+                baseState.tickPurchaseCount(),
+                baseState.tickSales(),
+                baseState.cumulativeCustomerCount(),
+                baseState.cumulativePurchaseCount(),
+                baseState.cumulativeSales(),
+                baseState.cumulativeTotalCost(),
+                baseState.locationChangeCost(),
+                baseState.balance(),
+                -7,
+                baseState.lastCalculatedAt()
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.of(negativeStockState));
+        when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
+        when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(15L, OrderType.EMERGENCY))
+                .thenReturn(List.of());
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 1)).thenReturn(List.of());
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1))
+                .thenReturn(List.of());
+
+        GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
+
+        assertThat(response.inventory().totalStock()).isZero();
+
+        ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
+        verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(
+                org.mockito.ArgumentMatchers.eq(15L),
+                org.mockito.ArgumentMatchers.eq(1),
+                stateCaptor.capture()
+        );
+        assertThat(stateCaptor.getValue().stock()).isZero();
     }
 
     @Test
@@ -449,7 +567,7 @@ class GameDayStateServiceTests {
     }
 
     @Test
-    void getGameStateUsesRedisActionStatusAndSeparatesEmergencyUsedFromPending() {
+    void getGameStateUsesActionLogsForActionStatusAndSeparatesEmergencyUsedFromPending() {
         gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 0, 55)));
 
         User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
@@ -483,8 +601,6 @@ class GameDayStateServiceTests {
                 .thenReturn(List.of(store, dummyStore));
         when(gameDayStoreStateRedisRepository.find(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
                 .thenReturn(Optional.of(state));
-        when(gameDayStoreStateRedisRepository.getActions(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
-                .thenReturn(Map.of("discount", true, "promotion", true));
         when(orderRepository.findDailyStartOrder(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
                 .thenReturn(Optional.of(GameDayTestFixtures.dailyStartOrder(store)));
         when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
@@ -497,7 +613,10 @@ class GameDayStateServiceTests {
                 OrderType.EMERGENCY
         )).thenReturn(List.of(pendingEmergencyOrder));
         when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
-                .thenReturn(List.of());
+                .thenReturn(List.of(
+                        actionLog(action(ActionCategory.DISCOUNT), store, GameDayTestFixtures.CURRENT_DAY),
+                        actionLog(action(ActionCategory.PROMOTION), store, GameDayTestFixtures.CURRENT_DAY)
+                ));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
                 GameDayTestFixtures.SEASON_ID,
                 1,
@@ -511,6 +630,41 @@ class GameDayStateServiceTests {
         assertThat(response.actionStatus().promotionUsed()).isTrue();
         assertThat(response.actionStatus().emergencyUsed()).isFalse();
         assertThat(response.actionStatus().emergencyOrderPending()).isTrue();
+    }
+
+    @Test
+    void getGameStateResetsActionStatusForNewBusinessDay() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 3, 7, 500);
+        GameDayLiveState state = state(
+                500,
+                List.of(),
+                1_000,
+                20,
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0)
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 3)).thenReturn(Optional.of(state));
+        when(orderRepository.findDailyStartOrder(15L, 3)).thenReturn(Optional.empty());
+        when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(15L, OrderType.EMERGENCY))
+                .thenReturn(List.of());
+        when(orderRepository.findByStoreIdAndOrderedDayAndOrderTypeOrderByArrivedTimeAscIdAsc(15L, 3, OrderType.EMERGENCY))
+                .thenReturn(List.of());
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 3)).thenReturn(List.of());
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 3))
+                .thenReturn(List.of());
+
+        GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
+
+        assertThat(response.day()).isEqualTo(3);
+        assertThat(response.actionStatus().discountUsed()).isFalse();
+        assertThat(response.actionStatus().donationUsed()).isFalse();
+        assertThat(response.actionStatus().promotionUsed()).isFalse();
+        assertThat(response.actionStatus().emergencyUsed()).isFalse();
     }
 
     @Test
@@ -714,6 +868,17 @@ class GameDayStateServiceTests {
             int initialStock,
             LocalDateTime startedAt
     ) {
+        return state(salePrice, purchaseList, initialBalance, initialStock, startedAt, List.of());
+    }
+
+    private GameDayLiveState state(
+            int salePrice,
+            List<Integer> purchaseList,
+            int initialBalance,
+            int initialStock,
+            LocalDateTime startedAt,
+            List<GameDayStartResponse.EventSchedule> eventSchedule
+    ) {
         return new GameDayLiveState(
                 startedAt,
                 purchaseList,
@@ -726,7 +891,7 @@ class GameDayStateServiceTests {
                         new BigDecimal("1.10"),
                         BigDecimal.ONE,
                         new BigDecimal("0.10"),
-                        List.of(),
+                        eventSchedule,
                         initialBalance,
                         initialStock,
                         null,
@@ -807,6 +972,19 @@ class GameDayStateServiceTests {
         ReflectionTestUtils.setField(menu, "menuName", menuName);
         ReflectionTestUtils.setField(menu, "originPrice", originPrice);
         return menu;
+    }
+
+    private Action action(ActionCategory category) {
+        Action action = instantiate(Action.class);
+        ReflectionTestUtils.setField(action, "id", 100L + category.ordinal());
+        ReflectionTestUtils.setField(action, "category", category);
+        ReflectionTestUtils.setField(action, "cost", 0);
+        ReflectionTestUtils.setField(action, "captureRate", BigDecimal.ZERO);
+        return action;
+    }
+
+    private ActionLog actionLog(Action action, Store store, int day) {
+        return new ActionLog(action, store, day, null);
     }
 
     private DailyEvent dailyEvent(

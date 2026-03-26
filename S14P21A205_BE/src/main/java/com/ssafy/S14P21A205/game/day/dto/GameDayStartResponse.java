@@ -35,7 +35,8 @@ public record GameDayStartResponse(
             Scope scope,
             String newsTitle,
             BigDecimal populationMultiplier,
-            Integer balanceChange
+            Integer balanceChange,
+            String eventCategory
     ) {
     }
 

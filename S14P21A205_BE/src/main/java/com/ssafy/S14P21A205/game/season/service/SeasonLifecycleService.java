@@ -122,17 +122,32 @@ public class SeasonLifecycleService {
             return;
         }
 
-        // Keep develop's pre-start preparation flow for scheduled seasons.
+        logScheduledSeasonState(
+                now,
+                scheduledSeason,
+                "SEASON_WAITING_TO_START",
+                scheduledSeason.getStartTime().isAfter(now) ? "BEFORE_START" : "START_TRIGGER_PENDING",
+                scheduledSeason.getStartTime().isAfter(now) ? null : 0L
+        );
+    }
+
+    public synchronized SeasonStartResult startScheduledSeason(Long seasonId) {
+        if (seasonId == null) {
+            return SeasonStartResult.SKIPPED;
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        Season inProgressSeason = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS).orElse(null);
+        if (inProgressSeason != null) {
+            return SeasonStartResult.SKIPPED;
+        }
+
+        Season scheduledSeason = seasonRepository.findByIdAndStatus(seasonId, SeasonStatus.SCHEDULED).orElse(null);
+        if (scheduledSeason == null || scheduledSeason.getStartTime() == null) {
+            return SeasonStartResult.SKIPPED;
+        }
         if (scheduledSeason.getStartTime().isAfter(now)) {
-            logScheduledSeasonState(
-                    now,
-                    scheduledSeason,
-                    "SEASON_WAITING_TO_START",
-                    "BEFORE_START",
-                    null
-            );
-            // 준비(ETL+뉴스)는 prepareScheduledSeasonIfNeeded()에서 트랜잭션 밖으로 처리
-            return;
+            return SeasonStartResult.SKIPPED;
         }
 
         List<Location> locations = requireLocations();
@@ -145,12 +160,13 @@ public class SeasonLifecycleService {
                     "WAITING_SOURCE_BATCH",
                     0L
             );
-            return;
+            return SeasonStartResult.WAITING_SOURCE_BATCH;
         }
 
         prepareDailyEventsIfMissing(scheduledSeason, locations);
 
         scheduledSeason.startAt(now, sourceBatchKey);
+        scheduledSeason.applyReservedDemoSkip();
         Random random = new Random(resolveSeed(scheduledSeason));
 
         List<WeatherLocation> weatherSchedule = rebuildWeatherSchedule(scheduledSeason, locations, random);
@@ -161,8 +177,8 @@ public class SeasonLifecycleService {
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
 
         synchronizeInProgressSeason(scheduledSeason, now);
+        return SeasonStartResult.STARTED;
     }
-
     /**
      * Spark ETL + 뉴스 생성을 트랜잭션 밖에서 실행.
      * Spark TRUNCATE TABLE(DDL)이 REPEATABLE READ 스냅샷을 깨뜨리므로,
@@ -232,7 +248,7 @@ public class SeasonLifecycleService {
                         + "stage={} detailPhase={} day={}\n"
                         + "phaseRemaining={}s seasonRemaining={}s gameTime={} tick={}\n"
                         + "joinEnabled={} joinPlayableFromDay={}\n"
-                        + "startTime={} endTime={} batchKey={}\n"
+                        + "startTime={} endTime={} batchKey={} demoSkipStatus={} demoPlayableDays={} runtimePlayableDays={}\n"
                         + "==================================================",
                 now,
                 season.getId(),
@@ -248,7 +264,10 @@ public class SeasonLifecycleService {
                 formatValue(timePoint.joinPlayableFromDay()),
                 season.getStartTime(),
                 seasonEndAt,
-                formatValue(season.getSourceBatchKey())
+                formatValue(season.getSourceBatchKey()),
+                season.getDemoSkipStatus(),
+                formatValue(season.getDemoPlayableDays()),
+                season.resolveRuntimePlayableDays()
         );
     }
 
@@ -268,7 +287,7 @@ public class SeasonLifecycleService {
                         + "stage={} detailPhase={} day={}\n"
                         + "phaseRemaining={}s seasonRemaining={}s gameTime={} tick={}\n"
                         + "joinEnabled={} joinPlayableFromDay={}\n"
-                        + "startTime={} endTime={} batchKey={}\n"
+                        + "startTime={} endTime={} batchKey={} demoSkipStatus={} demoPlayableDays={} runtimePlayableDays={}\n"
                         + "==================================================",
                 now,
                 season.getId(),
@@ -284,7 +303,10 @@ public class SeasonLifecycleService {
                 "-",
                 season.getStartTime(),
                 season.getEndTime(),
-                formatValue(season.getSourceBatchKey())
+                formatValue(season.getSourceBatchKey()),
+                season.getDemoSkipStatus(),
+                formatValue(season.getDemoPlayableDays()),
+                season.resolveRuntimePlayableDays()
         );
     }
 
@@ -361,9 +383,17 @@ public class SeasonLifecycleService {
         if (targetTime == null) {
             return 0L;
         }
-        return Math.max(0L, Duration.between(now, targetTime).toSeconds());
-    }
+        Duration remaining = Duration.between(now, targetTime);
+        if (remaining.isNegative() || remaining.isZero()) {
+            return 0L;
+        }
 
+        long truncatedSeconds = remaining.toSeconds();
+        if (remaining.minusSeconds(truncatedSeconds).isZero()) {
+            return truncatedSeconds;
+        }
+        return truncatedSeconds + 1L;
+    }
     private String formatDay(Integer day) {
         return day == null ? "-" : "DAY " + day;
     }
@@ -466,7 +496,7 @@ public class SeasonLifecycleService {
         return trafficRepository.saveAll(fixedRows);
     }
 
-    private void rebuildDailyEvents(Season season, List<Menu> menus, Random random) {
+    private void rebuildDailyEvents(Season season, List<Menu> menus, List<Location> locations, Random random) {
         dailyEventRepository.deleteBySeasonId(season.getId());
 
         List<WeightedEventSpec> fullPool = buildWeightedEventPool(menus);
@@ -489,6 +519,7 @@ public class SeasonLifecycleService {
 
                 WeightedEventSpec selectedEvent = selectedBaseEvent
                         .withApplyOffsetSeconds(index == 0 ? FIRST_EVENT_OFFSET_SECONDS : SECOND_EVENT_OFFSET_SECONDS);
+                Long targetLocationId = resolveTargetLocationId(selectedEvent, locations, random);
                 RandomEvent randomEvent = upsertRandomEvent(selectedEvent);
                 dailyEvents.add(DailyEvent.create(
                         season,
@@ -496,7 +527,7 @@ public class SeasonLifecycleService {
                         day,
                         selectedEvent.applyOffsetSeconds(),
                         selectedEvent.expireOffsetSeconds(),
-                        selectedEvent.targetLocationId(),
+                        targetLocationId,
                         selectedEvent.targetMenuId()
                 ));
             }
@@ -588,7 +619,27 @@ public class SeasonLifecycleService {
 
         List<Menu> menus = requireMenus();
         Random random = createDailyEventRandom(season, locations);
-        rebuildDailyEvents(season, menus, random);
+        rebuildDailyEvents(season, menus, locations, random);
+    }
+
+    private Long resolveTargetLocationId(WeightedEventSpec event, List<Location> locations, Random random) {
+        if (event.targetLocationId() != null || !requiresTargetLocation(event.category())) {
+            return event.targetLocationId();
+        }
+        if (locations == null || locations.isEmpty()) {
+            throw new BaseException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
+                    "No locations available for location-scoped event"
+            );
+        }
+        return locations.get(random.nextInt(locations.size())).getId();
+    }
+
+    private boolean requiresTargetLocation(EventCategory category) {
+        return switch (category) {
+            case CELEBRITY_APPEARANCE, EARTHQUAKE, FLOOD, TYPHOON, FIRE -> true;
+            default -> false;
+        };
     }
 
     private Random createDailyEventRandom(Season season, List<Location> locations) {
@@ -1235,6 +1286,12 @@ public class SeasonLifecycleService {
                 : finishedSeason.getTotalDays();
         LocalDateTime nextSeasonEndAt = nextSeasonStartAt.plus(seasonTimelineService.seasonCycleDuration(totalDays));
         seasonRepository.save(Season.createScheduled(totalDays, nextSeasonStartAt, nextSeasonEndAt));
+    }
+
+    public enum SeasonStartResult {
+        STARTED,
+        WAITING_SOURCE_BATCH,
+        SKIPPED
     }
 
     private record WeightedEventSpec(

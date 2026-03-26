@@ -33,6 +33,10 @@ public class ActionEffectResolver {
                 captureRateMultiplier = captureRateMultiplier.multiply(normalizeMultiplier(actionLog.getActionValue()));
             } else if (category == ActionCategory.DONATION) {
                 captureRateMultiplier = captureRateMultiplier.multiply(toBonusMultiplier(actionLog.getActionValue()));
+            } else if (category == ActionCategory.PROMOTION) {
+                captureRateMultiplier = captureRateMultiplier.multiply(
+                        normalizeMultiplier(actionLog.getAction().getCaptureRate())
+                );
             } else {
                 captureRateMultiplier = captureRateMultiplier.multiply(
                         toBonusMultiplier(actionLog.getAction().getCaptureRate())

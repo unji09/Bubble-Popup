@@ -48,7 +48,7 @@ public class SeasonDayClosingScheduler {
 
         SeasonScheduleSignature signature = new SeasonScheduleSignature(
                 season.getStartTime(),
-                season.getTotalDays(),
+                season.resolveRuntimePlayableDays(),
                 season.getStatus()
         );
         SeasonScheduleState existingState = scheduleStates.get(season.getId());
@@ -60,7 +60,8 @@ public class SeasonDayClosingScheduler {
 
         Map<Integer, ScheduledFuture<?>> futures = new ConcurrentHashMap<>();
         LocalDateTime now = LocalDateTime.now(clock);
-        for (int day = 1; day <= season.getTotalDays(); day++) {
+        int runtimePlayableDays = season.resolveRuntimePlayableDays();
+        for (int day = 1; day <= runtimePlayableDays; day++) {
             DayWindow dayWindow = seasonTimelineService.day(season, day);
             LocalDateTime businessEndAt = dayWindow.businessEnd();
 
@@ -106,7 +107,7 @@ public class SeasonDayClosingScheduler {
 
     private record SeasonScheduleSignature(
             LocalDateTime startTime,
-            Integer totalDays,
+            Integer runtimePlayableDays,
             SeasonStatus status
     ) {
     }

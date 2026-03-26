@@ -87,7 +87,7 @@ class ShopServiceTests {
 
         assertThatThrownBy(() -> shopService.purchaseItems(7, List.of(1L)))
                 .isInstanceOf(BaseException.class)
-                .hasMessageContaining("only through day 5");
+                .hasMessageContaining("no longer available");
         verifyNoInteractions(userRepository);
     }
 

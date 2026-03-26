@@ -12,11 +12,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class EventEffectResolver {
 
@@ -44,6 +48,7 @@ public class EventEffectResolver {
         BigDecimal ingredientCostMultiplier = DECIMAL_ONE;
         List<GameStateResponse.AppliedEvent> appliedEvents = new ArrayList<>();
         List<StockRateEvent> appliedStockRateEvents = new ArrayList<>();
+        Set<EventDedupKey> resolvedEventKeys = new HashSet<>();
 
         for (DailyEvent dailyEvent : dailyEvents) {
             if (!matchesScope(dailyEvent, locationId, menuId)) {
@@ -52,6 +57,18 @@ public class EventEffectResolver {
 
             int appliedDay = resolveAppliedDay(dailyEvent);
             if (appliedDay < 1 || appliedDay > currentDay) {
+                continue;
+            }
+            EventDedupKey eventKey = EventDedupKey.from(dailyEvent, appliedDay);
+            if (!resolvedEventKeys.add(eventKey)) {
+                log.warn(
+                        "Duplicate event effect suppressed. seasonId={} day={} eventCategory={} targetLocationId={} targetMenuId={}",
+                        season.getId(),
+                        appliedDay,
+                        eventKey.eventCategory(),
+                        eventKey.targetLocationId(),
+                        eventKey.targetMenuId()
+                );
                 continue;
             }
 
@@ -180,6 +197,23 @@ public class EventEffectResolver {
             Long dailyEventId,
             BigDecimal stockRate
     ) {
+    }
+
+    private record EventDedupKey(
+            int appliedDay,
+            String eventCategory,
+            Long targetLocationId,
+            Long targetMenuId
+    ) {
+        private static EventDedupKey from(DailyEvent dailyEvent, int appliedDay) {
+            RandomEvent event = dailyEvent.getEvent();
+            return new EventDedupKey(
+                    appliedDay,
+                    event == null || event.getEventCategory() == null ? null : event.getEventCategory().name(),
+                    dailyEvent.getTargetLocationId(),
+                    dailyEvent.getTargetMenuId()
+            );
+        }
     }
 }
 

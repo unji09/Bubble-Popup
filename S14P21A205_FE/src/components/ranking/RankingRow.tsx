@@ -23,22 +23,28 @@ export default function RankingRow({ entry, animationDelay }: RankingRowProps) {
   return (
     <div
       className={`flex items-center rounded-2xl p-4 shadow-soft border transition-shadow hover:shadow-md group relative overflow-hidden animate-slide-in-left ${
-        entry.isMe
-          ? "bg-primary/5 border-primary"
-          : entry.isBankrupt
-            ? "bg-slate-50 border-slate-100 opacity-60"
-            : "bg-white border-slate-50"
+        entry.isMe && entry.isBankrupt
+          ? "bg-rose-50/60 border-rose-300"
+          : entry.isMe
+            ? "bg-primary/5 border-primary"
+            : entry.isBankrupt
+              ? "bg-slate-50 border-slate-100 opacity-60"
+              : "bg-white border-slate-50"
       }`}
       style={animationDelay ? { animationDelay: `${animationDelay}ms` } : undefined}
     >
-      {entry.isMe && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />}
+      {entry.isMe && (
+        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${entry.isBankrupt ? "bg-rose-400" : "bg-primary"}`} />
+      )}
 
       {/* Rank */}
       <div className="w-12 flex justify-center mr-4 ml-2">
         <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-          entry.isMe
-            ? "bg-primary text-white"
-            : "bg-slate-100 text-slate-500 group-hover:bg-primary group-hover:text-white transition-colors"
+          entry.isMe && entry.isBankrupt
+            ? "bg-rose-400 text-white"
+            : entry.isMe
+              ? "bg-primary text-white"
+              : "bg-slate-100 text-slate-500 group-hover:bg-primary group-hover:text-white transition-colors"
         }`}>
           {entry.rank ?? "-"}
         </span>
@@ -46,7 +52,11 @@ export default function RankingRow({ entry, animationDelay }: RankingRowProps) {
 
       {/* Avatar */}
       <div className={`size-12 rounded-full bg-slate-100 overflow-hidden mr-4 flex-shrink-0 flex items-center justify-center text-xl ${
-        entry.isMe ? "border-2 border-white shadow-sm ring-2 ring-primary/30" : ""
+        entry.isMe
+          ? entry.isBankrupt
+            ? "border-2 border-white shadow-sm ring-2 ring-rose-300/40"
+            : "border-2 border-white shadow-sm ring-2 ring-primary/30"
+          : ""
       }`}>
         <span className="material-symbols-outlined text-2xl text-slate-400">person</span>
       </div>
@@ -58,7 +68,11 @@ export default function RankingRow({ entry, animationDelay }: RankingRowProps) {
             {entry.nickname}
             {entry.isBankrupt && <Badge variant="rose" size="sm">파산</Badge>}
           </span>
-          {entry.isMe && <span className="text-xs text-primary font-bold">나 (Player)</span>}
+          {entry.isMe && (
+            <span className={`text-xs font-bold ${entry.isBankrupt ? "text-rose-400" : "text-primary"}`}>
+              {entry.isBankrupt ? "나 (파산)" : "나 (Player)"}
+            </span>
+          )}
         </div>
         <div className="flex flex-col text-sm text-slate-500">
           <span className="flex items-center gap-1 font-medium text-slate-700 truncate">

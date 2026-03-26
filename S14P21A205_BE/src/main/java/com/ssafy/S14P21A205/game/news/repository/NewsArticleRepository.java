@@ -18,6 +18,8 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
 
     boolean existsByNewsReportIdAndCategory(Long newsReportId, NewsCategory category);
 
+    long countByNewsReportId(Long newsReportId);
+
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM NewsArticle na WHERE na.newsReport.season.id = :seasonId")
     void deleteBySeasonId(@Param("seasonId") Long seasonId);

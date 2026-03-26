@@ -8,6 +8,9 @@ import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
+import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
@@ -15,6 +18,7 @@ import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.dto.LocationListResponse;
+import com.ssafy.S14P21A205.store.dto.MenuListResponse;
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
@@ -57,6 +61,12 @@ class StoreServiceImplTests {
     @Mock
     private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
+    @Mock
+    private NewsRankingResolver newsRankingResolver;
+
+    @Mock
+    private EventEffectResolver eventEffectResolver;
+
     private StoreServiceImpl storeService;
 
     @BeforeEach
@@ -68,6 +78,9 @@ class StoreServiceImplTests {
                 menuRepository,
                 itemUserRepository,
                 gameDayStoreStateRedisRepository,
+                new StoreRankingPolicy(),
+                newsRankingResolver,
+                eventEffectResolver,
                 fixedClock
         );
     }
@@ -178,6 +191,49 @@ class StoreServiceImplTests {
         verify(storeRepository, never()).findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS);
     }
 
+    @Test
+    void getMenusReturnsIngredientPriceAdjustedByMenuRankAndEvent() {
+        Store store = store(15L, 3L, 3, 7, 60L);
+        Menu cookie = menu(5L, "Cookie", 1_200);
+        Menu taco = menu(8L, "Taco", 2_000);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(new BigDecimal("0.80")));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(cookie, taco));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(
+                storeWithMenu(31L, 3L, cookie, store.getSeason()),
+                storeWithMenu(32L, 3L, cookie, store.getSeason()),
+                storeWithMenu(33L, 3L, taco, store.getSeason())
+        ));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 3, cookie)).thenReturn(null);
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 3, taco)).thenReturn(9);
+        when(eventEffectResolver.resolve(store.getSeason(), 3, LocalDateTime.of(2026, 3, 9, 14, 33), 3L, 5L))
+                .thenReturn(eventEffect(new BigDecimal("1.05")));
+        when(eventEffectResolver.resolve(store.getSeason(), 3, LocalDateTime.of(2026, 3, 9, 14, 33), 3L, 8L))
+                .thenReturn(eventEffect(new BigDecimal("0.95")));
+
+        MenuListResponse response = storeService.getMenus(1);
+
+        assertThat(response.getMenus()).hasSize(2);
+        assertThat(response.getMenus().get(0).getIngredientPrice()).isEqualTo(1_512);
+        assertThat(response.getMenus().get(0).getDiscount()).isEqualTo(0.8f);
+        assertThat(response.getMenus().get(1).getIngredientPrice()).isEqualTo(1_710);
+        assertThat(response.getMenus().get(1).getDiscount()).isEqualTo(0.8f);
+    }
+
+    @Test
+    void getMenusThrowsWhenNoActiveStoreExists() {
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> storeService.getMenus(1))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.STORE_NOT_FOUND));
+    }
+
     private Store store(Long storeId, Long locationId, int currentDay, int totalDays) {
         return store(storeId, locationId, currentDay, totalDays, 170L);
     }
@@ -207,10 +263,37 @@ class StoreServiceImplTests {
     }
 
     private Menu menu(Long id, String name) {
+        return menu(id, name, 1_200);
+    }
+
+    private Menu menu(Long id, String name, int originPrice) {
         Menu menu = instantiate(Menu.class);
         ReflectionTestUtils.setField(menu, "id", id);
         ReflectionTestUtils.setField(menu, "menuName", name);
+        ReflectionTestUtils.setField(menu, "originPrice", originPrice);
         return menu;
+    }
+
+    private Store storeWithMenu(Long storeId, Long locationId, Menu menu, Season season) {
+        Store store = instantiate(Store.class);
+        ReflectionTestUtils.setField(store, "id", storeId);
+        ReflectionTestUtils.setField(store, "location", location(locationId, "Seongsu", 100_000, 150_000));
+        ReflectionTestUtils.setField(store, "menu", menu);
+        ReflectionTestUtils.setField(store, "season", season);
+        ReflectionTestUtils.setField(store, "storeName", "Trend Store");
+        ReflectionTestUtils.setField(store, "playableFromDay", 1);
+        return store;
+    }
+
+    private EventEffectResolver.EventEffect eventEffect(BigDecimal ingredientCostMultiplier) {
+        return new EventEffectResolver.EventEffect(
+                0L,
+                0,
+                BigDecimal.ONE,
+                ingredientCostMultiplier,
+                List.of(),
+                List.of()
+        );
     }
 
     private Location location(Long id, String name, int interiorCost, int rent) {

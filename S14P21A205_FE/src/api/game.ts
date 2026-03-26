@@ -181,10 +181,33 @@ export interface GameActionStatus {
 }
 
 export interface AppliedEvent {
-  eventType: string;
-  eventName: string;
-  newsTitle: string;
+  eventId?: number | null;
+  eventCategory?: string | null;
+  eventType?: string | null;
+  eventName?: string | null;
+  newsTitle?: string | null;
   appliedAt: string;
+  scope?: { region: number | null; menu: number | null } | null;
+  targetRegionId?: number | null;
+  targetRegionName?: string | null;
+  regionName?: string | null;
+  locationName?: string | null;
+}
+
+export interface TodayEventScheduleItem {
+  time: string;
+  type: string;
+  scope: { region: number | null; menu: number | null } | null;
+  newsTitle: string;
+  populationMultiplier: number;
+  balanceChange: number | null;
+  eventId?: number | null;
+  eventName?: string | null;
+  eventCategory?: string | null;
+  targetRegionId?: number | null;
+  targetRegionName?: string | null;
+  regionName?: string | null;
+  locationName?: string | null;
 }
 
 export interface GameStateResponse {
@@ -198,6 +221,7 @@ export interface GameStateResponse {
   customerCount: number;
   customerTick: CustomerTick;
   customerPlanByHour?: CustomerPlanByHourItem[] | null;
+  todayEventSchedule: TodayEventScheduleItem[];
   inventory: { totalStock: number };
   actionStatus: GameActionStatus;
   appliedEvents: AppliedEvent[];

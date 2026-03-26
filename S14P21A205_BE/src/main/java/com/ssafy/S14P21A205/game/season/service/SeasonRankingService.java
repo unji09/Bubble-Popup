@@ -238,7 +238,9 @@ public class SeasonRankingService {
     }
 
     private Map<Long, Integer> bankruptcyDays(Season season) {
-        int dayUpperBound = season.getTotalDays() == null ? Integer.MAX_VALUE : season.getTotalDays() + 1;
+        int dayUpperBound = season.resolveRuntimePlayableDays() <= 0
+                ? Integer.MAX_VALUE
+                : season.resolveRuntimePlayableDays() + 1;
         Map<Long, Integer> bankruptcyDays = new HashMap<>();
         List<DailyReport> reports = dailyReportRepository
                 .findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(season.getId(), dayUpperBound);

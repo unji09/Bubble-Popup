@@ -24,9 +24,12 @@ public class OrderController implements OrderControllerDoc {
      */
     @Override
     @GetMapping
-    public ResponseEntity<CurrentOrderResponse> getCurrentOrder(Authentication authentication) {
+    public ResponseEntity<CurrentOrderResponse> getCurrentOrder(
+            Authentication authentication,
+            @RequestParam(required = false) Integer menuId
+    ) {
         Integer userId = extractUserId(authentication);
-        return ResponseEntity.ok(orderService.getCurrentOrder(userId));
+        return ResponseEntity.ok(orderService.getCurrentOrder(userId, menuId));
     }
 
     // 정규 발주 api

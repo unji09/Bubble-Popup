@@ -51,9 +51,14 @@ export default function ShareModal({
       await Promise.resolve(onSubmit(normalizedQuantity));
     } catch (error) {
       if (axios.isAxiosError<ApiErrorResponse>(error)) {
-        setSubmitError(
-          error.response?.data?.message ?? "나눔 실행에 실패했습니다. 잠시 후 다시 시도해주세요.",
-        );
+        const status = error.response?.status;
+        if (status === 400 || status === 409) {
+          setSubmitError("앗! 그 사이 손님이 다녀가서 나눔할 재고가 부족해졌어요");
+        } else {
+          setSubmitError(
+            error.response?.data?.message ?? "나눔 실행에 실패했습니다. 잠시 후 다시 시도해주세요.",
+          );
+        }
       } else {
         setSubmitError("나눔 실행에 실패했습니다. 잠시 후 다시 시도해주세요.");
       }

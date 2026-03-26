@@ -4,9 +4,12 @@ import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTimeResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
+import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
+import com.ssafy.S14P21A205.game.season.service.SeasonAdminService;
 import com.ssafy.S14P21A205.game.season.service.CurrentSeasonTimeService;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
@@ -34,6 +37,7 @@ public class SeasonController implements SeasonControllerDoc {
     private final SeasonRankingService seasonRankingService;
     private final SeasonSummaryService seasonSummaryService;
     private final SeasonWaitingService seasonWaitingService;
+    private final SeasonAdminService seasonAdminService;
 
     @Override
     @GetMapping("/waiting")
@@ -55,6 +59,16 @@ public class SeasonController implements SeasonControllerDoc {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(seasonJoinService.joinCurrentSeason(authentication, request));
+    }
+
+    @Override
+    @PostMapping("/seasons/admin/demo-skip")
+    public ResponseEntity<SeasonDemoSkipResponse> reserveDemoSkip(
+            Authentication authentication,
+            @Valid @RequestBody SeasonDemoSkipRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(seasonAdminService.reserveDemoSkip(authentication, request));
     }
 
     @Override

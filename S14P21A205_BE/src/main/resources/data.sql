@@ -353,8 +353,12 @@ INSERT INTO random_event (event_category, event_type, start_time, end_time, popu
 SELECT 'POLICY_CHANGE', '정부 방침 변경', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 1.05, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'POLICY_CHANGE');
 
+UPDATE random_event
+SET stock_flat = 0.00
+WHERE event_category = 'INFECTIOUS_DISEASE';
+
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'INFECTIOUS_DISEASE', '감염병', 'IMMEDIATE', 'SAME_DAY', 0.70, 1.00, 1.00, 0 FROM DUAL
+SELECT 'INFECTIOUS_DISEASE', '감염병', 'IMMEDIATE', 'SAME_DAY', 0.70, 0.00, 1.00, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'INFECTIOUS_DISEASE');
 
 -- 7. Action (액션)

@@ -3,7 +3,7 @@
  * BE의 GameTimePolicy.java와 동일하게 유지할 것
  *
  * 시즌 타임라인:
- * [지역선택 2분] → [1일차: 영업준비 50초 + 영업중 2분 + 리포트 10초] × 7일
+ * [지역선택 2분] → [1일차: 영업준비 40초 + 영업중 2분 + 리포트 20초] × 7일
  * → [시즌요약 2분] → [다음시즌대기 5분] → 종료
  */
 
@@ -13,13 +13,13 @@
 export const LOCATION_SELECTION_SECONDS = 120; // 2분
 
 /** 영업 준비 구간 */
-export const PREP_SECONDS = 50;
+export const PREP_SECONDS = 40;
 
 /** 영업중 구간 */
 export const BUSINESS_SECONDS = 120; // 2분
 
 /** 일일 리포트 구간 */
-export const REPORT_SECONDS = 10;
+export const REPORT_SECONDS = 20;
 
 /** 하루 전체 = 영업준비 + 영업중 + 리포트 */
 export const DAY_SECONDS = PREP_SECONDS + BUSINESS_SECONDS + REPORT_SECONDS; // 180초 = 3분

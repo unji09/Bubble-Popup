@@ -41,7 +41,9 @@ public interface OrderControllerDoc {
             )
     })
     ResponseEntity<CurrentOrderResponse> getCurrentOrder(
-            @Parameter(hidden = true) Authentication authentication
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(description = "가격 정보를 조회할 메뉴 ID. 생략 시 현재 가게 메뉴 기준으로 계산됩니다.")
+            Integer menuId
     );
 
     @Operation(

@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.season.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.Authentication;
@@ -114,9 +116,9 @@ class SeasonJoinServiceTests {
         User user = user(7);
         Season season = season(11L);
         Location location = location(3L, 100_000, 200_000);
-        Menu menu = menu(5L, 2_000);
-        Store previousStore = store(20L, user, season, location, menu, 2_000);
-        Store savedStore = store(21L, user, season, location, menu, 2_000);
+        Menu defaultMenu = menu(1L, 1_800);
+        Menu previousMenu = menu(5L, 2_000);
+        Store previousStore = store(20L, user, season, location, previousMenu, 4_500);
 
         when(userService.getCurrentUser(any(Authentication.class))).thenReturn(user);
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
@@ -125,8 +127,12 @@ class SeasonJoinServiceTests {
         when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(20L))
                 .thenReturn(Optional.of(bankruptReport(previousStore)));
         when(locationRepository.findById(3L)).thenReturn(Optional.of(location));
-        when(storeRepository.findFirstByUser_IdOrderBySeason_IdDescIdDesc(7)).thenReturn(Optional.of(previousStore));
-        when(storeRepository.save(any(Store.class))).thenReturn(savedStore);
+        when(menuRepository.findFirstByOrderByIdAsc()).thenReturn(Optional.of(defaultMenu));
+        when(storeRepository.save(any(Store.class))).thenAnswer(invocation -> {
+            Store store = invocation.getArgument(0);
+            ReflectionTestUtils.setField(store, "id", 21L);
+            return store;
+        });
         when(purchaseListGenerator.issueSeed()).thenReturn(4_321L);
 
         SeasonJoinResponse response = seasonJoinService.joinCurrentSeason(
@@ -134,7 +140,14 @@ class SeasonJoinServiceTests {
                 new SeasonJoinRequest(3, "rejoin store")
         );
 
+        ArgumentCaptor<Store> storeCaptor = ArgumentCaptor.forClass(Store.class);
+        verify(storeRepository).save(storeCaptor.capture());
+        Store savedStore = storeCaptor.getValue();
+
         assertThat(response.storeId()).isEqualTo(21L);
+        assertThat(response.balance()).isEqualTo(4_800_000);
+        assertThat(savedStore.getMenu()).isSameAs(defaultMenu);
+        assertThat(savedStore.getPrice()).isEqualTo(1_800);
         assertThat(savedStore.getPurchaseSeed()).isEqualTo(4_321L);
         assertThat(savedStore.getPurchaseCursor()).isZero();
     }
@@ -188,7 +201,7 @@ class SeasonJoinServiceTests {
                 new SeasonJoinRequest(3, "late join")
         ))
                 .isInstanceOf(com.ssafy.S14P21A205.exception.BaseException.class)
-                .hasMessageContaining("only through day 5");
+                .hasMessageContaining("no longer available");
     }
 
     private User user(Integer id) {

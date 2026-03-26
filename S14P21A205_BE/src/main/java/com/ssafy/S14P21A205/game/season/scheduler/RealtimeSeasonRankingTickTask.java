@@ -167,7 +167,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
 
     private int resolveCurrentDay(Season season) {
         int currentDay = season.getCurrentDay() == null ? 1 : season.getCurrentDay();
-        if (currentDay < 1 || currentDay > season.getTotalDays()) {
+        if (currentDay < 1 || currentDay > season.resolveRuntimePlayableDays()) {
             throw new IllegalStateException("Current season day is out of range.");
         }
         return currentDay;

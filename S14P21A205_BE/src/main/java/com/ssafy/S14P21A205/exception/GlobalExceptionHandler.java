@@ -6,7 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
@@ -17,6 +21,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -54,12 +60,36 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(ErrorCode.INVALID_INPUT_VALUE, message, request.getRequestURI()));
     }
 
+    @ExceptionHandler({
+            NoHandlerFoundException.class,
+            NoResourceFoundException.class
+    })
+    public ResponseEntity<ErrorResponse> handleNotFound(Exception e, HttpServletRequest request) {
+        log.info(REQUEST_LOG_FORMAT, ErrorCode.RESOURCE_NOT_FOUND.getCode(), request.getMethod(), request.getRequestURI(), e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(ErrorCode.RESOURCE_NOT_FOUND, request.getRequestURI()));
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException e, HttpServletRequest request) {
         log.warn(REQUEST_LOG_FORMAT, ErrorCode.ACCESS_DENIED.getCode(), request.getMethod(), request.getRequestURI(), e.getMessage());
         return ResponseEntity
                 .status(ErrorCode.ACCESS_DENIED.getHttpStatus())
                 .body(new ErrorResponse(ErrorCode.ACCESS_DENIED, request.getRequestURI()));
+    }
+
+    @ExceptionHandler({
+            CannotCreateTransactionException.class,
+            DataAccessResourceFailureException.class,
+            QueryTimeoutException.class,
+            RedisConnectionFailureException.class
+    })
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(Exception e, HttpServletRequest request) {
+        log.error(REQUEST_LOG_FORMAT, ErrorCode.SERVICE_UNAVAILABLE.getCode(), request.getMethod(), request.getRequestURI(), e.getMessage(), e);
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(ErrorCode.SERVICE_UNAVAILABLE, request.getRequestURI()));
     }
 
     @ExceptionHandler(Exception.class)

@@ -5,8 +5,14 @@ export interface RegularOrderRequest {
 }
 
 export interface RegularOrderResponse {
+  menuId?: number;
+  menuName?: string;
+  costPrice?: number;
+  recommendedPrice?: number;
+  maxSellingPrice?: number;
+  sellingPrice: number;
+  stock?: number;
   orderId?: number;
   status?: string;
   message?: string;
-  [key: string]: unknown;
 }

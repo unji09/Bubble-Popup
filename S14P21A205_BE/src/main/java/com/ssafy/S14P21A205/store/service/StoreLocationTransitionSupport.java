@@ -74,8 +74,8 @@ public class StoreLocationTransitionSupport {
             Integer currentDay = timePoint.currentDay();
             if (currentDay != null
                     && currentDay >= 1
-                    && store.getSeason().getTotalDays() != null
-                    && currentDay <= store.getSeason().getTotalDays()) {
+                    && store.getSeason().resolveRuntimePlayableDays() > 0
+                    && currentDay <= store.getSeason().resolveRuntimePlayableDays()) {
                 return currentDay;
             }
         } catch (IllegalStateException ignored) {

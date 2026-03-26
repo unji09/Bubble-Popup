@@ -2,6 +2,10 @@ package com.ssafy.S14P21A205.store.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
+import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
+import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
@@ -16,6 +20,7 @@ import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
+import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
@@ -41,6 +46,9 @@ public class StoreServiceImpl implements StoreService {
     private final MenuRepository menuRepository;
     private final ItemUserRepository itemUserRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
+    private final StoreRankingPolicy storeRankingPolicy;
+    private final NewsRankingResolver newsRankingResolver;
+    private final EventEffectResolver eventEffectResolver;
     private final Clock clock;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -68,7 +76,7 @@ public class StoreServiceImpl implements StoreService {
         Long storeId = store.getId();
         int currentDay = resolveCurrentDay(store, now);
 
-        if (currentDay >= store.getSeason().getTotalDays()) {
+        if (currentDay >= store.getSeason().resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Location changes are unavailable on the last day.");
         }
         if (STORE_LOCATION_TRANSITION_SUPPORT.hasFuturePendingLocationChange(store, currentDay)) {
@@ -85,6 +93,20 @@ public class StoreServiceImpl implements StoreService {
         Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
         recordLocationChangeCost(storeId, currentDay, location.getInteriorCost());
         store.reserveLocationChange(location, currentDay + 1);
+        gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                storeId,
+                currentDay,
+                resolveDebugTick(store, now),
+                new TickDebugActionNote(
+                        "이동(%s)".formatted(location.getLocationName()),
+                        0L,
+                        0L,
+                        0L,
+                        0L,
+                        location.getInteriorCost() == null ? 0L : location.getInteriorCost().longValue(),
+                        0
+                )
+        );
 
         return new UpdateStoreLocationResponse(
                 location.getId(),
@@ -111,14 +133,19 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public MenuListResponse getMenus(Integer userId) {
+        LocalDateTime now = LocalDateTime.now(clock);
         Store store = getStoreByUserId(userId);
+        SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
+        int currentDay = resolveCurrentDay(store, now);
         float discount = getDisplayedIngredientDiscountRate(userId).floatValue();
+        List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
+        LocalDateTime ingredientPricingAt = resolveIngredientPricingAt(store, currentDay, seasonTimePoint, now);
 
         List<MenuListResponse.MenuInfo> menuInfos = menuRepository.findAllByOrderByIdAsc().stream()
                 .map(menu -> MenuListResponse.MenuInfo.builder()
                         .menuId(Math.toIntExact(menu.getId()))
                         .menuName(menu.getMenuName())
-                        .ingredientPrice(menu.getOriginPrice())
+                        .ingredientPrice(resolveIngredientPrice(store, currentDay, menu, seasonStores, ingredientPricingAt))
                         .discount(discount)
                         .build())
                 .toList();
@@ -168,10 +195,70 @@ public class StoreServiceImpl implements StoreService {
                 .orElse(BigDecimal.ONE);
     }
 
+    private Integer resolveDebugTick(Store store, LocalDateTime recordedAt) {
+        if (store == null || store.getSeason() == null || recordedAt == null) {
+            return 0;
+        }
+        try {
+            Integer tick = seasonTimelineService.resolve(store.getSeason(), recordedAt).tick();
+            return tick == null ? 0 : Math.max(0, tick);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private int resolveIngredientPrice(
+            Store store,
+            int day,
+            Menu menu,
+            List<Store> seasonStores,
+            LocalDateTime ingredientPricingAt
+    ) {
+        int menuEntryRank = resolveMenuEntryRank(store, day, menu, seasonStores);
+        BigDecimal ingredientCostMultiplier = eventEffectResolver.resolve(
+                store.getSeason(),
+                day,
+                ingredientPricingAt,
+                store.getLocation().getId(),
+                menu.getId()
+        ).ingredientCostMultiplier();
+
+        return storeRankingPolicy.apply(
+                menu.getOriginPrice(),
+                storeRankingPolicy.resolveMenuEntryMultiplier(menuEntryRank),
+                ingredientCostMultiplier
+        );
+    }
+
+    private int resolveMenuEntryRank(Store store, int day, Menu menu, List<Store> seasonStores) {
+        Integer newsRank = newsRankingResolver.resolveMenuEntryRank(
+                store.getSeason().getId(),
+                day,
+                menu
+        );
+        if (newsRank != null) {
+            return newsRank;
+        }
+        return storeRankingPolicy.resolveMenuTrendRank(menu.getId(), seasonStores);
+    }
+
+    private LocalDateTime resolveIngredientPricingAt(
+            Store store,
+            int day,
+            SeasonTimePoint seasonTimePoint,
+            LocalDateTime now
+    ) {
+        if (seasonTimePoint.phase() == SeasonPhase.DAY_PREPARING
+                || seasonTimePoint.phase() == SeasonPhase.LOCATION_SELECTION) {
+            return seasonTimelineService.day(store.getSeason(), day).businessStart();
+        }
+        return now;
+    }
+
     private int resolveCurrentDay(Store store, LocalDateTime now) {
         SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay != null && currentDay >= 1 && currentDay <= store.getSeason().getTotalDays()) {
+        if (currentDay != null && currentDay >= 1 && currentDay <= store.getSeason().resolveRuntimePlayableDays()) {
             return currentDay;
         }
         Integer fallbackDay = store.getSeason().getCurrentDay();

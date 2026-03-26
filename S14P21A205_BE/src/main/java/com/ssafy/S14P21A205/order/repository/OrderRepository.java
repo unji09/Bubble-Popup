@@ -48,6 +48,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             OrderType orderType
     );
 
+    Optional<Order> findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+            Long storeId,
+            Integer orderedDay,
+            OrderType orderType
+    );
+
     default Optional<Order> findDailyStartOrder(Long storeId, Integer orderedDay) {
         return findDailyStartOrders(storeId, orderedDay).stream().findFirst();
     }

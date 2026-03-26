@@ -59,6 +59,7 @@ class RealtimeSeasonRankingTickTaskTests {
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
         when(season.getCurrentDay()).thenReturn(2);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
 
         Store firstStore = createStore(101L, 1, "alpha", "Alpha Store", "Gangnam", "Salt Bread", 20);
         Store secondStore = createStore(102L, 2, "beta", "Beta Store", "Hongdae", "Mara", 25);
@@ -111,6 +112,7 @@ class RealtimeSeasonRankingTickTaskTests {
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
         when(season.getCurrentDay()).thenReturn(1);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
 
         Store firstStore = createStore(101L, 1, "alpha", "Alpha Store", "Gangnam", "Salt Bread", 20);
         Store secondStore = createStore(102L, 2, "beta", "Beta Store", "Hongdae", "Mara", 20);
@@ -164,6 +166,7 @@ class RealtimeSeasonRankingTickTaskTests {
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
         when(season.getCurrentDay()).thenReturn(3);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
 
         Store store = createStore(201L, 11, "delta", "Delta Store", "Jamsil", "Bagel", 30);
         LocalDateTime liveTickAt = LocalDateTime.of(2026, 3, 14, 11, 0);
@@ -209,6 +212,7 @@ class RealtimeSeasonRankingTickTaskTests {
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
         when(season.getCurrentDay()).thenReturn(2);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
 
         Store store = createStore(301L, 21, "echo", "Echo Store", "Yeonnam", "Croffle", 35);
 

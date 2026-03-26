@@ -21,6 +21,7 @@ import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.shop.service.ShopService;
+import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
@@ -93,13 +94,27 @@ public class GameDayReportService {
             LocalDateTime now,
             SeasonTimePoint seasonTimePoint
     ) {
-        Integer totalDays = store.getSeason().getTotalDays();
-        if (totalDays != null && day > totalDays) {
+        int totalDays = store.getSeason().resolveRuntimePlayableDays();
+        if (day > totalDays) {
             log.warn("[DayReport] Skipped: day {} > totalDays {}. storeId={}", day, totalDays, store.getId());
             return;
         }
         if (dailyReportRepository.existsByStoreIdAndDay(store.getId(), day)) {
             log.debug("[DayReport] Already exists. storeId={} day={}", store.getId(), day);
+            return;
+        }
+        DailyReport latestReport = dailyReportRepository.findFirstByStore_IdOrderByDayDesc(store.getId())
+                .orElse(null);
+        if (latestReport != null
+                && latestReport.getDay() != null
+                && latestReport.getDay() < day
+                && Boolean.TRUE.equals(latestReport.getIsBankrupt())) {
+            log.info(
+                    "[DayReport] Skipped: store already bankrupt. storeId={} latestBankruptDay={} requestedDay={}",
+                    store.getId(),
+                    latestReport.getDay(),
+                    day
+            );
             return;
         }
 
@@ -108,6 +123,9 @@ public class GameDayReportService {
         }
 
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
+        if (state == null || state.startedAt() == null) {
+            state = restoreClosedDayState(store, day);
+        }
         if (state == null || state.startedAt() == null) {
             log.warn("[DayReport] Skipped: Redis state missing. storeId={} day={} state={}", store.getId(), day, state);
             return;
@@ -119,53 +137,91 @@ public class GameDayReportService {
             return;
         }
 
+        long settledRent = resolveClosingRent(store, state, day);
+        long finalTotalCost = valueOf(state.cumulativeTotalCost()) + settledRent;
+        long closingBalanceBeforeBankruptcy = valueOf(state.balance()) - settledRent;
+        long reportBalance = Math.max(0L, closingBalanceBeforeBankruptcy);
+
         ProfitPolicy.ProfitResult profitResult =
-                profitPolicy.calculate(state.cumulativeSales(), state.cumulativeTotalCost());
+                profitPolicy.calculate(state.cumulativeSales(), finalTotalCost);
         DailyReport previousDayReport = day == 1
                 ? null
                 : dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1).orElse(null);
-        BankruptcyPolicy.BankruptcyResult bankruptcyResult =
+        BankruptcyPolicy.BankruptcyResult deficitBankruptcyResult =
                 bankruptcyPolicy.resolve(previousDayReport, profitResult.netProfit());
+        boolean bankruptByClosingBalance = closingBalanceBeforeBankruptcy < 0L;
+        boolean isBankrupt = deficitBankruptcyResult.bankrupt() || bankruptByClosingBalance;
+
+        if (bankruptByClosingBalance) {
+            log.info(
+                    "[DayReport] Closing settlement triggered bankruptcy. storeId={} day={} balanceBeforeSettlement={} rent={}",
+                    store.getId(),
+                    day,
+                    valueOf(state.balance()),
+                    settledRent
+            );
+        }
+
+        Location reportLocation = STORE_LOCATION_TRANSITION_SUPPORT.resolveLocationForDay(store, day);
+        String reportLocationName = reportLocation == null || reportLocation.getLocationName() == null
+                ? store.getLocation().getLocationName()
+                : reportLocation.getLocationName();
+
+        int stockRemaining = normalizeStock(state.stock());
 
         dailyReportRepository.save(DailyReport.create(
                 store,
                 day,
-                store.getLocation().getLocationName(),
+                reportLocationName,
                 store.getMenu().getMenuName(),
                 safeToInt(profitResult.revenue()),
                 safeToInt(profitResult.totalCost()),
                 safeToInt(profitResult.netProfit()),
                 defaultInt(state.cumulativeCustomerCount()),
                 defaultInt(state.cumulativePurchaseCount()),
-                defaultInt(state.stock()),
-                bankruptcyResult.consecutiveDeficitDays(),
-                bankruptcyResult.bankrupt(),
-                safeToInt(valueOf(state.balance())),
+                stockRemaining,
+                deficitBankruptcyResult.consecutiveDeficitDays(),
+                isBankrupt,
+                safeToInt(reportBalance),
                 resolveCaptureRate(state)
         ));
         store.changePurchaseCursor(
                 purchaseListGenerator.advanceCursor(store.getPurchaseCursor(), defaultInt(state.purchaseCursor()))
         );
-        if (bankruptcyResult.bankrupt()) {
+        gameDayStoreStateRedisRepository.updateField(
+                store.getId(),
+                day,
+                "cumulative_total_cost",
+                String.valueOf(finalTotalCost)
+        );
+        gameDayStoreStateRedisRepository.updateField(
+                store.getId(),
+                day,
+                "stock",
+                String.valueOf(stockRemaining)
+        );
+        if (isBankrupt) {
             shopService.resetPurchasedItems(store.getUser().getId());
             gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, 0L);
             gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", "0");
+            return;
         }
+        gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, reportBalance);
     }
 
+    @Transactional
     public GameDayReportResponse getDayReport(Authentication authentication, int day) {
         User user = userService.getCurrentUser(authentication);
         Store store = getReportStore(user.getId());
         validateDay(day, store.getSeason());
 
-        DailyReport report = dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
-                .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
+        DailyReport report = findOrCreateReport(store, day);
         List<DailyReport> storeReports = dailyReportRepository.findByStore_IdOrderByDayAsc(store.getId());
 
-        int stockRemaining = defaultInt(report.getStockRemaining());
+        int stockRemaining = normalizeStock(report.getStockRemaining());
         int stockDisposed = STOCK_DISPOSED_COUNT;
         boolean nextDayIsOrderDay = Boolean.TRUE.equals(
-                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()));
+                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().resolveRuntimePlayableDays()));
         if (nextDayIsOrderDay && stockRemaining > 0) {
             stockDisposed = stockRemaining;
             stockRemaining = 0;
@@ -190,12 +246,24 @@ public class GameDayReportService {
                         store.getSeason().getId(),
                         resolveTomorrowLocationId(store, report.getDay()),
                         report.getDay(),
-                        store.getSeason().getTotalDays()
+                        store.getSeason().resolveRuntimePlayableDays()
                 ),
-                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()),
+                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().resolveRuntimePlayableDays()),
                 defaultInt(report.getConsecutiveDeficitDays()),
                 Boolean.TRUE.equals(report.getIsBankrupt())
         );
+    }
+
+    private DailyReport findOrCreateReport(Store store, int day) {
+        Optional<DailyReport> existingReport = dailyReportRepository.findByStoreIdAndDay(store.getId(), day);
+        if (existingReport.isPresent()) {
+            return existingReport.get();
+        }
+
+        log.info("[DayReport] Missing report on read. attempting materialization. storeId={} day={}", store.getId(), day);
+        recordClosedDayReport(store, day);
+        return dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
+                .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
     }
 
     private Store getReportStore(Integer userId) {
@@ -235,7 +303,7 @@ public class GameDayReportService {
     }
 
     private void validateDay(int day, Season season) {
-        int totalDays = season.getTotalDays() == null ? MAX_SUPPORTED_DAY : season.getTotalDays();
+        int totalDays = season.resolveRuntimePlayableDays() <= 0 ? MAX_SUPPORTED_DAY : season.resolveRuntimePlayableDays();
         if (day < 1 || day > MAX_SUPPORTED_DAY || day > totalDays) {
             throw new BaseException(
                     ErrorCode.INVALID_DAY,
@@ -250,7 +318,7 @@ public class GameDayReportService {
             case LOCATION_SELECTION -> null;
             case DAY_PREPARING, DAY_BUSINESS -> currentDay == null || currentDay <= 1 ? null : currentDay - 1;
             case DAY_REPORT -> currentDay;
-            case SEASON_SUMMARY, NEXT_SEASON_WAITING, CLOSED -> season.getTotalDays();
+            case SEASON_SUMMARY, NEXT_SEASON_WAITING, CLOSED -> season.resolveRuntimePlayableDays();
         };
     }
 
@@ -259,6 +327,29 @@ public class GameDayReportService {
                 && seasonTimePoint.phase() == SeasonPhase.DAY_REPORT
                 && seasonTimePoint.currentDay() != null
                 && reportDay.equals(seasonTimePoint.currentDay());
+    }
+
+    private GameDayLiveState restoreClosedDayState(Store store, int day) {
+        log.info("[DayReport] Redis state missing. attempting restore. storeId={} day={}", store.getId(), day);
+        GameDayLiveState restoredState = gameDayStateService.restoreClosedDayState(store, day).orElse(null);
+        if (restoredState != null) {
+            log.info("[DayReport] Redis state restored. storeId={} day={}", store.getId(), day);
+        }
+        return restoredState;
+    }
+
+    private long resolveClosingRent(Store store, GameDayLiveState state, int day) {
+        if (state != null
+                && state.startResponse() != null
+                && state.startResponse().openingSummary() != null
+                && state.startResponse().openingSummary().dailyRentApplied() != null) {
+            return state.startResponse().openingSummary().dailyRentApplied().longValue();
+        }
+        Location reportLocation = STORE_LOCATION_TRANSITION_SUPPORT.resolveLocationForDay(store, day);
+        if (reportLocation == null || reportLocation.getRent() == null) {
+            return 0L;
+        }
+        return reportLocation.getRent().longValue();
     }
 
     private GameDayReportResponse.TomorrowWeather resolveTomorrowWeather(
@@ -308,7 +399,9 @@ public class GameDayReportService {
         if (store == null || store.getLocation() == null) {
             return null;
         }
-        if (day >= (store.getSeason() == null || store.getSeason().getTotalDays() == null ? MAX_SUPPORTED_DAY : store.getSeason().getTotalDays())) {
+        if (day >= (store.getSeason() == null || store.getSeason().resolveRuntimePlayableDays() <= 0
+                ? MAX_SUPPORTED_DAY
+                : store.getSeason().resolveRuntimePlayableDays())) {
             return store.getLocation().getId();
         }
         return STORE_LOCATION_TRANSITION_SUPPORT.resolveLocationForDay(store, day + 1).getId();
@@ -392,6 +485,10 @@ public class GameDayReportService {
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
     }
 
     private long valueOf(Integer value) {

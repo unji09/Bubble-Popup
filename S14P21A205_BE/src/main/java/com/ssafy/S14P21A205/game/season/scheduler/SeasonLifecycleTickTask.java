@@ -10,12 +10,17 @@ import org.springframework.stereotype.Component;
 public class SeasonLifecycleTickTask {
 
     private final SeasonLifecycleService seasonLifecycleService;
+    private final SeasonStartScheduler seasonStartScheduler;
 
-    @Scheduled(fixedRateString = "${app.game.season-lifecycle.fixed-rate-ms:10000}")
-    public void synchronizeSeasonLifecycle() {
-        // 1) Spark ETL + 뉴스 생성 (트랜잭션 밖 — Spark TRUNCATE DDL 충돌 방지)
+    @Scheduled(fixedRateString = "${app.game.season-lifecycle.prepare-fixed-rate-ms}")
+    public void prepareScheduledSeason() {
         seasonLifecycleService.prepareScheduledSeasonIfNeeded();
-        // 2) 시즌 상태 전환 + rebuild (트랜잭션 안)
+        seasonStartScheduler.synchronizeCurrentScheduledSeason();
+    }
+
+    @Scheduled(fixedRateString = "${app.game.season-lifecycle.synchronize-fixed-rate-ms}")
+    public void synchronizeSeasonLifecycle() {
         seasonLifecycleService.synchronize();
+        seasonStartScheduler.synchronizeCurrentScheduledSeason();
     }
 }

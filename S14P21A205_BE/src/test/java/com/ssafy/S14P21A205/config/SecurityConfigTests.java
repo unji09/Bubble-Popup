@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssafy.S14P21A205.action.service.ActionService;
@@ -43,6 +45,7 @@ import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.season.scheduler.SeasonStartScheduler;
 import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
 import com.ssafy.S14P21A205.game.season.service.SeasonLifecycleService;
@@ -170,6 +173,9 @@ class SecurityConfigTests {
     private SeasonLifecycleService seasonLifecycleService;
 
     @MockitoBean
+    private SeasonStartScheduler seasonStartScheduler;
+
+    @MockitoBean
     private SeasonDayClosingScheduler seasonDayClosingScheduler;
 
     @MockitoBean
@@ -280,6 +286,16 @@ class SecurityConfigTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"refresh-token\"}"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void missingEndpointReturnsCommonNotFoundResponse() throws Exception {
+        mockMvc.perform(get("/missing-endpoint")
+                        .with(jwt().jwt(jwt -> jwt.subject("1"))))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("COMMON-003"))
+                .andExpect(jsonPath("$.path").value("/missing-endpoint"));
     }
 
     @Test

@@ -6,11 +6,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ssafy.S14P21A205.config.RedisTtlProperties;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,7 +42,11 @@ class GameDayStoreStateRedisRepositoryTests {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        repository = new GameDayStoreStateRedisRepository(stringRedisTemplate, objectMapper);
+        repository = new GameDayStoreStateRedisRepository(
+                stringRedisTemplate,
+                objectMapper,
+                new RedisTtlProperties(Duration.ofMinutes(30), Duration.ofHours(2), Duration.ofMinutes(10))
+        );
         when(stringRedisTemplate.opsForHash()).thenReturn(hashOperations);
     }
 
@@ -52,6 +58,7 @@ class GameDayStoreStateRedisRepositoryTests {
 
         ArgumentCaptor<Map<String, String>> stateCaptor = ArgumentCaptor.forClass(Map.class);
         verify(hashOperations).putAll(org.mockito.ArgumentMatchers.eq("game:store:15:day:3:state"), stateCaptor.capture());
+        verify(stringRedisTemplate).expire("game:store:15:day:3:state", Duration.ofMinutes(30));
 
         Map<String, String> savedEntries = stateCaptor.getValue();
         assertThat(savedEntries)
@@ -119,6 +126,8 @@ class GameDayStoreStateRedisRepositoryTests {
 
         ArgumentCaptor<Map<String, String>> tickLogCaptor = ArgumentCaptor.forClass(Map.class);
         verify(hashOperations).putAll(eq("game:store:15:day:3:tick_log"), tickLogCaptor.capture());
+        verify(stringRedisTemplate).expire("game:store:15:day:3:state", Duration.ofMinutes(30));
+        verify(stringRedisTemplate).expire("game:store:15:day:3:tick_log", Duration.ofMinutes(30));
 
         Map<String, String> tickLogEntries = tickLogCaptor.getValue();
         assertThat(tickLogEntries)

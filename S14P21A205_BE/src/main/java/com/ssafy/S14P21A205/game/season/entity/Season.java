@@ -39,6 +39,13 @@ public class Season {
     @Column(name = "total_days", nullable = false)
     private Integer totalDays;
 
+    @Column(name = "demo_playable_days")
+    private Integer demoPlayableDays;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "demo_skip_status", nullable = false, length = 20)
+    private DemoSkipStatus demoSkipStatus;
+
     @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;
 
@@ -57,6 +64,8 @@ public class Season {
         this.status = status;
         this.currentDay = currentDay;
         this.totalDays = totalDays;
+        this.demoPlayableDays = null;
+        this.demoSkipStatus = DemoSkipStatus.NONE;
         this.startTime = startTime;
         this.endTime = endTime;
     }
@@ -82,13 +91,40 @@ public class Season {
         }
     }
 
+    public void reserveDemoSkip(int playableDays) {
+        this.demoPlayableDays = playableDays;
+        this.demoSkipStatus = DemoSkipStatus.RESERVED;
+    }
+
+    public void applyReservedDemoSkip() {
+        if (demoSkipStatus == DemoSkipStatus.RESERVED) {
+            demoSkipStatus = DemoSkipStatus.APPLIED;
+        }
+    }
+
+    public boolean isDemoSkipReserved() {
+        return demoSkipStatus == DemoSkipStatus.RESERVED;
+    }
+
+    public int resolveRuntimePlayableDays() {
+        if (demoSkipStatus == DemoSkipStatus.APPLIED
+                && demoPlayableDays != null
+                && demoPlayableDays > 0) {
+            return demoPlayableDays;
+        }
+        return totalDays == null ? 0 : totalDays;
+    }
+
     public void advanceToDay(int nextDay) {
         this.currentDay = nextDay;
     }
 
     public void finish() {
         this.status = SeasonStatus.FINISHED;
-        if (totalDays != null) {
+        int runtimePlayableDays = resolveRuntimePlayableDays();
+        if (runtimePlayableDays > 0) {
+            this.currentDay = runtimePlayableDays;
+        } else if (totalDays != null) {
             this.currentDay = totalDays;
         }
     }

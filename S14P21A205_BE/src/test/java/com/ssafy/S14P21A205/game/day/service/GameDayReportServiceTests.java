@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,6 +43,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -110,6 +112,9 @@ class GameDayReportServiceTests {
                 .when(gameDayStoreStateRedisRepository.find(anyLong(), anyInt()))
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
+                .when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(anyLong()))
+                .thenReturn(Optional.empty());
+        org.mockito.Mockito.lenient()
                 .when(purchaseListGenerator.advanceCursor(any(), anyInt()))
                 .thenReturn(12);
         org.mockito.Mockito.lenient()
@@ -147,15 +152,17 @@ class GameDayReportServiceTests {
         assertThat(saved.getLocationName()).isEqualTo("Seongsu");
         assertThat(saved.getMenuName()).isEqualTo("Cookie");
         assertThat(saved.getRevenue()).isEqualTo(5_000);
-        assertThat(saved.getTotalCost()).isEqualTo(1_300);
-        assertThat(saved.getNetProfit()).isEqualTo(3_700);
+        assertThat(saved.getTotalCost()).isEqualTo(1_600);
+        assertThat(saved.getNetProfit()).isEqualTo(3_400);
         assertThat(saved.getVisitors()).isEqualTo(42);
         assertThat(saved.getSalesCount()).isEqualTo(20);
         assertThat(saved.getStockRemaining()).isEqualTo(12);
-        assertThat(saved.getBalance()).isEqualTo(15_000);
+        assertThat(saved.getBalance()).isEqualTo(14_700);
         assertThat(saved.getCaptureRate()).isEqualByComparingTo("0.10");
         assertThat(store.getPurchaseCursor()).isEqualTo(12);
         verify(gameDayStateService).refreshGameState(store);
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "cumulative_total_cost", "1600");
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 14_700L);
         verify(purchaseListGenerator).advanceCursor(4, 8);
     }
 
@@ -197,9 +204,148 @@ class GameDayReportServiceTests {
 
         gameDayReportService.recordClosedDayReport(store, 3);
 
+        ArgumentCaptor<DailyReport> captor = ArgumentCaptor.forClass(DailyReport.class);
+        verify(dailyReportRepository).save(captor.capture());
+
+        DailyReport saved = captor.getValue();
+        assertThat(saved.getTotalCost()).isEqualTo(5_300);
+        assertThat(saved.getNetProfit()).isEqualTo(-4_300);
+        assertThat(saved.getBalance()).isEqualTo(7_700);
+        assertThat(saved.getIsBankrupt()).isTrue();
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 3, "cumulative_total_cost", "5300");
         verify(shopService).resetPurchasedItems(1);
         verify(gameDayStoreStateRedisRepository).saveBalance(15L, 3, 0L);
         verify(gameDayStoreStateRedisRepository).updateField(15L, 3, "stock", "0");
+    }
+
+    @Test
+    void recordClosedDayReportMarksStoreBankruptWhenClosingRentMakesBalanceNegative() {
+        Store store = store(15L, 9L, 4, 7, "Seongsu", "Cookie", 300);
+        GameDayLiveState state = state(
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                new BigDecimal("0.12"),
+                5_000L,
+                1_000L,
+                9,
+                4,
+                200L,
+                6,
+                2
+        );
+
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 4)).thenReturn(false);
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 4)).thenReturn(Optional.of(state));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 3)).thenReturn(Optional.empty());
+
+        gameDayReportService.recordClosedDayReport(store, 4);
+
+        ArgumentCaptor<DailyReport> captor = ArgumentCaptor.forClass(DailyReport.class);
+        verify(dailyReportRepository).save(captor.capture());
+
+        DailyReport saved = captor.getValue();
+        assertThat(saved.getTotalCost()).isEqualTo(1_300);
+        assertThat(saved.getNetProfit()).isEqualTo(3_700);
+        assertThat(saved.getBalance()).isZero();
+        assertThat(saved.getConsecutiveDeficitDays()).isZero();
+        assertThat(saved.getIsBankrupt()).isTrue();
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 4, "cumulative_total_cost", "1300");
+        verify(shopService).resetPurchasedItems(1);
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 4, 0L);
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 4, "stock", "0");
+    }
+
+    @Test
+    void recordClosedDayReportRestoresClosedStateWhenRedisStateIsMissing() {
+        Store store = store(15L, 9L, 2, 7, "Seongsu", "Cookie", 300);
+        GameDayLiveState restoredState = state(
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                new BigDecimal("0.10"),
+                5_000L,
+                1_300L,
+                42,
+                20,
+                15_000L,
+                12,
+                8
+        );
+
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 2)).thenReturn(false);
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
+        when(gameDayStateService.restoreClosedDayState(store, 2)).thenReturn(Optional.of(restoredState));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
+
+        gameDayReportService.recordClosedDayReport(store, 2);
+
+        ArgumentCaptor<DailyReport> captor = ArgumentCaptor.forClass(DailyReport.class);
+        verify(dailyReportRepository).save(captor.capture());
+
+        DailyReport saved = captor.getValue();
+        assertThat(saved.getDay()).isEqualTo(2);
+        assertThat(saved.getTotalCost()).isEqualTo(1_600);
+        assertThat(saved.getNetProfit()).isEqualTo(3_400);
+        assertThat(saved.getBalance()).isEqualTo(14_700);
+        verify(gameDayStateService).restoreClosedDayState(store, 2);
+    }
+
+    @Test
+    void recordClosedDayReportSkipsWhenStoreWasAlreadyBankrupt() {
+        Store store = store(15L, 9L, 7, 7, "Current Location", "Current Menu", 300);
+        DailyReport bankruptReport = dailyReport(
+                store,
+                3,
+                "Current Location",
+                "Current Menu",
+                1_000,
+                5_000,
+                -4_000,
+                12,
+                5,
+                0,
+                3,
+                true,
+                0,
+                new BigDecimal("0.05")
+        );
+
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 7)).thenReturn(false);
+        when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(15L)).thenReturn(Optional.of(bankruptReport));
+
+        gameDayReportService.recordClosedDayReport(store, 7);
+
+        verify(dailyReportRepository, never()).save(any(DailyReport.class));
+        verify(gameDayStateService, never()).restoreClosedDayState(any(Store.class), anyInt());
+    }
+
+    @Test
+    void recordClosedDayReportClampsNegativeStockToZero() {
+        Store store = store(15L, 9L, 2, 7, "Seongsu", "Cookie", 300);
+        GameDayLiveState state = state(
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                new BigDecimal("0.10"),
+                5_000L,
+                1_300L,
+                42,
+                20,
+                15_000L,
+                -12,
+                8
+        );
+
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 2)).thenReturn(false);
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
+
+        gameDayReportService.recordClosedDayReport(store, 2);
+
+        ArgumentCaptor<DailyReport> captor = ArgumentCaptor.forClass(DailyReport.class);
+        verify(dailyReportRepository).save(captor.capture());
+
+        DailyReport saved = captor.getValue();
+        assertThat(saved.getStockRemaining()).isZero();
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "0");
     }
 
     @Test
@@ -265,6 +411,52 @@ class GameDayReportServiceTests {
         assertThat(response.isNextDayOrderDay()).isTrue();
         assertThat(response.consecutiveDeficitDays()).isEqualTo(2);
         assertThat(response.isBankrupt()).isFalse();
+    }
+
+    @Test
+    void getDayReportMaterializesMissingReportOnRead() {
+        User user = user(1);
+        Store store = store(15L, 9L, 1, 7, "Seongsu", "Cookie", 300);
+        GameDayLiveState state = state(
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                new BigDecimal("0.10"),
+                5_000L,
+                1_300L,
+                42,
+                20,
+                15_000L,
+                12,
+                8
+        );
+        AtomicReference<DailyReport> savedReport = new AtomicReference<>();
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1))
+                .thenAnswer(invocation -> Optional.ofNullable(savedReport.get()));
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 1)).thenReturn(false);
+        when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(15L)).thenReturn(Optional.empty());
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.of(state));
+        when(dailyReportRepository.save(any(DailyReport.class))).thenAnswer(invocation -> {
+            DailyReport report = invocation.getArgument(0);
+            savedReport.set(report);
+            return report;
+        });
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L))
+                .thenAnswer(invocation -> savedReport.get() == null ? List.of() : List.of(savedReport.get()));
+        when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(2)).thenReturn(List.of(
+                weatherLocation(store.getLocation(), 2, weather(WeatherType.SUNNY))
+        ));
+
+        GameDayReportResponse response = gameDayReportService.getDayReport(mock(Authentication.class), 1);
+
+        assertThat(response.day()).isEqualTo(1);
+        assertThat(response.revenue()).isEqualTo(5_000L);
+        assertThat(response.totalCost()).isEqualTo(1_600L);
+        assertThat(response.locationName()).isEqualTo("Seongsu");
+        verify(dailyReportRepository).save(any(DailyReport.class));
     }
 
     @Test
@@ -382,6 +574,29 @@ class GameDayReportServiceTests {
                 .isInstanceOf(BaseException.class)
                 .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.NOT_PARTICIPATING));
+    }
+
+    @Test
+    void getDayReportThrowsWhenMissingReportCannotBeMaterialized() {
+        User user = user(1);
+        Store store = store(15L, 9L, 1, 7, "Seongsu", "Cookie", 300);
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 1)).thenReturn(false);
+        when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(15L)).thenReturn(Optional.empty());
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.empty());
+        when(gameDayStateService.restoreClosedDayState(store, 1)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> gameDayReportService.getDayReport(mock(Authentication.class), 1))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.REPORT_NOT_FOUND));
+
+        verify(dailyReportRepository, never()).save(any(DailyReport.class));
     }
 
     @Test

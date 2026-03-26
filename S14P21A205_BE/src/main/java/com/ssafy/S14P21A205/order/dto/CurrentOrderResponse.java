@@ -7,6 +7,7 @@ public record CurrentOrderResponse(
         Integer menuId,
         String menuName,
         Integer costPrice,
+        Integer minimumSellingPrice,
         Integer recommendedPrice,
         Integer maxSellingPrice,
         Integer sellingPrice,

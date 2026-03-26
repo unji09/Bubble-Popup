@@ -22,6 +22,7 @@ import com.ssafy.S14P21A205.store.entity.Store;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Component;
 public class RentPolicy {
 
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
+    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 3, 5, 7);
     private final DailyReportRepository dailyReportRepository;
     private final DailyEventRepository dailyEventRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
@@ -92,31 +94,28 @@ public class RentPolicy {
                 && store.getMenu() != null
                 && store.getMenu().getMenuName() != null
                 && !previousMenuName.equals(store.getMenu().getMenuName());
-        // Menu changes discard carried stock, but disposal no longer reduces cash.
-        int disposalQuantity = menuChanged ? carriedStock : 0;
+        boolean discardCarryOverStock = menuChanged || REGULAR_ORDER_DAYS.contains(day);
+        // Disposed stock is removed from opening inventory, but no longer reduces cash.
+        int disposalQuantity = discardCarryOverStock ? carriedStock : 0;
         int disposalLoss = 0;
-        int openingAgedStock = menuChanged ? 0 : carriedStock;
+        int openingAgedStock = discardCarryOverStock ? 0 : carriedStock;
         int openingFreshStock = regularOrderQuantity;
-        int fixedCostTotal = Math.addExact(
-                Math.addExact(dailyRentApplied, interiorCost),
-                regularOrderCost
-        );
+        int fixedCostTotal = Math.addExact(interiorCost, regularOrderCost);
         int initialBalance = carriedBalance - fixedCostTotal;
 
         if (initialBalance < 0) {
             int maxAffordableOrderCount = Math.max(
                     0,
-                    (carriedBalance - dailyRentApplied - interiorCost) / Math.max(1, appliedUnitCost)
+                    (carriedBalance - interiorCost) / Math.max(1, appliedUnitCost)
             );
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "Insufficient balance for today's fixed costs. "
-                            + "maxOrderCount=%d, existingOrderCount=%d, balanceBeforeOrder=%d, dailyRent=%d, interiorCost=%d, appliedUnitCost=%d"
+                    "Insufficient balance for today's opening costs. "
+                            + "maxOrderCount=%d, existingOrderCount=%d, balanceBeforeOrder=%d, interiorCost=%d, appliedUnitCost=%d"
                             .formatted(
                                     maxAffordableOrderCount,
                                     regularOrderQuantity,
                                     carriedBalance,
-                                    dailyRentApplied,
                                     interiorCost,
                                     appliedUnitCost
                             )
@@ -154,17 +153,20 @@ public class RentPolicy {
         if (day <= 1) {
             return new CarryOverState(
                     StoreStateCarryOverSupport.resolveInitialBalance(store),
-                    StoreStateCarryOverSupport.resolveInitialStock(),
+                    normalizeStock(StoreStateCarryOverSupport.resolveInitialStock()),
                     null
             );
         }
 
-        DailyReport previousDayReport = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+        DailyReport previousDayReport = dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(
+                        store.getId(),
+                        day
+                )
                 .orElse(null);
         if (previousDayReport != null) {
             return new CarryOverState(
                     previousDayReport.getBalance(),
-                    previousDayReport.getStockRemaining(),
+                    normalizeStock(previousDayReport.getStockRemaining()),
                     previousDayReport.getMenuName()
             );
         }
@@ -174,14 +176,14 @@ public class RentPolicy {
         if (previousDayState != null) {
             return new CarryOverState(
                     safeInt(previousDayState.balance()),
-                    previousDayState.stock() == null ? 0 : previousDayState.stock(),
+                    normalizeStock(previousDayState.stock()),
                     null
             );
         }
 
         return new CarryOverState(
                 StoreStateCarryOverSupport.resolveInitialBalance(store),
-                StoreStateCarryOverSupport.resolveInitialStock(),
+                normalizeStock(StoreStateCarryOverSupport.resolveInitialStock()),
                 null
         );
     }
@@ -278,6 +280,10 @@ public class RentPolicy {
 
     private int safeInt(Long value) {
         return value == null ? 0 : Math.toIntExact(value);
+    }
+
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
     }
 
     private record OpeningEventAdjustment(

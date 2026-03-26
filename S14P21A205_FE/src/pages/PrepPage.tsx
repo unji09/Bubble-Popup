@@ -8,7 +8,11 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
-import { getCurrentOrder, postRegularOrder } from "../api/order";
+import {
+  getCurrentOrder,
+  postRegularOrder,
+  type CurrentOrderResponse,
+} from "../api/order";
 import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
 import {
   getNewsRanking,
@@ -22,7 +26,6 @@ import {
   applyDiscount,
   normalizeDiscountMultiplier,
 } from "../utils/dashboardItems";
-
 interface PrepMenu {
   id: number;
   emoji: string;
@@ -31,6 +34,8 @@ interface PrepMenu {
   previousSalePrice: number;
   hasPreviousPrice: boolean;
   ingredientDiscountMultiplier: number;
+  recommendedPrice?: number;
+  maxSellingPrice?: number;
 }
 
 const fallbackMenus: PrepMenu[] = [
@@ -165,14 +170,14 @@ function getRecommendedPrice(costPrice: number) {
 }
 
 function getSellingPriceDefault(
-  costPrice: number,
+  recommendedPrice: number,
   previousSalePrice: number,
   hasPreviousPrice: boolean,
 ) {
   if (hasPreviousPrice && previousSalePrice > 0) {
     return previousSalePrice;
   }
-  return getRecommendedPrice(costPrice);
+  return recommendedPrice;
 }
 
 function isRegularOrderDay(day: number) {
@@ -191,17 +196,36 @@ function normalizeMenuName(value: string | null | undefined) {
   return value?.trim() ?? "";
 }
 
+function resolvePlayableDay(store: StoreResponse | null) {
+  if (!store) {
+    return null;
+  }
+
+  if (typeof store.playableFromDay === "number") {
+    return store.playableFromDay;
+  }
+
+  return typeof store.playableday === "number" ? store.playableday : null;
+}
+
+function canUseExistingOrder(day: number, playableDay: number | null) {
+  return playableDay !== null && day > playableDay;
+}
+
 function resolveSelectedMenuId(
   menus: PrepMenu[],
   currentMenuId: number | null,
-  day: number,
+  currentOrderMenuId: number | null,
   storeMenuName: string | null,
 ) {
   const fallbackMenuId =
-    menus.find((menu) => menu.id === currentMenuId)?.id ?? menus[0]?.id ?? null;
+    menus.find((menu) => menu.id === currentOrderMenuId)?.id
+    ?? menus.find((menu) => menu.id === currentMenuId)?.id
+    ?? menus[0]?.id
+    ?? null;
 
-  if (day < 2) {
-    return fallbackMenuId;
+  if (currentOrderMenuId != null) {
+    return menus.find((menu) => menu.id === currentOrderMenuId)?.id ?? fallbackMenuId;
   }
 
   const normalizedStoreMenuName = normalizeMenuName(storeMenuName);
@@ -218,25 +242,31 @@ function resolveSelectedMenuId(
 
 function mapStoreMenusToPrepMenus(
   menus: StoreMenuResponse[],
-  previousSalePrice: number | null,
-  previousMenuId: number | null,
+  currentOrder: CurrentOrderResponse | null,
 ) {
   return menus.map((menu) => {
     const fallbackMenu = fallbackMenus.find((entry) => entry.id === menu.menuId);
     // 이전 판매가는 이전에 선택했던 메뉴에만 적용
-    const isPrevisousMenu = previousMenuId !== null && menu.menuId === previousMenuId;
-    const prevPrice = isPrevisousMenu && previousSalePrice != null
-      ? previousSalePrice
-      : null;
+    const costBasedRecommendedPrice = getRecommendedPrice(menu.ingredientPrice);
+    const costBasedMaxSellingPrice = roundToHundreds(costBasedRecommendedPrice * 2);
+    const isCurrentSellingMenu = currentOrder?.menuId === menu.menuId;
 
     return {
       id: menu.menuId,
       emoji: fallbackMenu?.emoji ?? "🍽️",
       name: menu.menuName,
       costPrice: menu.ingredientPrice,
-      previousSalePrice: prevPrice ?? getRecommendedPrice(menu.ingredientPrice),
-      hasPreviousPrice: prevPrice !== null,
+      previousSalePrice: isCurrentSellingMenu
+        ? currentOrder.sellingPrice
+        : costBasedRecommendedPrice,
+      hasPreviousPrice: isCurrentSellingMenu,
       ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
+      recommendedPrice: isCurrentSellingMenu
+        ? currentOrder.recommendedPrice
+        : costBasedRecommendedPrice,
+      maxSellingPrice: isCurrentSellingMenu
+        ? currentOrder.maxSellingPrice
+        : costBasedMaxSellingPrice,
     } satisfies PrepMenu;
   });
 }
@@ -247,7 +277,7 @@ export default function PrepPage() {
   const parsedDay = Number(dayParam);
   const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const isRegularOrderRouteDay = isRegularOrderDay(day);
-  const [tab, setTab] = useState<Tab>("prep");
+  const [tab, setTab] = useState<Tab>("news");
   const [menus, setMenus] = useState<PrepMenu[]>(fallbackMenus);
   const [isMenusLoading, setIsMenusLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -264,6 +294,8 @@ export default function PrepPage() {
   const [selectedMenu, setSelectedMenu] = useState<number | null>(1);
   const [quantity, setQuantity] = useState(120);
   const [expandedNewsId, setExpandedNewsId] = useState<number | null>(null);
+  const [showOrderReminder, setShowOrderReminder] = useState(false);
+  const [baseOrder, setBaseOrder] = useState<CurrentOrderResponse | null>(null);
   const selectedMenuData = menus.find((menu) => menu.id === selectedMenu) ?? menus[0] ?? fallbackMenus[0];
   const originalCostPrice = selectedMenuData.costPrice;
   const ingredientDiscountMultiplier = selectedMenuData.ingredientDiscountMultiplier;
@@ -273,13 +305,15 @@ export default function PrepPage() {
     originalCostPrice,
     ingredientDiscountMultiplier,
   );
-  const recommendedPrice = getRecommendedPrice(originalCostPrice);
-  const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
+  const recommendedPrice = selectedMenuData.recommendedPrice ?? getRecommendedPrice(originalCostPrice);
+  const maxSellingPrice =
+    selectedMenuData.maxSellingPrice ?? roundToHundreds(recommendedPrice * 2);
   const defaultSellingPrice = getSellingPriceDefault(
-    originalCostPrice,
+    recommendedPrice,
     selectedMenuData.previousSalePrice,
     selectedMenuData.hasPreviousPrice,
   );
+  const defaultPriceLabel = selectedMenuData.hasPreviousPrice ? "이전 판매가" : "권장가";
   const [price, setPrice] = useState(defaultSellingPrice);
   const totalCost = originalCostPrice * quantity;
   const discountedTotalCost = discountedCostPrice * quantity;
@@ -367,24 +401,33 @@ export default function PrepPage() {
       try {
         const [menusResult, storeResult, orderResult] = await Promise.allSettled([
           getStoreMenus(),
-          day >= 2 ? getStore() : Promise.resolve<StoreResponse | null>(null),
-          day >= 2 ? getCurrentOrder() : Promise.resolve(null),
+          getStore(),
+          getCurrentOrder(),
         ]);
 
         if (!isActive) {
           return;
         }
 
-        const nextStoreMenuName =
+        const nextStore =
           storeResult.status === "fulfilled"
-            ? normalizeMenuName(storeResult.value?.menu)
-            : "";
-        setCurrentStoreMenuName(nextStoreMenuName || null);
-        setPlayableday(
-          storeResult.status === "fulfilled" && storeResult.value?.playableday != null
-            ? storeResult.value.playableday
-            : null,
-        );
+            ? storeResult.value
+            : null;
+        const nextPlayableDay = resolvePlayableDay(nextStore);
+        const shouldReuseExistingOrder = canUseExistingOrder(day, nextPlayableDay);
+        const nextBaseOrder =
+          orderResult.status === "fulfilled" && shouldReuseExistingOrder
+            ? orderResult.value
+            : null;
+
+        setBaseOrder(nextBaseOrder);
+        const nextStoreMenuName = shouldReuseExistingOrder
+          ? normalizeMenuName(nextStore?.menu)
+          : "";
+        const nextCurrentStoreMenuName =
+          nextStoreMenuName || normalizeMenuName(nextBaseOrder?.menuName);
+        setCurrentStoreMenuName(nextCurrentStoreMenuName || null);
+        setPlayableday(nextPlayableDay);
 
         if (menusResult.status !== "fulfilled") {
           setMenuError("메뉴 정보를 불러오지 못했습니다. 정규 발주 요청은 잠시 후 다시 시도해주세요.");
@@ -398,15 +441,15 @@ export default function PrepPage() {
           return;
         }
 
-        const prevOrder = orderResult.status === "fulfilled" ? orderResult.value : null;
-        const nextMenus = mapStoreMenusToPrepMenus(
-          fetchedMenus,
-          prevOrder?.sellingPrice ?? null,
-          prevOrder?.menuId ?? null,
-        );
+        const nextMenus = mapStoreMenusToPrepMenus(fetchedMenus, nextBaseOrder);
         setMenus(nextMenus);
         setSelectedMenu((currentMenuId) =>
-          resolveSelectedMenuId(nextMenus, currentMenuId, day, nextStoreMenuName),
+          resolveSelectedMenuId(
+            nextMenus,
+            currentMenuId,
+            nextBaseOrder?.menuId ?? null,
+            nextCurrentStoreMenuName,
+          ),
         );
         setMenuError(null);
       } catch {
@@ -414,6 +457,7 @@ export default function PrepPage() {
           return;
         }
 
+        setBaseOrder(null);
         setCurrentStoreMenuName(null);
         setMenuError("메뉴 정보를 불러오지 못했습니다. 정규 발주 요청은 잠시 후 다시 시도해주세요.");
       } finally {
@@ -471,9 +515,7 @@ export default function PrepPage() {
     setNewsError(null);
     setNewsItems([]);
 
-    // 최소 5초간 스켈레톤 표시 (BE 뉴스 생성 대기)
-    // 5초 후 fetch → state에 반영 + 스켈레톤 해제
-    // 10초에 한 번 더 조용히 갱신 (추가 뉴스 반영)
+    // 2초 후 fetch → state에 반영 + 스켈레톤 해제
     const showTimer = setTimeout(async () => {
       if (!isActive) return;
       try {
@@ -487,20 +529,8 @@ export default function PrepPage() {
       } finally {
         if (isActive) setIsNewsLoading(false);
       }
-    }, 5000);
+    }, 2000);
     timers.push(showTimer);
-
-    const silentRefreshTimer = setTimeout(async () => {
-      if (!isActive) return;
-      try {
-        const [todayResult, rankingResult] = await Promise.allSettled([
-          getTodayNews(day),
-          getNewsRanking(day),
-        ]);
-        applyNewsData(todayResult, rankingResult);
-      } catch { /* 조용히 무시 */ }
-    }, 10000);
-    timers.push(silentRefreshTimer);
 
     return () => {
       isActive = false;
@@ -546,10 +576,39 @@ export default function PrepPage() {
   }, [defaultSellingPrice]);
 
   useEffect(() => {
-    setTab("prep");
+    setTab("news");
     setRegularOrderStatus("idle");
     setRegularOrderError(null);
+    setShowOrderReminder(false);
   }, [day]);
+
+  // 정규 발주일에 발주 미완료 시 종료 20초 전 토스트
+  useEffect(() => {
+    if (!isRegularOrderRouteDay || regularOrderStatus !== "idle" || !prepEndTimestampMs) {
+      setShowOrderReminder(false);
+      return;
+    }
+
+    const msUntilReminder = prepEndTimestampMs - Date.now() - 20_000;
+
+    if (msUntilReminder <= 0) {
+      setShowOrderReminder(true);
+      return;
+    }
+
+    const timer = setTimeout(() => setShowOrderReminder(true), msUntilReminder);
+    return () => clearTimeout(timer);
+  }, [isRegularOrderRouteDay, regularOrderStatus, prepEndTimestampMs]);
+
+  // 토스트 5초 후 자동 숨김
+  useEffect(() => {
+    if (!showOrderReminder) {
+      return;
+    }
+
+    const dismissTimer = setTimeout(() => setShowOrderReminder(false), 5_000);
+    return () => clearTimeout(dismissTimer);
+  }, [showOrderReminder]);
 
   const handleRegularOrderSubmit = async () => {
     if (!canSubmitRegularOrder) {
@@ -569,12 +628,50 @@ export default function PrepPage() {
         return;
       }
 
-      await postRegularOrder({
+      const regularOrderResponse = await postRegularOrder({
         menuId: selectedMenuData.id,
         quantity,
         price,
       });
       setRegularOrderStatus("submitted");
+
+      const syncedBaseOrderResult = await Promise.allSettled([getCurrentOrder()]);
+      const syncedBaseOrder =
+        syncedBaseOrderResult[0]?.status === "fulfilled"
+          ? syncedBaseOrderResult[0].value
+          : {
+              menuId: selectedMenuData.id,
+              menuName: selectedMenuData.name,
+              costPrice: selectedMenuData.costPrice,
+              recommendedPrice,
+              maxSellingPrice,
+              sellingPrice: regularOrderResponse.sellingPrice,
+              stock: baseOrder?.stock ?? 0,
+            };
+
+      setBaseOrder(syncedBaseOrder);
+      setCurrentStoreMenuName(syncedBaseOrder.menuName);
+      setMenus((currentMenus) =>
+        currentMenus.map((menu) => {
+          const costBasedRecommendedPrice = getRecommendedPrice(menu.costPrice);
+          const isSelectedMenu = menu.id === syncedBaseOrder.menuId;
+
+          return {
+            ...menu,
+            previousSalePrice: isSelectedMenu
+              ? syncedBaseOrder.sellingPrice
+              : costBasedRecommendedPrice,
+            hasPreviousPrice: isSelectedMenu,
+            recommendedPrice: isSelectedMenu
+              ? syncedBaseOrder.recommendedPrice
+              : costBasedRecommendedPrice,
+            maxSellingPrice: isSelectedMenu
+              ? syncedBaseOrder.maxSellingPrice
+              : roundToHundreds(costBasedRecommendedPrice * 2),
+          };
+        }),
+      );
+      setSelectedMenu(syncedBaseOrder.menuId);
     } catch (error) {
       setRegularOrderStatus("idle");
 
@@ -599,6 +696,21 @@ export default function PrepPage() {
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
       <AppHeader />
+
+      {/* Order reminder toast */}
+      {showOrderReminder && (
+        <div
+          className="fixed top-4 right-4 z-50 w-[90%] max-w-md cursor-pointer animate-[slideIn_0.3s_ease-out]"
+          onClick={() => setTab("prep")}
+        >
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 shadow-lg">
+            <span className="material-symbols-outlined text-amber-600 text-xl">warning</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-medium text-gray-900">정규 발주를 아직 완료하지 않았습니다!</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main */}
       <main className="flex-1 flex flex-col items-center py-6 pt-24 px-4 sm:px-8">
@@ -744,12 +856,12 @@ export default function PrepPage() {
                       price={price}
                       min={originalCostPrice}
                       max={maxSellingPrice}
-                      step={100}
+                      step={10}
                       originalCostPrice={originalCostPrice}
                       discountedCostPrice={discountedCostPrice}
                       hasItemDiscount={hasItemDiscount}
                       defaultPrice={defaultSellingPrice}
-                      defaultPriceLabel={selectedMenuData.hasPreviousPrice ? "이전 판매가" : "권장가"}
+                      defaultPriceLabel={defaultPriceLabel}
                       onChange={setPrice}
                     />
                     <div className="flex flex-col gap-5">
