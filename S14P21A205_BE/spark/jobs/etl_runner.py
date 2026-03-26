@@ -128,6 +128,46 @@ def parse_mentions_json(output):
     return json.loads(lines[-1])
 
 
+def load_aggregate_mentions(connection, start_date_str, total_days):
+    ensure_connection(connection)
+    start_date = datetime.strptime(start_date_str, '%Y%m%d').date()
+    result = {str(day): [] for day in range(1, total_days + 1)}
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT source_date, menu_name, mention_count
+            FROM news_daily_menu_aggregate
+            WHERE source_date BETWEEN %s AND %s
+            ORDER BY source_date ASC, mention_count DESC, menu_name ASC
+            """,
+            (start_date, start_date + timedelta(days=total_days - 1)),
+        )
+        rows = cursor.fetchall()
+
+    if not rows:
+        raise RuntimeError(
+            f'news aggregate is empty. startDate={start_date_str}, totalDays={total_days}'
+        )
+
+    day_by_date = {
+        start_date + timedelta(days=offset): str(offset + 1)
+        for offset in range(total_days)
+    }
+    for row in rows:
+        day_key = day_by_date.get(row['source_date'])
+        if day_key is None:
+            continue
+        result[day_key].append(
+            {
+                'menuName': row['menu_name'],
+                'mentionCount': int(row['mention_count']),
+            }
+        )
+
+    return result
+
+
 def save_mentions(connection, batch_key, start_date_str, mentions_by_day):
     ensure_connection(connection)
     with connection.cursor() as cursor:
@@ -211,13 +251,8 @@ def process_request(connection, request):
     spark_submit('etl_traffic_score.py', start_date, batch_key)
     log("Completed etl_traffic_score.py")
 
-    log("Running etl_news_score.py")
-    spark_submit('etl_news_score.py')
-    log("Completed etl_news_score.py")
-
-    log("Running read_news_mentions.py")
-    mentions_output = spark_submit('read_news_mentions.py', start_date, total_days)
-    mentions_by_day = parse_mentions_json(mentions_output)
+    log("Loading precomputed news aggregate")
+    mentions_by_day = load_aggregate_mentions(connection, start_date, total_days)
     mention_row_count = sum(len(mentions) for mentions in mentions_by_day.values())
     log(f"Parsed news mentions days={len(mentions_by_day)} rows={mention_row_count}")
 
