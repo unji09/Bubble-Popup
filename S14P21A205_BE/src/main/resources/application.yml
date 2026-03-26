@@ -87,8 +87,8 @@ app:
       synchronize-fixed-rate-ms: ${APP_GAME_SEASON_LIFECYCLE_SYNCHRONIZE_FIXED_RATE_MS:${APP_GAME_SEASON_LIFECYCLE_FIXED_RATE_MS:10000}}
   jwt:
     secret: ${JWT_SECRET:}
-    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:PT30M}
-    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:P14D}
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:P1D}
+    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:P1D}
   redis:
     ttl:
       game-day: ${APP_REDIS_TTL_GAME_DAY:PT2H}

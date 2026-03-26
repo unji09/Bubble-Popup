@@ -57,10 +57,10 @@ public class JwtTokenService {
     private final StringRedisTemplate stringRedisTemplate;
     private final UserRepository userRepository;
 
-    @Value("${app.jwt.access-token-ttl:PT30M}")
+    @Value("${app.jwt.access-token-ttl:P1D}")
     private Duration accessTokenTtl;
 
-    @Value("${app.jwt.refresh-token-ttl:P14D}")
+    @Value("${app.jwt.refresh-token-ttl:P1D}")
     private Duration refreshTokenTtl;
 
     /** 용도: OAuth 로그인 성공 직후 access/refresh 토큰 발급. */

@@ -839,6 +839,18 @@ function PlayPageSession({
       return next;
     });
 
+    if (!isUsed) {
+      setOptimisticUsedActions((prev) => {
+        if (!prev.has(action)) {
+          return prev;
+        }
+
+        const next = new Set(prev);
+        next.delete(action);
+        return next;
+      });
+    }
+
     if (!persistentActionTypes.has(action)) {
       return;
     }
@@ -879,6 +891,7 @@ function PlayPageSession({
   const pendingDebugLogsRef = useRef<PlayDebugPendingLog[]>([]);
   const emittedDebugKeysRef = useRef<Set<string>>(new Set());
   const [debugFlushVersion, setDebugFlushVersion] = useState(0);
+  const lastActionStateDayRef = useRef<number | null>(null);
   // ref로 최신 값 추적 (클로저 캡처 문제 방지)
   const prevGuestsRef = useRef<number | null>(null);
   const prevStockRef = useRef<number | null>(null);
@@ -1376,6 +1389,11 @@ function PlayPageSession({
     state: GameStateResponse,
     source: "initial" | "poll" | "action_sync" | "emergency_refresh" = "poll",
   ) => {
+    if (lastActionStateDayRef.current !== null && lastActionStateDayRef.current !== state.day) {
+      setOptimisticUsedActions(new Set());
+    }
+    lastActionStateDayRef.current = state.day;
+
     setLiveSellingPrice(state.customerTick.unitPrice);
     const previousDisplayedGuests = displayedGuestsRef.current;
     const previousDisplayedStock = displayedStockRef.current;

@@ -74,35 +74,38 @@ export default function ReportPage() {
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    const fetchReport = async (): Promise<boolean> => {
+    const fetchPreviousReports = async (): Promise<GameDayReportResponse[]> => {
+      if (day <= 1) {
+        return [];
+      }
+
       try {
-        const [todayResult, allResult] = await Promise.allSettled([
-          getDayReport(day),
-          getAllDayReports(day),
-        ]);
+        return await getAllDayReports(day - 1);
+      } catch {
+        return [];
+      }
+    };
+
+    const fetchReport = async (previousReports: GameDayReportResponse[]): Promise<boolean> => {
+      try {
+        const todayReport = await getDayReport(day);
 
         if (cancelled) return false;
 
-        const reports = allResult.status === "fulfilled" ? allResult.value : [];
+        const reports = [...previousReports, todayReport];
         setAllReports(reports);
+        setReport(todayReport);
+        setError(null);
+        return true;
+      } catch {
+        if (cancelled) return false;
 
-        if (todayResult.status === "fulfilled") {
-          setReport(todayResult.value);
-          setError(null);
-          return true;
-        }
-
-        const fallback =
-          reports.find((item) => item.day === day) ?? reports[reports.length - 1] ?? null;
-
+        setAllReports(previousReports);
+        const fallback = previousReports[previousReports.length - 1] ?? null;
         setReport(fallback);
         if (fallback) {
           setError(null);
-          return true;
         }
-
-        return false;
-      } catch {
         return false;
       }
     };
@@ -115,7 +118,12 @@ export default function ReportPage() {
     const loadStart = Date.now();
 
     const loadWithRetry = async () => {
-      const success = await fetchReport();
+      const previousReports = await fetchPreviousReports();
+      if (cancelled) return;
+
+      setAllReports(previousReports);
+
+      const success = await fetchReport(previousReports);
       if (cancelled) return;
 
       if (success) {
@@ -140,7 +148,7 @@ export default function ReportPage() {
         retryCount++;
         const timer = setTimeout(async () => {
           if (cancelled) return;
-          const ok = await fetchReport();
+          const ok = await fetchReport(previousReports);
           if (cancelled) return;
           if (ok) {
             setLoading(false);

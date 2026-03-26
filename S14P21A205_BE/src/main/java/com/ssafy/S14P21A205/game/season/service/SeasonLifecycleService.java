@@ -164,6 +164,9 @@ public class SeasonLifecycleService {
         }
 
         prepareDailyEventsIfMissing(scheduledSeason, locations);
+        if (!newsReportRepository.existsBySeasonId(scheduledSeason.getId())) {
+            newsService.generateSeasonNews(scheduledSeason.getId());
+        }
 
         scheduledSeason.startAt(now, sourceBatchKey);
         scheduledSeason.applyReservedDemoSkip();
