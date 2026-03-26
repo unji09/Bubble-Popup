@@ -356,7 +356,7 @@ class SeasonLifecycleServiceTests {
     @Test
     void synchronizePreloadsReachedDayWhenTimelineAdvances() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
-        LocalDateTime now = seasonStartAt.plusSeconds(120 + 180 + 5L);
+        LocalDateTime now = seasonStartAt.plusSeconds(60 + 180 + 5L);
         Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
         ReflectionTestUtils.setField(inProgressSeason, "id", 21L);
         inProgressSeason.start("spark-20260318-02");
@@ -382,8 +382,8 @@ class SeasonLifecycleServiceTests {
     @Test
     void synchronizeFinishesSeasonAndSchedulesNextSeasonWhenSeasonSummaryStarts() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
-        LocalDateTime now = seasonStartAt.plusSeconds(120 + 7L * 180L);
-        LocalDateTime expectedNextSeasonStartAt = now.plusMinutes(7);
+        LocalDateTime now = seasonStartAt.plusSeconds(60 + 7L * 180L);
+        LocalDateTime expectedNextSeasonStartAt = now.plusMinutes(8);
 
         Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
         ReflectionTestUtils.setField(inProgressSeason, "id", 31L);

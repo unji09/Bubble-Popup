@@ -19,7 +19,7 @@ export default function PriceSlider({
   price,
   min,
   max,
-  step: _step,
+  step,
   originalCostPrice,
   discountedCostPrice,
   hasItemDiscount,
@@ -30,7 +30,26 @@ export default function PriceSlider({
   const [showTooltip, setShowTooltip] = useState(false);
   const [inputValue, setInputValue] = useState(String(price));
   const [isFocused, setIsFocused] = useState(false);
-  const sliderStep = 100;
+  const normalizedStep = Number.isFinite(step) && step > 0 ? step : 1;
+  const sliderMaxIndex = Math.max(0, Math.ceil((max - min) / normalizedStep));
+  const sliderValue =
+    sliderMaxIndex === 0
+      ? 0
+      : price >= max
+        ? sliderMaxIndex
+        : Math.max(0, Math.min(sliderMaxIndex, Math.round((price - min) / normalizedStep)));
+
+  const toPriceFromSliderIndex = (index: number) => {
+    if (sliderMaxIndex === 0) {
+      return min;
+    }
+
+    if (index >= sliderMaxIndex) {
+      return max;
+    }
+
+    return Math.min(max, min + index * normalizedStep);
+  };
 
   useEffect(() => {
     if (!isFocused) {
@@ -107,11 +126,11 @@ export default function PriceSlider({
           <div className="mt-4 w-full px-1">
             <input
               type="range"
-              min={min}
-              max={max}
-              step={sliderStep}
-              value={price}
-              onChange={(event) => onChange(Number(event.target.value))}
+              min={0}
+              max={sliderMaxIndex}
+              step={1}
+              value={sliderValue}
+              onChange={(event) => onChange(toPriceFromSliderIndex(Number(event.target.value)))}
               className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-100 accent-primary transition-all hover:accent-primary-dark"
             />
             <div className="mt-2 flex justify-between text-xs font-medium text-slate-400">

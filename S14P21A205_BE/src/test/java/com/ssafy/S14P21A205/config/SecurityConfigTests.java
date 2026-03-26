@@ -40,11 +40,13 @@ import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
+import com.ssafy.S14P21A205.game.season.dto.ParticipationResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.season.service.ParticipationService;
 import com.ssafy.S14P21A205.game.season.scheduler.SeasonStartScheduler;
 import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
@@ -167,6 +169,9 @@ class SecurityConfigTests {
     private SeasonJoinService seasonJoinService;
 
     @MockitoBean
+    private ParticipationService participationService;
+
+    @MockitoBean
     private SeasonWaitingService seasonWaitingService;
 
     @MockitoBean
@@ -259,6 +264,22 @@ class SecurityConfigTests {
 
         mockMvc.perform(get("/game/waiting"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void currentParticipationAllowsAuthenticatedRequest() throws Exception {
+        when(participationService.getCurrentParticipation(1))
+                .thenReturn(new ParticipationResponse(true, true, 15L, "cookie store", 3));
+
+        mockMvc.perform(get("/game/seasons/current/participation")
+                        .with(jwt().jwt(jwt -> jwt.subject("1"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void currentParticipationRejectsUnauthenticatedRequest() throws Exception {
+        mockMvc.perform(get("/game/seasons/current/participation"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

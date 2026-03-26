@@ -225,13 +225,13 @@ class ActionServiceImplTests {
     void executePromotionThrowsWhenSeasonIsNotInBusinessPhase() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
         LocalDateTime now = LocalDateTime.ofInstant(fixedClock.instant(), fixedClock.getZone());
-        LocalDateTime seasonStartAt = now.minusSeconds(120L + 180L + 20L);
+        LocalDateTime seasonStartAt = now.minusSeconds(60L + 180L + 20L);
 
         ReflectionTestUtils.setField(store.getSeason(), "startTime", seasonStartAt);
         ReflectionTestUtils.setField(
                 store.getSeason(),
                 "endTime",
-                seasonStartAt.plusSeconds(120L + store.getSeason().getTotalDays() * 180L + 120L)
+                seasonStartAt.plusSeconds(60L + store.getSeason().getTotalDays() * 180L + 180L)
         );
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
@@ -814,9 +814,9 @@ class ActionServiceImplTests {
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
         LocalDateTime businessStartAt = LocalDateTime.ofInstant(fixedClock.instant(), fixedClock.getZone()).withSecond(0).withNano(0);
-        LocalDateTime seasonStartAt = businessStartAt.minusSeconds(120L + (currentDay - 1L) * 180L + 40L);
+        LocalDateTime seasonStartAt = businessStartAt.minusSeconds(60L + (currentDay - 1L) * 180L + 40L);
         ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
-        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
+        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(60L + totalDays * 180L + 180L));
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);

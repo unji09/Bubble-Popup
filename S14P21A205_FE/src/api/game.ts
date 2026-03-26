@@ -259,6 +259,14 @@ export interface CurrentSeasonTimeResponse {
   joinPlayableFromDay: number | null;
 }
 
+export interface ParticipationResponse {
+  joinedCurrentSeason: boolean;
+  storeAccessible: boolean;
+  storeId: number | null;
+  storeName: string | null;
+  playableFromDay: number | null;
+}
+
 export interface GameDayStartResponse {
   startTime: string;
   endTime: string;
@@ -296,5 +304,10 @@ export async function getGameDayState() {
 /** 현재 시즌 시간 정보 (타이머 보정용) */
 export async function getSeasonTime() {
   const { data } = await client.get<CurrentSeasonTimeResponse>("/api/game/seasons/time");
+  return data;
+}
+
+export async function getCurrentParticipation() {
+  const { data } = await client.get<ParticipationResponse>("/api/game/seasons/current/participation");
   return data;
 }

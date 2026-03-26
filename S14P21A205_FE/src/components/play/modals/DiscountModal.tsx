@@ -125,7 +125,7 @@ export default function DiscountModal({
 
         <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
           <span className="material-symbols-outlined text-[16px]">info</span>
-          <span>원가 미만 할인은 서버에서 거절될 수 있습니다.</span>
+          <span>원가 미만 할인은 거절될 수 있습니다.</span>
         </div>
       </div>
 

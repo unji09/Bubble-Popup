@@ -1,7 +1,11 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { refreshAccessToken } from "./auth";
 import { clearAuthSession } from "../hooks/useAuth";
-import { redirectToErrorPage, type ErrorPageState } from "../utils/errorPageState";
+import {
+  AUTH_EXPIRED_NOTICE,
+  SERVER_ISSUE_NOTICE,
+  useAppNoticeStore,
+} from "../stores/useAppNoticeStore";
 
 export const GAME_EXIT_CODES = new Set(["STORE-001", "GAME-003"]);
 
@@ -37,24 +41,25 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = [];
 }
 
-function buildErrorPageState(error: AxiosError, status: number): ErrorPageState {
-  const responseData = error.response?.data as
-    | { code?: unknown; message?: unknown; path?: unknown; timestamp?: unknown }
-    | undefined;
-
-  return {
-    status,
-    code: typeof responseData?.code === "string" ? responseData.code : null,
-    message: typeof responseData?.message === "string" ? responseData.message : null,
-    path: typeof responseData?.path === "string" ? responseData.path : null,
-    timestamp: typeof responseData?.timestamp === "string" ? responseData.timestamp : null,
-    returnTo: window.location.pathname,
-  };
+function showServerIssue() {
+  useAppNoticeStore.getState().showServerNotice(SERVER_ISSUE_NOTICE);
 }
 
-function redirectToStatusPage(error: AxiosError, status: 401 | 500 | 503) {
-  const targetPath = status === 401 ? "/401" : status === 500 ? "/500" : "/503";
-  redirectToErrorPage(targetPath, buildErrorPageState(error, status));
+function handleExpiredSession() {
+  clearAuthSession();
+  useAppNoticeStore.getState().clearServerNotice();
+  useAppNoticeStore.getState().showAuthNotice(AUTH_EXPIRED_NOTICE);
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (window.location.pathname === "/") {
+    window.location.reload();
+    return;
+  }
+
+  window.location.replace("/");
 }
 
 client.interceptors.response.use(
@@ -63,8 +68,8 @@ client.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
     const status = error.response?.status;
 
-    if (status === 500 || status === 503) {
-      redirectToStatusPage(error, status);
+    if (status === 500 || status === 503 || (status == null && error.request)) {
+      showServerIssue();
       return Promise.reject(error);
     }
 
@@ -73,8 +78,7 @@ client.interceptors.response.use(
     }
 
     if (!originalRequest || originalRequest._retried) {
-      clearAuthSession();
-      redirectToStatusPage(error, 401);
+      handleExpiredSession();
       return Promise.reject(error);
     }
 
@@ -93,22 +97,24 @@ client.interceptors.response.use(
     try {
       const newToken = await refreshAccessToken();
       localStorage.setItem("accessToken", newToken);
+      useAppNoticeStore.getState().clearAuthNotice();
       processQueue(null, newToken);
 
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return client(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null);
-      clearAuthSession();
 
       if (axios.isAxiosError(refreshError)) {
-        redirectToStatusPage(refreshError, 401);
+        const refreshStatus = refreshError.response?.status;
+
+        if (refreshStatus === 500 || refreshStatus === 503 || (refreshStatus == null && refreshError.request)) {
+          showServerIssue();
+        } else {
+          handleExpiredSession();
+        }
       } else {
-        redirectToErrorPage("/401", {
-          status: 401,
-          message: "Authentication is required.",
-          returnTo: window.location.pathname,
-        });
+        showServerIssue();
       }
 
       return Promise.reject(refreshError);

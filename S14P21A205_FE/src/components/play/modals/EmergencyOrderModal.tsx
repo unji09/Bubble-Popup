@@ -14,6 +14,8 @@ export interface EmergencyMenuItem {
   ingredientPrice: number;
   ingredientDiscountMultiplier: number;
   emoji: string;
+  recommendedPrice: number;
+  maxSellingPrice: number;
 }
 
 export interface CurrentMenuPricing {
@@ -70,10 +72,9 @@ function getDefaultSalePrice(
 ) {
   const isCurrentMenu = menu.menuId === currentMenuId;
   const appliedCurrentPricing = isCurrentMenu ? currentMenuPricing : null;
-  const originalCostPrice = menu.ingredientPrice;
-  const recommendedPrice = getRecommendedPrice(originalCostPrice);
-  const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
-  const minSellingPrice = originalCostPrice;
+  const minSellingPrice = menu.ingredientPrice;
+  const recommendedPrice = menu.recommendedPrice;
+  const maxSellingPrice = menu.maxSellingPrice;
 
   return clampPrice(
     appliedCurrentPricing?.sellingPrice ?? recommendedPrice,
@@ -196,14 +197,14 @@ export default function EmergencyOrderModal({
   const isCurrentMenu = selectedMenu.menuId === currentMenuId;
   const ingredientDiscountMultiplier = selectedMenu.ingredientDiscountMultiplier;
   const hasItemDiscount = ingredientDiscountMultiplier < 1;
-  // 판매가 범위는 메뉴 기본 원가 기준 (정규 발주와 동일)
+  // 판매가 범위는 서버에서 계산된 값 사용 (배율 적용된 원가 기준)
   const originalCostPrice = selectedMenu.ingredientPrice;
   const discountedCostPrice = applyDiscount(
     originalCostPrice,
     ingredientDiscountMultiplier,
   );
-  const recommendedPrice = getRecommendedPrice(originalCostPrice);
-  const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
+  const recommendedPrice = selectedMenu.recommendedPrice;
+  const maxSellingPrice = selectedMenu.maxSellingPrice;
   const minSellingPrice = originalCostPrice;
   const defaultSalePrice = getDefaultSalePrice(
     selectedMenu,

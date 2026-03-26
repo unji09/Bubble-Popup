@@ -14,6 +14,8 @@ export interface StoreMenuResponse {
   menuName: string;
   ingredientPrice: number;
   discount: number;
+  recommendedPrice: number;
+  maxSellingPrice: number;
 }
 
 export interface StoreMenuListResponse {

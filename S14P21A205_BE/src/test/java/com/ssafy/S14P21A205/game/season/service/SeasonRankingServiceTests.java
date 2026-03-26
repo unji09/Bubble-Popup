@@ -28,6 +28,7 @@ import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
+import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
@@ -49,6 +50,7 @@ class SeasonRankingServiceTests {
     private final SeasonRepository seasonRepository = mock(SeasonRepository.class);
     private final SeasonRankingRecordRepository seasonRankingRecordRepository = mock(SeasonRankingRecordRepository.class);
     private final DailyReportRepository dailyReportRepository = mock(DailyReportRepository.class);
+    private final StoreRepository storeRepository = mock(StoreRepository.class);
     private final UserService userService = mock(UserService.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-03-24T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
@@ -57,6 +59,7 @@ class SeasonRankingServiceTests {
             seasonRepository,
             seasonRankingRecordRepository,
             dailyReportRepository,
+            storeRepository,
             userService,
             clock
     );
@@ -305,6 +308,28 @@ class SeasonRankingServiceTests {
     }
 
     @Test
+    void getCurrentFinalRankingsReturnsEmptyArraysWhenSeasonHasNoParticipants() {
+        Integer myUserId = 200;
+        Authentication authentication = authenticate(myUserId, "me");
+        Season inProgressSeason = inProgressSeason(13L);
+
+        when(seasonRepository.findByStatusAndStartTimeLessThanEqualOrderByStartTimeDescIdDesc(
+                eq(SeasonStatus.IN_PROGRESS),
+                any(LocalDateTime.class)
+        )).thenReturn(List.of(inProgressSeason));
+        when(seasonRankingRecordRepository.findByStore_Season_IdOrderByFinalRankAsc(13L)).thenReturn(List.of());
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(13L)).thenReturn(List.of());
+        when(dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(13L, 8))
+                .thenReturn(List.of());
+
+        CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(authentication);
+
+        assertEquals(13L, response.seasonId());
+        assertTrue(response.rankings().isEmpty());
+        assertTrue(response.myRankings().isEmpty());
+    }
+
+    @Test
     void getCurrentFinalRankingsDoesNotFallBackToPreviousFinishedSeasonWhenCurrentSeasonIsNotReady() {
         Integer myUserId = 200;
         Authentication authentication = authenticate(myUserId, "me");
@@ -321,6 +346,15 @@ class SeasonRankingServiceTests {
                 any(LocalDateTime.class)
         )).thenReturn(List.of(previousFinishedSeason));
         when(seasonRankingRecordRepository.findByStore_Season_IdOrderByFinalRankAsc(13L)).thenReturn(List.of());
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(13L)).thenReturn(List.of(createStore(
+                13L,
+                13,
+                "user-13",
+                "store-13",
+                "location-13",
+                "menu-13",
+                10
+        )));
 
         BaseException exception = assertThrows(
                 BaseException.class,

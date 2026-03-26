@@ -4,6 +4,7 @@ import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTimeResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
+import com.ssafy.S14P21A205.game.season.dto.ParticipationResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
@@ -11,6 +12,7 @@ import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
 import com.ssafy.S14P21A205.game.season.service.SeasonAdminService;
 import com.ssafy.S14P21A205.game.season.service.CurrentSeasonTimeService;
+import com.ssafy.S14P21A205.game.season.service.ParticipationService;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
@@ -33,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SeasonController implements SeasonControllerDoc {
 
     private final CurrentSeasonTimeService currentSeasonTimeService;
+    private final ParticipationService participationService;
     private final SeasonJoinService seasonJoinService;
     private final SeasonRankingService seasonRankingService;
     private final SeasonSummaryService seasonSummaryService;
@@ -49,6 +52,13 @@ public class SeasonController implements SeasonControllerDoc {
     @GetMapping("/seasons/time")
     public ResponseEntity<CurrentSeasonTimeResponse> getCurrentSeasonTime(Authentication authentication) {
         return ResponseEntity.ok(currentSeasonTimeService.getCurrentSeasonTime());
+    }
+
+    @Override
+    @GetMapping("/seasons/current/participation")
+    public ResponseEntity<ParticipationResponse> getCurrentParticipation(Authentication authentication) {
+        Integer userId = Integer.valueOf(authentication.getName());
+        return ResponseEntity.ok(participationService.getCurrentParticipation(userId));
     }
 
     @Override

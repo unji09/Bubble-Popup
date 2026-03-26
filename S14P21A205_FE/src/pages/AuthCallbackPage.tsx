@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAppNoticeStore } from "../stores/useAppNoticeStore";
 import { useUserStore } from "../stores/useUserStore";
 
 const AUTH_CALLBACK_HANDLED_KEY = "authCallbackHandled";
@@ -24,6 +25,7 @@ export default function AuthCallbackPage() {
           localStorage.removeItem("tokenType");
         }
 
+        useAppNoticeStore.getState().clearAuthNotice();
         await useUserStore.getState().fetchUser();
         sessionStorage.setItem(AUTH_CALLBACK_HANDLED_KEY, "true");
         navigate("/", { replace: true });

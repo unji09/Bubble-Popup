@@ -178,7 +178,7 @@ class SeasonJoinServiceTests {
     void joinCurrentSeasonRejectsLateJoinFromDaySix() {
         User user = user(7);
         Season season = season(11L);
-        LocalDateTime daySixBusiness = season.getStartTime().plusSeconds(120 + 5L * 180L + 40L);
+        LocalDateTime daySixBusiness = season.getStartTime().plusSeconds(60 + 5L * 180L + 40L);
 
         seasonJoinService = new SeasonJoinService(
                 userService,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppNoticeStore } from "../stores/useAppNoticeStore";
 import { useGameStore } from "../stores/useGameStore";
 import { useUserStore } from "../stores/useUserStore";
 
@@ -10,6 +11,8 @@ export function clearAuthSession() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("tokenType");
   localStorage.removeItem("profileNickname");
+  useAppNoticeStore.getState().clearServerNotice();
+  useAppNoticeStore.getState().clearAuthNotice();
   useGameStore.getState().clearGame();
   useGameStore.getState().clearBankruptNotice();
   useUserStore.getState().clearUser();

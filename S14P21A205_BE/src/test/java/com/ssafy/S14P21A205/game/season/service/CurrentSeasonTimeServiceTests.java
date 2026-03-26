@@ -47,13 +47,13 @@ class CurrentSeasonTimeServiceTests {
     @Test
     void getCurrentSeasonTimeReturnsBusinessPhaseFromInProgressSeason() {
         currentSeasonTimeService = createService(
-                Clock.fixed(Instant.parse("2026-03-18T01:03:20Z"), ZoneId.of("Asia/Seoul"))
+                Clock.fixed(Instant.parse("2026-03-18T01:02:20Z"), ZoneId.of("Asia/Seoul"))
         );
 
         Season season = season(1, 7, LocalDateTime.of(2026, 3, 18, 10, 0, 0));
         when(seasonRepository.findByStatusAndStartTimeLessThanEqualOrderByStartTimeDescIdDesc(
                 SeasonStatus.IN_PROGRESS,
-                LocalDateTime.of(2026, 3, 18, 10, 3, 20)
+                LocalDateTime.of(2026, 3, 18, 10, 2, 20)
         )).thenReturn(List.of(season));
 
         CurrentSeasonTimeResponse response = currentSeasonTimeService.getCurrentSeasonTime();
@@ -61,7 +61,7 @@ class CurrentSeasonTimeServiceTests {
         assertThat(response.seasonPhase()).isEqualTo("DAY_BUSINESS");
         assertThat(response.currentDay()).isEqualTo(1);
         assertThat(response.phaseRemainingSeconds()).isEqualTo(80);
-        assertThat(response.serverTime()).isEqualTo(LocalDateTime.of(2026, 3, 18, 10, 3, 20));
+        assertThat(response.serverTime()).isEqualTo(LocalDateTime.of(2026, 3, 18, 10, 2, 20));
         assertThat(response.seasonStartTime()).isEqualTo(LocalDateTime.of(2026, 3, 18, 10, 0, 0));
         assertThat(response.gameTime()).isEqualTo("14:00");
         assertThat(response.tick()).isEqualTo(4);
@@ -97,13 +97,13 @@ class CurrentSeasonTimeServiceTests {
     @Test
     void getCurrentSeasonTimeUsesStartedScheduledSeasonWhenLifecycleHasNotStartedItYet() {
         currentSeasonTimeService = createService(
-                Clock.fixed(Instant.parse("2026-03-18T01:02:10Z"), ZoneId.of("Asia/Seoul"))
+                Clock.fixed(Instant.parse("2026-03-18T01:01:10Z"), ZoneId.of("Asia/Seoul"))
         );
 
         Season season = season(1, 7, LocalDateTime.of(2026, 3, 18, 10, 0, 0));
         when(seasonRepository.findByStatusAndStartTimeLessThanEqualOrderByStartTimeAscIdAsc(
                 SeasonStatus.SCHEDULED,
-                LocalDateTime.of(2026, 3, 18, 10, 2, 10)
+                LocalDateTime.of(2026, 3, 18, 10, 1, 10)
         )).thenReturn(List.of(season));
 
         CurrentSeasonTimeResponse response = currentSeasonTimeService.getCurrentSeasonTime();

@@ -17,17 +17,17 @@ class GameTimePolicyTests {
     void resolvesSeasonPhaseAcrossConfiguredBoundaries() {
         assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT))
                 .isEqualTo(SeasonPhase.LOCATION_SELECTION);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(119)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(59)))
                 .isEqualTo(SeasonPhase.LOCATION_SELECTION);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(120)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(60)))
                 .isEqualTo(SeasonPhase.DAY_PREPARING);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(160)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(100)))
                 .isEqualTo(SeasonPhase.DAY_BUSINESS);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(280)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(220)))
                 .isEqualTo(SeasonPhase.DAY_REPORT);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(300)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(240)))
                 .isEqualTo(SeasonPhase.DAY_PREPARING);
-        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(1380)))
+        assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(1320)))
                 .isEqualTo(SeasonPhase.SEASON_SUMMARY);
         assertThat(gameTimePolicy.resolveSeasonPhase(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(1500)))
                 .isEqualTo(SeasonPhase.NEXT_SEASON_WAITING);
@@ -37,7 +37,7 @@ class GameTimePolicyTests {
 
     @Test
     void convertsBusinessElapsedSecondsToGameTimeAndTick() {
-        LocalDateTime dayOneBusinessStart = SEASON_START_AT.plusSeconds(160);
+        LocalDateTime dayOneBusinessStart = SEASON_START_AT.plusSeconds(100);
 
         assertThat(gameTimePolicy.resolveGameTime(SEASON_START_AT, TOTAL_DAYS, dayOneBusinessStart))
                 .isEqualTo("10:00");
@@ -60,25 +60,25 @@ class GameTimePolicyTests {
 
     @Test
     void resolvesJoinPlayableFromDayByPhase() {
-        assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(60)))
+        assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, SEASON_START_AT.plusSeconds(30)))
                 .isEqualTo(1);
 
-        LocalDateTime dayTwoBusiness = SEASON_START_AT.plusSeconds(360);
+        LocalDateTime dayTwoBusiness = SEASON_START_AT.plusSeconds(300);
         assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, dayTwoBusiness))
                 .isEqualTo(3);
         assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, dayTwoBusiness)).isTrue();
 
-        LocalDateTime dayFiveReport = SEASON_START_AT.plusSeconds(120 + 4L * 180L + 170L);
+        LocalDateTime dayFiveReport = SEASON_START_AT.plusSeconds(60 + 4L * 180L + 170L);
         assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, dayFiveReport))
                 .isEqualTo(6);
         assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, dayFiveReport)).isTrue();
 
-        LocalDateTime daySixBusiness = SEASON_START_AT.plusSeconds(120 + 5L * 180L + 40L);
+        LocalDateTime daySixBusiness = SEASON_START_AT.plusSeconds(60 + 5L * 180L + 40L);
         assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, daySixBusiness))
                 .isNull();
         assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, daySixBusiness)).isFalse();
 
-        LocalDateTime daySevenReport = SEASON_START_AT.plusSeconds(1370);
+        LocalDateTime daySevenReport = SEASON_START_AT.plusSeconds(1310);
         assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, daySevenReport))
                 .isNull();
         assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, daySevenReport)).isFalse();

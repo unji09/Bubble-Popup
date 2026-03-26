@@ -27,6 +27,7 @@ import com.ssafy.S14P21A205.store.repository.LocationRepository;
 import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -142,12 +143,22 @@ public class StoreServiceImpl implements StoreService {
         LocalDateTime ingredientPricingAt = resolveIngredientPricingAt(store, currentDay, seasonTimePoint, now);
 
         List<MenuListResponse.MenuInfo> menuInfos = menuRepository.findAllByOrderByIdAsc().stream()
-                .map(menu -> MenuListResponse.MenuInfo.builder()
-                        .menuId(Math.toIntExact(menu.getId()))
-                        .menuName(menu.getMenuName())
-                        .ingredientPrice(resolveIngredientPrice(store, currentDay, menu, seasonStores, ingredientPricingAt))
-                        .discount(discount)
-                        .build())
+                .map(menu -> {
+                    int ingredientPrice = resolveIngredientPrice(store, currentDay, menu, seasonStores, ingredientPricingAt);
+                    int recommended = BigDecimal.valueOf(ingredientPrice)
+                            .multiply(new BigDecimal("2.5"))
+                            .setScale(0, RoundingMode.HALF_UP)
+                            .intValue();
+                    int maxSelling = Math.multiplyExact(recommended, 2);
+                    return MenuListResponse.MenuInfo.builder()
+                            .menuId(Math.toIntExact(menu.getId()))
+                            .menuName(menu.getMenuName())
+                            .ingredientPrice(ingredientPrice)
+                            .discount(discount)
+                            .recommendedPrice(recommended)
+                            .maxSellingPrice(maxSelling)
+                            .build();
+                })
                 .toList();
 
         return MenuListResponse.builder()

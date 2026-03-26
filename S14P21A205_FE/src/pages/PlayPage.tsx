@@ -577,6 +577,8 @@ function mapStoreMenusToEmergencyMenus(menus: StoreMenuResponse[]): EmergencyMen
     ingredientPrice: menu.ingredientPrice,
     ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     emoji: resolveMenuEmoji(menu.menuId, menu.menuName),
+    recommendedPrice: menu.recommendedPrice,
+    maxSellingPrice: menu.maxSellingPrice,
   }));
 }
 
@@ -894,7 +896,6 @@ function PlayPageSession({
   const prevStockRef = useRef<number | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
   // Unity arrival 시 고객별 재고/잔액 변동 큐
-  const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
 
   useEffect(() => {
     remainingMillisecondsRef.current = remainingMilliseconds;
@@ -1304,16 +1305,7 @@ function PlayPageSession({
   };
 
   const applyOneArrival = () => {
-    if (arrivalQueueRef.current.length === 0) return;
-
-    setGuests((prev) => prev + 1);
-
-    const change = arrivalQueueRef.current.shift();
-    if (change && (change.stockDelta !== 0 || change.balanceDelta !== 0)) {
-      setStock((prev) => prev + change.stockDelta);
-      setBalance((prev) => prev + change.balanceDelta);
-    }
-
+    // 숫자 변경은 statQueue가 담당, 여기는 Unity 스폰 타이밍 추적만
     spawnTimingRef.current.totalArrived += 1;
     const { totalSpawned, totalArrived } = spawnTimingRef.current;
     const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
@@ -1403,39 +1395,29 @@ function PlayPageSession({
     if (prevGuestsRef.current !== null) {
       const gd = state.customerCount - prevGuestsRef.current;
 
-      // 이전 큐 클리어
-      arrivalQueueRef.current = [];
+      // 재고/잔액은 항상 서버 절대값 기준으로 statQueue를 통해 점진 반영
+      statQueue.enqueue({
+        targetStock: state.inventory.totalStock,
+        targetBalance: state.cash,
+        currentStock: displayedStockRef.current,
+        currentBalance: displayedBalanceRef.current,
+      });
 
-      // 새 손님이 있으면: 재고/잔액은 이전 값 유지, 큐로 점진 반영
-      if (gd > 0) {
-        const { soldUnits, unitPrice } = state.customerTick;
-        for (const units of soldUnits) {
-          arrivalQueueRef.current.push({
-            stockDelta: -units,
-            balanceDelta: units * unitPrice,
-          });
+      // 손님수는 서버 값으로 직접 업데이트
+      setGuests(state.customerCount);
+
+      // Unity 비주얼 스폰 (숫자 변경과 분리, 시각 효과만)
+      if (gd > 0 && !hasCustomerPlan) {
+        const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
+
+        if (popupStoreIndex !== null) {
+          spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+          spawnTimingRef.current.totalSpawned += gd;
+          spawnTimingRef.current.lastRequestAt = Date.now();
+          const { totalSpawned, totalArrived } = spawnTimingRef.current;
+          const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
+          console.log(`[SpawnTiming] 스폰 요청: +${gd}명 (누적 스폰: ${totalSpawned}, 도착: ${totalArrived}, 미도착: ${totalSpawned - totalArrived}), 남은 시간: ${remainingUntilEnd}ms`);
         }
-
-        if (!hasCustomerPlan) {
-          const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
-
-          if (popupStoreIndex !== null) {
-            spawnPopupVisitorsImmediately(popupStoreIndex, gd);
-            spawnTimingRef.current.totalSpawned += gd;
-            spawnTimingRef.current.lastRequestAt = Date.now();
-            const { totalSpawned, totalArrived } = spawnTimingRef.current;
-            const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
-            console.log(`[SpawnTiming] 스폰 요청: +${gd}명 (누적 스폰: ${totalSpawned}, 도착: ${totalArrived}, 미도착: ${totalSpawned - totalArrived}), 남은 시간: ${remainingUntilEnd}ms`);
-          }
-        }
-      } else {
-        // 새 손님 없으면 큐를 통해 점진적으로 동기화
-        statQueue.enqueue({
-          targetStock: state.inventory.totalStock,
-          targetBalance: state.cash,
-          currentStock: prevStockRef.current ?? 0,
-          currentBalance: prevBalanceRef.current ?? 0,
-        });
       }
     } else {
       // 최초 폴링: 백엔드 값으로 초기화

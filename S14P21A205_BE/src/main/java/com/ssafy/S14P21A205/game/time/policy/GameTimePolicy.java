@@ -13,12 +13,12 @@ public class GameTimePolicy {
     public static final int BUSINESS_OPEN_HOUR = 10;
     public static final int BUSINESS_CLOSE_HOUR = 22;
 
-    private static final Duration LOCATION_SELECTION_DURATION = Duration.ofMinutes(2);
+    private static final Duration LOCATION_SELECTION_DURATION = Duration.ofMinutes(1);
     private static final Duration PREP_DURATION = Duration.ofSeconds(40);
     private static final Duration BUSINESS_DURATION = Duration.ofMinutes(2);
     private static final Duration REPORT_DURATION = Duration.ofSeconds(20);
     private static final Duration DAY_DURATION = PREP_DURATION.plus(BUSINESS_DURATION).plus(REPORT_DURATION);
-    private static final Duration SEASON_SUMMARY_DURATION = Duration.ofMinutes(2);
+    private static final Duration SEASON_SUMMARY_DURATION = Duration.ofMinutes(3);
     private static final Duration NEXT_SEASON_WAIT_DURATION = Duration.ofMinutes(5);
     private static final int GAME_BUSINESS_DURATION_MINUTES = (BUSINESS_CLOSE_HOUR - BUSINESS_OPEN_HOUR) * 60;
     private static final Duration TICK_INTERVAL = Duration.ofSeconds(10);

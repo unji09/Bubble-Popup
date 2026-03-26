@@ -21,5 +21,7 @@ public class MenuListResponse {
         private String menuName;
         private Integer ingredientPrice;
         private Float discount;
+        private Integer recommendedPrice;
+        private Integer maxSellingPrice;
     }
 }

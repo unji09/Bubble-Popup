@@ -28,7 +28,7 @@ class SeasonWaitingServiceTests {
         SeasonWaitingService seasonWaitingService = createService(
                 Clock.fixed(Instant.parse("2026-03-16T01:05:00Z"), ZoneId.of("Asia/Seoul"))
         );
-        Season inProgressSeason = season(3L, SeasonStatus.IN_PROGRESS, 3, 7, LocalDateTime.of(2026, 3, 16, 9, 58, 10));
+        Season inProgressSeason = season(3L, SeasonStatus.IN_PROGRESS, 3, 7, LocalDateTime.of(2026, 3, 16, 9, 59, 10));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressSeason));
         when(storeRepository.countDistinctUsersBySeasonId(3L)).thenReturn(12L);

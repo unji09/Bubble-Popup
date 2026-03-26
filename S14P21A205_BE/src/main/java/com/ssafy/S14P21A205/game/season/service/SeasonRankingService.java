@@ -14,6 +14,7 @@ import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -39,6 +40,7 @@ public class SeasonRankingService {
     private final SeasonRepository seasonRepository;
     private final SeasonRankingRecordRepository seasonRankingRecordRepository;
     private final DailyReportRepository dailyReportRepository;
+    private final StoreRepository storeRepository;
     private final UserService userService;
     private final Clock clock;
 
@@ -75,6 +77,9 @@ public class SeasonRankingService {
                 .sorted(rankingViewComparator())
                 .toList();
         if (allRankings.isEmpty()) {
+            if (storeRepository.findAllBySeason_IdOrderByIdAsc(season.getId()).isEmpty()) {
+                return new CurrentSeasonRankingsResponse(season.getId(), List.of(), List.of());
+            }
             throw new BaseException(ErrorCode.FINAL_RANKING_NOT_READY);
         }
 

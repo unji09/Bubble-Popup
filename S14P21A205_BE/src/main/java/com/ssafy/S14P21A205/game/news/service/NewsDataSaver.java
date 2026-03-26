@@ -313,13 +313,16 @@ public class NewsDataSaver {
         }
 
         DailyReport topStore = topStores.get(0);
-        String storeName = topStore.getStore().getStoreName();
+        Store store = topStore.getStore();
+        String storeName = store.getStoreName();
         String menuName = topStore.getMenuName();
         int revenue = topStore.getRevenue();
         int salesCount = topStore.getSalesCount();
+        String ownerNickname = store.getUser().getNickname();
+        String locationName = store.getLocation().getLocationName();
 
         NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
-                seasonId, day, storeName, menuName, revenue, salesCount);
+                seasonId, day, storeName, menuName, revenue, salesCount, ownerNickname, locationName);
         NewsArticle article = NewsArticle.create(
                 report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
         newsArticleRepository.save(article);
@@ -336,6 +339,7 @@ public class NewsDataSaver {
         int[] thresholds = {100, 200, 500, 1000};
 
         for (Object[] row : salesData) {
+            Long storeId = ((Number) row[0]).longValue();
             String storeName = (String) row[1];
             String menuName = (String) row[2];
             long totalSales = ((Number) row[3]).longValue();
@@ -343,6 +347,7 @@ public class NewsDataSaver {
             for (int threshold : thresholds) {
                 if (totalSales >= threshold) {
                     Map<String, Object> milestone = new LinkedHashMap<>();
+                    milestone.put("storeId", storeId);
                     milestone.put("storeName", storeName);
                     milestone.put("menuName", menuName);
                     milestone.put("totalSales", totalSales);
@@ -358,12 +363,21 @@ public class NewsDataSaver {
         }
 
         Map<String, Object> topMilestone = milestones.get(0);
+        Long topStoreId = ((Number) topMilestone.get("storeId")).longValue();
+        String ownerNickname = "";
+        String locationName = "";
+        Store topMilestoneStore = storeRepository.findById(topStoreId).orElse(null);
+        if (topMilestoneStore != null) {
+            ownerNickname = topMilestoneStore.getUser().getNickname();
+            locationName = topMilestoneStore.getLocation().getLocationName();
+        }
         NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
                 seasonId, day,
                 (String) topMilestone.get("storeName"),
                 (String) topMilestone.get("menuName"),
                 ((Number) topMilestone.get("totalSales")).longValue(),
-                ((Number) topMilestone.get("milestone")).intValue());
+                ((Number) topMilestone.get("milestone")).intValue(),
+                ownerNickname, locationName);
         NewsArticle article = NewsArticle.create(
                 report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
         newsArticleRepository.save(article);
@@ -492,7 +506,8 @@ public class NewsDataSaver {
 
         NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
                 seasonId, day, topStore.getStoreName(), topStore.getMenu().getMenuName(),
-                (int) topSales, topPurchaseCount);
+                (int) topSales, topPurchaseCount,
+                topStore.getUser().getNickname(), topStore.getLocation().getLocationName());
         newsArticleRepository.save(NewsArticle.create(
                 report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
         log.info("Generated top store news from Redis for season {} day {}", seasonId, day);
@@ -512,7 +527,7 @@ public class NewsDataSaver {
         }
 
         // 오늘 Redis 데이터 합산
-        record SalesEntry(String storeName, String menuName, long totalSales) {}
+        record SalesEntry(String storeName, String menuName, long totalSales, String ownerNickname, String locationName) {}
         List<SalesEntry> entries = new ArrayList<>();
         for (Store store : stores) {
             long pastSales = pastSalesByStore.getOrDefault(store.getId(), 0L);
@@ -524,7 +539,9 @@ public class NewsDataSaver {
                 entries.add(new SalesEntry(
                         storeNames.getOrDefault(store.getId(), store.getStoreName()),
                         menuNames.getOrDefault(store.getId(), store.getMenu().getMenuName()),
-                        totalSales));
+                        totalSales,
+                        store.getUser().getNickname(),
+                        store.getLocation().getLocationName()));
             }
         }
         entries.sort((a, b) -> Long.compare(b.totalSales(), a.totalSales()));
@@ -534,7 +551,8 @@ public class NewsDataSaver {
             for (int threshold : thresholds) {
                 if (entry.totalSales() >= threshold) {
                     NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
-                            seasonId, day, entry.storeName(), entry.menuName(), entry.totalSales(), threshold);
+                            seasonId, day, entry.storeName(), entry.menuName(), entry.totalSales(), threshold,
+                            entry.ownerNickname(), entry.locationName());
                     newsArticleRepository.save(NewsArticle.create(
                             report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
                     log.info("Generated cumulative sales news from Redis for season {} day {}", seasonId, day);

@@ -261,7 +261,7 @@ class EventEffectResolverTests {
         Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", 1L);
         ReflectionTestUtils.setField(season, "totalDays", 7);
-        ReflectionTestUtils.setField(season, "startTime", LocalDateTime.of(2026, 3, 17, 8, 57, 10));
+        ReflectionTestUtils.setField(season, "startTime", LocalDateTime.of(2026, 3, 17, 8, 58, 10));
         return season;
     }
 

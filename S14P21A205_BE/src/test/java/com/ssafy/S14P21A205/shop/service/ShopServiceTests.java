@@ -52,7 +52,7 @@ class ShopServiceTests {
                 itemUserRepository,
                 userRepository,
                 seasonRepository,
-                fixedClock(LocalDateTime.of(2026, 3, 18, 10, 16, 50))
+                fixedClock(LocalDateTime.of(2026, 3, 18, 10, 15, 50))
         );
         User user = user(7, 5_000);
         Item item = item(1L, ItemCategory.INGREDIENT, 1_000, new BigDecimal("0.90"));

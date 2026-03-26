@@ -266,7 +266,7 @@ class OrderServiceImplTests {
         Store store = store(15L, 1, 3L, 7L, 2_500, 2_375);
         Menu menu = store.getMenu();
         ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
-        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 53, 0));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -369,7 +369,7 @@ class OrderServiceImplTests {
         Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
         Menu menu = store.getMenu();
         ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
-        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 53, 0));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -407,7 +407,7 @@ class OrderServiceImplTests {
         Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
         Menu menu = store.getMenu();
         ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
-        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 53, 0));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -440,7 +440,7 @@ class OrderServiceImplTests {
         Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
         Menu menu = store.getMenu();
         ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
-        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 53, 0));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -478,7 +478,7 @@ class OrderServiceImplTests {
         Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
         Menu menu = store.getMenu();
         ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
-        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 53, 0));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -509,7 +509,7 @@ class OrderServiceImplTests {
         Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
         Menu menu = store.getMenu();
         ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
-        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 53, 0));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -554,8 +554,8 @@ class OrderServiceImplTests {
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
         ReflectionTestUtils.setField(season, "currentDay", 1);
         ReflectionTestUtils.setField(season, "totalDays", 7);
-        ReflectionTestUtils.setField(season, "startTime", LocalDateTime.of(2026, 3, 17, 9, 57, 50));
-        ReflectionTestUtils.setField(season, "endTime", LocalDateTime.of(2026, 3, 17, 10, 30, 0));
+        ReflectionTestUtils.setField(season, "startTime", LocalDateTime.of(2026, 3, 17, 9, 58, 50));
+        ReflectionTestUtils.setField(season, "endTime", LocalDateTime.of(2026, 3, 17, 10, 28, 50));
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);

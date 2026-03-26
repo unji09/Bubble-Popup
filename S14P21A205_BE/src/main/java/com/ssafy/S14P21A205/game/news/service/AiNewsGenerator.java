@@ -33,12 +33,13 @@ public class AiNewsGenerator {
     );
 
     private static final String SYSTEM_PROMPT =
-            "너는 '버블팝업' 팝업스토어 상권 전문 기자다. "
+            "너는 '버블팝업' 팝업스토어 상권을 취재하는 속보 전문 기자다. "
             + "이 세계에서 점주들이 서울 8개 상권(홍대, 강남, 성수, 여의도, 잠실, 이태원, 명동, 건대입구)에서 팝업 음식 매장을 운영하고 있다. "
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
-            + "제목: 핵심 정보를 담아 50자 이내로 써. 지역명, 메뉴명, 매장명 등 구체적 사실 포함. "
-            + "본문: 300~500자로 풍부하게 써. 현장감 있는 묘사, 관계자 코멘트, 분위기 전달을 포함해. "
-            + "순수 한국어만 사용. 영어, 외국어, 아랍어 절대 금지. "
+            + "제목: 최신 뉴스 헤드라인처럼 임팩트 있게 50자 이내로 써. 핵심 팩트(지역명, 메뉴명, 매장명, 수치)를 반드시 포함. "
+            + "본문: 300~500자. 리드문(핵심 사실 요약) → 상세 전개 → 관계자 코멘트 → 전망 순서로 구성해. "
+            + "문체: 간결하고 힘 있는 뉴스 보도체. ~했다, ~밝혔다, ~전했다 등 기사 어미 사용. "
+            + "반드시 한국어(한글, 숫자, 한국어 문장부호)만 사용. 영어, 일본어, 중국어, 아랍어, 특수문자, 외국어 단어를 절대 포함하지 마. 알파벳도 금지. "
             + "마크다운 금지. 이모지 금지. 줄바꿈 넣지 마. "
             + "가상의 인물명이나 브랜드명을 만들지 마. 관계자, 점주, 단골 등 일반 호칭만 사용해. "
             + "'게임'이라는 단어를 절대 쓰지 마. 이 세계는 실제 상권이다.";
@@ -200,41 +201,42 @@ public class AiNewsGenerator {
     // ---- Top Store News ----
 
     public NewsGenerationResult generateTopStoreNews(long seasonId, int day, String storeName, String menuName,
-            int revenue, int salesCount) {
+            int revenue, int salesCount, String ownerNickname, String locationName) {
         String style = getRandomStyle();
-        String prompt = ("오늘의 매출 왕은 %s 매장이다. 판매 메뉴는 %s이고 엄청난 매출과 판매량을 기록했다. "
+        String prompt = ("%s에 위치한 %s 점주의 %s 매장이 오늘의 매출 왕에 올랐다. 판매 메뉴는 %s이고 엄청난 매출과 판매량을 기록했다. "
                 + "매장 앞 긴 줄, 분주한 주방, 사장님의 소감 등을 현장감 있게 묘사해. "
                 + "인근 점주들의 반응도 포함해. "
-                + "제목에 매장명을 포함해. 스타일: %s")
-                .formatted(storeName, menuName, style);
+                + "제목에 매장명과 점주 이름을 포함해. 스타일: %s")
+                .formatted(locationName, ownerNickname, storeName, menuName, style);
         try {
             return callAi(prompt);
         } catch (Exception e) {
             log.error("AI top store news failed day {}", day, e);
             return new NewsGenerationResult(
-                    "'" + storeName + "' 앞 긴 줄… 무슨 일이?",
-                    "오늘 " + storeName + " 앞에는 아침부터 긴 줄이 늘어섰다. " + menuName + "을(를) 맛보려는 손님들로 "
-                    + "매장은 문전성시를 이뤘고, 인근 점주들 사이에서도 화제가 됐다.");
+                    locationName + " '" + storeName + "' 앞 긴 줄… 무슨 일이?",
+                    "오늘 " + locationName + "에 위치한 " + ownerNickname + " 점주의 " + storeName + " 앞에는 아침부터 긴 줄이 늘어섰다. "
+                    + menuName + "을(를) 맛보려는 손님들로 매장은 문전성시를 이뤘고, 인근 점주들 사이에서도 화제가 됐다.");
         }
     }
 
     // ---- Cumulative Sales News ----
 
     public NewsGenerationResult generateCumulativeSalesNews(long seasonId, int day, String storeName, String menuName,
-            long totalSales, int milestone) {
+            long totalSales, int milestone, String ownerNickname, String locationName) {
         String style = getRandomStyle();
-        String prompt = ("%s 매장이 %s 누적 판매로 놀라운 기록을 세웠다. "
+        String prompt = ("%s에서 운영 중인 %s 점주의 %s 매장이 %s 누적 판매로 놀라운 기록을 세웠다. "
                 + "꾸준히 찾아오는 단골들의 반응, 매장 분위기, 사장님의 소감 등을 묘사해. "
                 + "같은 메뉴를 파는 인근 매장들의 반응도 포함해. "
-                + "제목에 매장명과 판매 기록 달성 사실을 포함해. 스타일: %s")
-                .formatted(storeName, menuName, style);
+                + "제목에 매장명과 점주 이름, 판매 기록 달성 사실을 포함해. 스타일: %s")
+                .formatted(locationName, ownerNickname, storeName, menuName, style);
         try {
             return callAi(prompt);
         } catch (Exception e) {
             log.error("AI cumulative sales news failed day {}", day, e);
             return new NewsGenerationResult(
-                    "'" + storeName + "', 놀라운 판매 기록 달성",
-                    storeName + "이(가) 조용히 놀라운 기록을 세웠다. " + menuName + " 누적 판매량이 업계에서도 보기 드문 수준에 도달한 것이다. "
+                    locationName + " '" + storeName + "', 놀라운 판매 기록 달성",
+                    locationName + "에서 운영 중인 " + ownerNickname + " 점주의 " + storeName + "이(가) 조용히 놀라운 기록을 세웠다. "
+                    + menuName + " 누적 판매량이 업계에서도 보기 드문 수준에 도달한 것이다. "
                     + "같은 메뉴를 취급하는 인근 매장들도 이 소식에 촉각을 곤두세우고 있다.");
         }
     }
@@ -609,26 +611,15 @@ public class AiNewsGenerator {
         text = text.replaceAll("[\\x{2600}-\\x{27BF}]", "");
         text = text.replaceAll("[\\x{FE00}-\\x{FEFF}]", "");
         text = text.replaceAll("[\\x{E0020}-\\x{E007F}]", "");
-        // 괄호로 감싼 이모지+텍스트 패턴 제거: (🥤 젤리의 달콤함이) → 젤리의 달콤함이
-        text = text.replaceAll("\\(\\s*[^\\p{IsHangul}]*\\s+([\\p{IsHangul}].*?)\\)", "$1");
-        // 영어 단어 제거
-        text = text.replaceAll("[a-zA-Z]+", "");
-        // 영어 제거 후 남는 빈 따옴표·콜론 정리
-        text = text.replaceAll("\"\\s*\"", "").replaceAll(":\\s*:", ":").replaceAll("^[:\\s\"]+", "");
-        // 중국어·일본어 문자 제거
-        text = text.replaceAll("[\\u4e00-\\u9fff\\u3040-\\u309f\\u30a0-\\u30ff]+", "");
-        // 아랍어·키릴 등 비한글·비숫자·비구두점 외국어 제거
-        text = text.replaceAll("[\\u0600-\\u06FF\\u0400-\\u04FF]+", "");
-        // 백슬래시 이스케이프 정리
+        // 백슬래시 이스케이프 정리 (화이트리스트 전에 처리)
         text = text.replace("\\n", " ").replace("\\\"", "\"").replace("\\\\", "");
-        // 남은 단독 백슬래시 제거
         text = text.replace("\\", "");
+        // 한글·숫자·한국어 문장부호만 허용 (화이트리스트 방식)
+        text = text.replaceAll("[^\\p{IsHangul}\\d\\s.,!?~()%]", "");
         // 연속 공백 정리
         text = text.replaceAll("\\s{2,}", " ");
-        // 빈 따옴표·괄호 정리
-        text = text.replace("''", "").replace("\"\"", "").replace("()", "");
-        // 앞뒤 특수문자 잔해 정리 (콜론, 따옴표, 쉼표 등)
-        text = text.replaceAll("^[:\\s,\"']+", "").replaceAll("[:\\s,\"']+$", "");
+        // 빈 괄호 정리
+        text = text.replace("()", "");
         return text.strip();
     }
 

@@ -743,9 +743,9 @@ class GameDayStartServiceTests {
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
         LocalDateTime currentPrepAt = LocalDateTime.ofInstant(fixedClock.instant(), fixedClock.getZone());
-        LocalDateTime seasonStartAt = currentPrepAt.minusSeconds(120L + (currentDay - 1L) * 180L);
+        LocalDateTime seasonStartAt = currentPrepAt.minusSeconds(60L + (currentDay - 1L) * 180L);
         ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
-        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
+        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(60L + totalDays * 180L + 180L));
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);

@@ -248,9 +248,9 @@ class StoreServiceImplTests {
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
         LocalDateTime now = LocalDateTime.of(2026, 3, 9, 14, 33, 0);
-        LocalDateTime seasonStartAt = now.minusSeconds(120L + (currentDay - 1L) * 180L + currentDayElapsedSeconds);
+        LocalDateTime seasonStartAt = now.minusSeconds(60L + (currentDay - 1L) * 180L + currentDayElapsedSeconds);
         ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
-        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
+        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(60L + totalDays * 180L + 180L));
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);

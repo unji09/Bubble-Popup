@@ -5,6 +5,7 @@ import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTimeResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
+import com.ssafy.S14P21A205.game.season.dto.ParticipationResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
@@ -61,6 +62,27 @@ public interface SeasonControllerDoc {
             )
     })
     ResponseEntity<CurrentSeasonTimeResponse> getCurrentSeasonTime(
+            @Parameter(hidden = true) Authentication authentication
+    );
+
+    @Operation(
+            summary = "Get current season participation state",
+            description = "Return whether the authenticated user has joined the current season and whether the store screen is currently accessible.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Current season participation lookup success",
+                    content = @Content(schema = @Schema(implementation = ParticipationResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<ParticipationResponse> getCurrentParticipation(
             @Parameter(hidden = true) Authentication authentication
     );
 
