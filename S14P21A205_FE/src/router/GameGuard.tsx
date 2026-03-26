@@ -8,6 +8,7 @@ import {
 } from "../api/game";
 import { getStore, type StoreResponse } from "../api/store";
 import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
+import { setStoredBrandName } from "../hooks/useBrandName";
 import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
 import { clearSeasonJoinIntent, hasSeasonJoinIntent } from "../utils/seasonJoinIntent";
@@ -35,12 +36,20 @@ async function resolveJoinedStoreAccess(day: number | null) {
 
     const fallbackStoreData = buildFallbackStoreData(participation, day);
 
+    // 서버 브랜드명으로 localStorage 동기화 (다른 브라우저에서 변경된 경우 대비)
+    if (participation.storeName) {
+      setStoredBrandName(participation.storeName);
+    }
+
     if (!participation.storeAccessible) {
       return { joined: true, storeData: fallbackStoreData };
     }
 
     try {
       const storeData = await getStore();
+      if (storeData.popupName) {
+        setStoredBrandName(storeData.popupName);
+      }
       return {
         joined: true,
         storeData: {
