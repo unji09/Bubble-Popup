@@ -52,7 +52,7 @@ import {
   elapsedToGameTime,
   type SeasonPhase,
 } from "../constants/gameTime";
-import { sendToUnity, setWeather, setDay, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
+import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import { classifyEventEffect } from "../components/play/effects/effects";
 import { useEventEffectStore } from "../components/play/effects/useEventEffect";
 import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
