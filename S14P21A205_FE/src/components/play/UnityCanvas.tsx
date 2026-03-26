@@ -26,7 +26,7 @@ interface UnityFrameWindow extends Window {
 export interface UnityBridgeHandle {
   isReady: () => boolean;
   sendMessage: (methodName: UnityMethodName, payload: string) => boolean;
-  spawnPopupVisitors: (popupStoreIndex: number, count: number) => boolean;
+  spawnPopupVisitors: (popupStoreIndex: number, count: number, hasStock?: boolean) => boolean;
   spawnSinglePopupVisitor: (popupStoreIndex: number) => boolean;
   setCongestionLevel: (level: number) => boolean;
 }
@@ -83,11 +83,11 @@ const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function Uni
     () => ({
       isReady: () => isReady,
       sendMessage,
-      spawnPopupVisitors: (popupStoreIndex: number, count: number) =>
-        sendMessage("SpawnPopupVisitors", `${popupStoreIndex},${count}`) ||
+      spawnPopupVisitors: (popupStoreIndex: number, count: number, hasStock = true) =>
+        sendMessage("SpawnPopupVisitors", `${popupStoreIndex},${count},${hasStock ? 1 : 0}`) ||
         (pendingMessagesRef.current.push({
           methodName: "SpawnPopupVisitors",
-          payload: `${popupStoreIndex},${count}`,
+          payload: `${popupStoreIndex},${count},${hasStock ? 1 : 0}`,
         }),
         true),
       spawnSinglePopupVisitor: (popupStoreIndex: number) =>

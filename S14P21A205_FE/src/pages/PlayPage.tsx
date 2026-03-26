@@ -1147,9 +1147,10 @@ function PlayPageSession({
   const spawnPopupVisitorsImmediately = (popupStoreIndex: number, count: number) => {
     const totalCount = Math.max(0, Math.floor(count));
     if (totalCount <= 0) return false;
+    const hasStock = displayedStockRef.current > 0;
 
     // Unity의 SpawnPopupVisitorsRoutine을 사용해 NPC를 분산 스폰
-    return unityBridgeRef.current?.spawnPopupVisitors(popupStoreIndex, totalCount) ?? false;
+    return unityBridgeRef.current?.spawnPopupVisitors(popupStoreIndex, totalCount, hasStock) ?? false;
   };
 
   const schedulePlannedVisitors = (

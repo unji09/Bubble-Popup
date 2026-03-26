@@ -39,13 +39,14 @@ export function returnToMain(
   sendToUnity(iframeRef, "ReturnToMain");
 }
 
-/** 팝업 방문객 스폰 (payload: "regionIndex,count") */
+/** 팝업 방문객 스폰 (payload: "regionIndex,count,hasStock") */
 export function spawnPopupVisitors(
   iframeRef: RefObject<HTMLIFrameElement | null>,
   regionIndex: number,
   count: number,
+  hasStock = true,
 ) {
-  sendToUnity(iframeRef, "SpawnPopupVisitors", `${regionIndex},${count}`);
+  sendToUnity(iframeRef, "SpawnPopupVisitors", `${regionIndex},${count},${hasStock ? 1 : 0}`);
 }
 
 /** 혼잡도 레벨 설정 */
