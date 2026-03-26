@@ -131,7 +131,8 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
                         candidate.store().getStoreName(),
                         candidate.roi(),
                         candidate.totalRevenue(),
-                        resolveRewardPoints(currentRank)
+                        resolveRewardPoints(currentRank),
+                        false
                 ));
             }
 

@@ -45,6 +45,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -59,6 +60,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class ActionServiceImpl implements ActionService {
 
     private static final BigDecimal EMERGENCY_COST_MULTIPLIER = new BigDecimal("1.5");
+    private static final BigDecimal RECOMMENDED_PRICE_MULTIPLIER = new BigDecimal("2.5");
     private static final BigDecimal PRICE_RANGE_UPPER = new BigDecimal("1.10");
     private static final BigDecimal PRICE_RANGE_LOWER = new BigDecimal("0.90");
     private static final BigDecimal MULTIPLIER_AVERAGE = new BigDecimal("1.00");
@@ -357,6 +359,20 @@ public class ActionServiceImpl implements ActionService {
 
         BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, menu, day, state, now);
         int menuTrendRank = resolveMenuEntryRank(store, day, menu);
+        int minimumSellingPrice = storeRankingPolicy.apply(
+                menu.getOriginPrice(),
+                storeRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
+                ingredientCostMultiplier
+        );
+        int recommendedPrice = BigDecimal.valueOf(minimumSellingPrice)
+                .multiply(RECOMMENDED_PRICE_MULTIPLIER)
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
+        int maxSellingPrice = Math.multiplyExact(recommendedPrice, 2);
+
+        if (request.salePrice() < minimumSellingPrice || request.salePrice() > maxSellingPrice) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
         int adjustedOriginPrice = storeRankingPolicy.apply(
                 menu.getOriginPrice(),
                 storeRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
@@ -385,6 +401,10 @@ public class ActionServiceImpl implements ActionService {
                 now
         ).delaySeconds();
         LocalDateTime arrivedTime = now.plusSeconds(deliverySeconds);
+
+        if (!Objects.equals(store.getPrice(), request.salePrice())) {
+            store.changePrice(request.salePrice());
+        }
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
         Order order = orderRepository.save(

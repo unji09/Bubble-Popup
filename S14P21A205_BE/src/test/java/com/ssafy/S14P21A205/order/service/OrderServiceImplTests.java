@@ -101,8 +101,7 @@ class OrderServiceImplTests {
                 .when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(any(), any()))
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
-                .when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
-                        any(),
+                .when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
                         any(),
                         any()
                 ))
@@ -153,10 +152,9 @@ class OrderServiceImplTests {
                         Collections.emptyList(),
                         Collections.emptyList()
                 ));
-        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
                 15L,
-                1,
-                com.ssafy.S14P21A205.order.entity.OrderType.NORMAL
+                1
         )).thenReturn(Optional.of(Order.create(menu, store, 50, 150_000, 2_500, 1)));
 
         assertThat(orderService.getCurrentOrder(1, null).sellingPrice()).isEqualTo(2_500);
@@ -287,10 +285,9 @@ class OrderServiceImplTests {
                         Collections.emptyList(),
                         Collections.emptyList()
                 ));
-        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
                 eq(15L),
-                anyInt(),
-                eq(com.ssafy.S14P21A205.order.entity.OrderType.NORMAL)
+                anyInt()
         )).thenReturn(Optional.of(Order.create(menu, store, 50, 150_000, 2_500, 1)));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order saved = invocation.getArgument(0);

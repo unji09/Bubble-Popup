@@ -63,6 +63,8 @@ class SeasonRankingServiceTests {
 
     @Test
     void getCurrentTopRankingsReturnsTopTenFromRedis() {
+        Integer myUserId = 3;
+        Authentication authentication = authenticate(myUserId, "me");
         CurrentSeasonTopRankingsResponse cachedResponse = new CurrentSeasonTopRankingsResponse(
                 3L,
                 buildRankingItems(12),
@@ -71,12 +73,55 @@ class SeasonRankingServiceTests {
 
         when(seasonRankingRedisRepository.findCurrentTopRankings()).thenReturn(Optional.of(cachedResponse));
 
-        CurrentSeasonTopRankingsResponse response = seasonRankingService.getCurrentTopRankings();
+        CurrentSeasonTopRankingsResponse response = seasonRankingService.getCurrentTopRankings(authentication);
 
         assertEquals(3L, response.seasonId());
         assertEquals(10, response.rankings().size());
         assertEquals(1, response.rankings().get(0).rank());
+        assertTrue(response.rankings().get(2).isMine());
+        assertEquals(1, response.rankings().stream().filter(ranking -> Boolean.TRUE.equals(ranking.isMine())).count());
         assertEquals("2026-03-13T15:00:00", response.refreshedAt());
+    }
+
+
+    @Test
+    void getCurrentTopRankingsMarksOnlyMatchingUserAsMineWhenNicknamesAreDuplicated() {
+        Integer myUserId = 200;
+        Authentication authentication = authenticate(myUserId, "same-nickname");
+        CurrentSeasonTopRankingsResponse cachedResponse = new CurrentSeasonTopRankingsResponse(
+                3L,
+                List.of(
+                        new CurrentSeasonTopRankingItemResponse(
+                                1,
+                                100,
+                                "same-nickname",
+                                "store-100",
+                                new BigDecimal("30.0"),
+                                300_000L,
+                                30,
+                                false
+                        ),
+                        new CurrentSeasonTopRankingItemResponse(
+                                2,
+                                200,
+                                "same-nickname",
+                                "store-200",
+                                new BigDecimal("20.0"),
+                                200_000L,
+                                20,
+                                false
+                        )
+                ),
+                "2026-03-13T15:00:00"
+        );
+
+        when(seasonRankingRedisRepository.findCurrentTopRankings()).thenReturn(Optional.of(cachedResponse));
+
+        CurrentSeasonTopRankingsResponse response = seasonRankingService.getCurrentTopRankings(authentication);
+
+        assertFalse(response.rankings().get(0).isMine());
+        assertTrue(response.rankings().get(1).isMine());
+        assertEquals(1, response.rankings().stream().filter(ranking -> Boolean.TRUE.equals(ranking.isMine())).count());
     }
 
     @Test
@@ -126,7 +171,9 @@ class SeasonRankingServiceTests {
         assertFalse(response.myRankings().get(0).isBankrupt());
         assertNull(response.myRankings().get(1).rank());
         assertTrue(response.myRankings().get(1).isBankrupt());
+        assertTrue(response.myRankings().stream().allMatch(ranking -> Boolean.TRUE.equals(ranking.isMine())));
         assertFalse(response.rankings().stream().anyMatch(ranking -> ranking.userId().equals(myUserId)));
+        assertTrue(response.rankings().stream().noneMatch(ranking -> Boolean.TRUE.equals(ranking.isMine())));
     }
 
     @Test
@@ -183,6 +230,7 @@ class SeasonRankingServiceTests {
         assertEquals(8, response.rankings().get(11).rank());
         assertTrue(response.rankings().stream().allMatch(ranking -> ranking.rank() != null && ranking.rank() <= 10));
         assertEquals(13, response.myRankings().get(0).rank());
+        assertTrue(response.myRankings().get(0).isMine());
     }
 
     @Test
@@ -228,6 +276,8 @@ class SeasonRankingServiceTests {
         assertEquals("delta-store", response.rankings().get(4).storeName());
         assertTrue(response.rankings().get(3).isBankrupt());
         assertTrue(response.rankings().get(4).isBankrupt());
+        assertTrue(response.rankings().get(3).isMine());
+        assertFalse(response.rankings().get(4).isMine());
         assertTrue(response.myRankings().isEmpty());
     }
 
@@ -250,6 +300,7 @@ class SeasonRankingServiceTests {
 
         assertEquals(13L, response.seasonId());
         assertEquals(1, response.rankings().size());
+        assertTrue(response.rankings().get(0).isMine());
         assertTrue(response.myRankings().isEmpty());
     }
 
@@ -282,12 +333,13 @@ class SeasonRankingServiceTests {
 
     @Test
     void getCurrentTopRankingsReturnsEmptyWhenTopCacheDoesNotExist() {
+        Authentication authentication = authenticate(77, "me");
         Season season = mock(Season.class);
         when(season.getId()).thenReturn(3L);
         when(seasonRankingRedisRepository.findCurrentTopRankings()).thenReturn(Optional.empty());
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
 
-        CurrentSeasonTopRankingsResponse response = seasonRankingService.getCurrentTopRankings();
+        CurrentSeasonTopRankingsResponse response = seasonRankingService.getCurrentTopRankings(authentication);
 
         assertEquals(3L, response.seasonId());
         assertTrue(response.rankings().isEmpty());
@@ -328,7 +380,8 @@ class SeasonRankingServiceTests {
                     "store-" + rank,
                     BigDecimal.valueOf(100 - rank).setScale(1),
                     rank * 100000L,
-                    rank == 1 ? 30 : rank == 2 ? 20 : rank == 3 ? 10 : 5
+                    rank == 1 ? 30 : rank == 2 ? 20 : rank == 3 ? 10 : 5,
+                    false
             ));
         }
         return rankings;

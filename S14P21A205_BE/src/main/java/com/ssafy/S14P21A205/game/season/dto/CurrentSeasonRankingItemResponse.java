@@ -12,6 +12,7 @@ public record CurrentSeasonRankingItemResponse(
         BigDecimal roi,
         Long totalRevenue,
         Integer rewardPoints,
-        Boolean isBankrupt
+        Boolean isBankrupt,
+        Boolean isMine
 ) {
 }

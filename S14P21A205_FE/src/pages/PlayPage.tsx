@@ -2087,6 +2087,13 @@ function PlayPageSession({
             setLiveSellingPrice(response.newPrice);
             syncDiscountActionState(true);
 
+            completeAction("discount", {
+              alert: {
+                title: "할인 이벤트 적용",
+                description: `${rate}% 할인이 적용되었습니다.`,
+              },
+            });
+
             const [stateResult] = await Promise.allSettled([getGameDayState()]);
 
             if (stateResult.status === "fulfilled") {
@@ -2114,12 +2121,6 @@ function PlayPageSession({
               });
             }
 
-            completeAction("discount", {
-              alert: {
-                title: "할인 이벤트 적용",
-                description: `${rate}% 할인이 적용되었습니다.`,
-              },
-            });
           }}
         />
       )}

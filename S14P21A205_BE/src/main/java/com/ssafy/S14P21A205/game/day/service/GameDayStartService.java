@@ -334,10 +334,9 @@ public class GameDayStartService {
 
     private Integer resolveBaseSellingPrice(Store store, int day) {
         return orderRepository
-                .findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                .findFirstByStore_IdAndOrderedDayLessThanEqualAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
                         store.getId(),
-                        day,
-                        OrderType.NORMAL
+                        day
                 )
                 .map(Order::getSalePrice)
                 .orElseGet(() -> store.getPrice() != null ? store.getPrice() : store.getMenu().getOriginPrice());

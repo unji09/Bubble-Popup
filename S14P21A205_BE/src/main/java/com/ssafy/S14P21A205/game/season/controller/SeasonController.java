@@ -74,7 +74,7 @@ public class SeasonController implements SeasonControllerDoc {
     @Override
     @GetMapping("/seasons/current/rankings/top")
     public ResponseEntity<CurrentSeasonTopRankingsResponse> getCurrentTopRankings(Authentication authentication) {
-        return ResponseEntity.ok(seasonRankingService.getCurrentTopRankings());
+        return ResponseEntity.ok(seasonRankingService.getCurrentTopRankings(authentication));
     }
 
     @Override

@@ -208,10 +208,11 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
-    private Integer resolveMinimumSellingPrice(Menu menu, int menuTrendRank) {
+    private Integer resolveMinimumSellingPrice(Menu menu, int menuTrendRank, BigDecimal ingredientCostMultiplier) {
         return marketRankingPolicy.apply(
                 menu.getOriginPrice(),
-                marketRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank)
+                marketRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
+                ingredientCostMultiplier
         );
     }
 
@@ -222,7 +223,7 @@ public class OrderServiceImpl implements OrderService {
             int menuTrendRank
     ) {
         int costPrice = resolveCostPrice(menu, discountRate, ingredientCostMultiplier, menuTrendRank);
-        int minimumSellingPrice = resolveMinimumSellingPrice(menu, menuTrendRank);
+        int minimumSellingPrice = resolveMinimumSellingPrice(menu, menuTrendRank, ingredientCostMultiplier);
         int recommendedPrice = BigDecimal.valueOf(minimumSellingPrice)
                 .multiply(RECOMMENDED_PRICE_MULTIPLIER)
                 .setScale(0, RoundingMode.HALF_UP)
@@ -248,10 +249,9 @@ public class OrderServiceImpl implements OrderService {
 
     private Integer resolveBaseSellingPrice(Store store, int day) {
         return orderRepository
-                .findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                .findFirstByStore_IdAndOrderedDayLessThanEqualAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
                         store.getId(),
-                        day,
-                        OrderType.NORMAL
+                        day
                 )
                 .map(Order::getSalePrice)
                 .orElseGet(() -> store.getPrice() != null ? store.getPrice() : store.getMenu().getOriginPrice());

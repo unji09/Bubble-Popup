@@ -63,9 +63,28 @@ export interface CurrentSeasonFinalRankingsResponse {
   myRankings: CurrentSeasonRankingItem[];
 }
 
+export interface SeasonDemoSkipRequest {
+  seasonId: number;
+}
+
+export interface SeasonDemoSkipResponse {
+  seasonId: number;
+  status: string;
+  demoPlayableDays: number | null;
+  message: string;
+}
+
 export async function getCurrentSeasonFinalRankings() {
   const { data } = await client.get<CurrentSeasonFinalRankingsResponse>(
     "/api/game/seasons/current/rankings/final",
+  );
+  return data;
+}
+
+export async function reserveSeasonDemoSkip(payload: SeasonDemoSkipRequest) {
+  const { data } = await client.post<SeasonDemoSkipResponse>(
+    "/api/game/seasons/admin/demo-skip",
+    payload,
   );
   return data;
 }

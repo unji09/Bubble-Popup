@@ -33,18 +33,15 @@ public class AiNewsGenerator {
     );
 
     private static final String SYSTEM_PROMPT =
-            "너는 '버블팝업' 팝업스토어 음식게임 전문 기자다. "
-            + "게임 이름은 반드시 '버블팝업'이다. 다른 이름을 만들어내지 마. "
+            "너는 '버블팝업' 팝업스토어 상권 전문 기자다. "
+            + "이 세계에서 점주들이 서울 8개 상권(홍대, 강남, 성수, 여의도, 잠실, 이태원, 명동, 건대입구)에서 팝업 음식 매장을 운영하고 있다. "
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
-            + "제목은 핵심 정보를 담아 독자가 제목만 읽어도 기사 내용을 파악할 수 있게 써. "
-            + "예: 지역명+현상, 메뉴명+변동, 매장명+성과 등 구체적 사실 포함. "
-            + "제목 50자 이내. 본문 150~250자 이내로 짧게. "
-            + "순수 한국어만 사용(영어·한자·아랍어·외국어 절대 금지). "
-            + "숫자 직접 쓰지 말고 간접 표현. 괄호·이모지·따옴표 금지. "
-            + "마크다운 금지(**, *, #, ```, - 등 절대 쓰지 마). "
-            + "백슬래시 사용 금지. 줄바꿈 넣지 마. "
-            + "짧은 문장 위주, 자연스럽고 읽기 쉬운 한국어로 써. "
-            + "가상의 인물명·매장명·브랜드명을 만들어내지 마.";
+            + "제목: 핵심 정보를 담아 50자 이내로 써. 지역명, 메뉴명, 매장명 등 구체적 사실 포함. "
+            + "본문: 300~500자로 풍부하게 써. 현장감 있는 묘사, 관계자 코멘트, 분위기 전달을 포함해. "
+            + "순수 한국어만 사용. 영어, 외국어, 아랍어 절대 금지. "
+            + "마크다운 금지. 이모지 금지. 줄바꿈 넣지 마. "
+            + "가상의 인물명이나 브랜드명을 만들지 마. 관계자, 점주, 단골 등 일반 호칭만 사용해. "
+            + "'게임'이라는 단어를 절대 쓰지 마. 이 세계는 실제 상권이다.";
 
     private final RestClient restClient;
     private final String model;
@@ -57,7 +54,7 @@ public class AiNewsGenerator {
         log.info("GMS AI base-url={}, model={}", baseUrl, model);
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
-        factory.setReadTimeout(Duration.ofSeconds(15));
+        factory.setReadTimeout(Duration.ofSeconds(30));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
@@ -78,7 +75,10 @@ public class AiNewsGenerator {
                 .mapToObj(i -> (i + 1) + "위 " + rankedMenus.get(i).menuName())
                 .collect(Collectors.joining(", "));
 
-        String prompt = "인기메뉴: %s. 순위 직접 언급 말고 인기도 간접 표현. 상위 메뉴 모두 언급. 제목에 인기 메뉴명과 트렌드 포함. 스타일: %s"
+        String prompt = ("현재 버블팝업 상권 인기 메뉴 순위: %s. "
+                + "순위를 숫자로 직접 말하지 말고, 거리 풍경이나 줄 서는 모습 등으로 인기도를 간접 표현해. "
+                + "상위 메뉴들을 모두 자연스럽게 언급하되, 각 메뉴의 맛이나 분위기를 오감으로 묘사해. "
+                + "제목에 가장 인기 있는 메뉴명을 포함해. 스타일: %s")
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -105,7 +105,11 @@ public class AiNewsGenerator {
                 .map(item -> item.get("name") + " " + item.get("storeCount") + "개")
                 .collect(Collectors.joining(", "));
 
-        String prompt = "메뉴별 매장수: %s. 많은 메뉴는 원재료비 상승, 적은 메뉴는 틈새 기회. 상위·하위 대비. 제목에 1위 메뉴명과 매장 동향 포함. 스타일: %s"
+        String prompt = ("메뉴별 매장 현황: %s. "
+                + "매장이 많은 메뉴는 경쟁 과열과 원재료 수급 부담을, 적은 메뉴는 틈새시장 기회를 의미한다. "
+                + "도매시장 분위기, 유통 관계자의 반응 등 현장감 있게 묘사해. "
+                + "상위 메뉴와 하위 메뉴를 대비시켜 긴장감을 줘. "
+                + "제목에 가장 매장이 많은 메뉴명을 포함해. 스타일: %s")
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -127,7 +131,11 @@ public class AiNewsGenerator {
                 .map(item -> item.get("name") + " " + item.get("storeCount") + "개")
                 .collect(Collectors.joining(", "));
 
-        String prompt = "지역별 매장수: %s. 밀집 지역은 임대료 폭등, 한산한 지역은 안정. 상위·하위 대비. 제목에 1위 지역명과 입점 현황 포함. 스타일: %s"
+        String prompt = ("지역별 매장 현황: %s. "
+                + "매장이 밀집된 지역은 임대료 급등과 경쟁 과열을, 한산한 지역은 안정적 운영 환경을 의미한다. "
+                + "부동산 중개업소 분위기, 점주들의 반응 등 현장감 있게 묘사해. "
+                + "상위 지역과 하위 지역을 대비시켜. "
+                + "제목에 가장 매장이 많은 지역명을 포함해. 스타일: %s")
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -150,10 +158,16 @@ public class AiNewsGenerator {
 
         String prompt;
         if (locationName != null && !locationName.isEmpty()) {
-            prompt = "내일 %s에서 '%s' 축제. 축제지역·명칭 언급, 유동인구·매출 기대감. 스타일: %s"
+            prompt = ("내일 %s에서 %s 행사가 열린다. "
+                    + "축제 지역과 명칭을 자연스럽게 언급하고, 준비하는 점주들의 설렘과 기대감을 묘사해. "
+                    + "유동인구 증가로 인한 매출 기대, 주변 상권 분위기 변화를 현장감 있게 전달해. "
+                    + "스타일: %s")
                     .formatted(locationName, festivalName, style);
         } else {
-            prompt = "내일 '%s' 축제. 축제명 언급, 유동인구·매출 기대감. 스타일: %s"
+            prompt = ("내일 %s 행사가 열린다. "
+                    + "축제명을 자연스럽게 언급하고, 점주들의 설렘과 기대감을 묘사해. "
+                    + "유동인구 증가로 인한 매출 기대를 현장감 있게 전달해. "
+                    + "스타일: %s")
                     .formatted(festivalName, style);
         }
         try {
@@ -172,8 +186,11 @@ public class AiNewsGenerator {
     public NewsGenerationResult generateTopStoreNews(long seasonId, int day, String storeName, String menuName,
             int revenue, int salesCount) {
         String style = getRandomStyle();
-        String prompt = "매출1위: %s(%s), 매출%d원, %d개. 사장님 인터뷰 포함. 제목에 매장명과 매출 1위 사실 포함. 스타일: %s"
-                .formatted(storeName, menuName, revenue, salesCount, style);
+        String prompt = ("오늘의 매출 왕은 %s 매장이다. 판매 메뉴는 %s이고 엄청난 매출과 판매량을 기록했다. "
+                + "매장 앞 긴 줄, 분주한 주방, 사장님의 소감 등을 현장감 있게 묘사해. "
+                + "인근 점주들의 반응도 포함해. "
+                + "제목에 매장명을 포함해. 스타일: %s")
+                .formatted(storeName, menuName, style);
         try {
             return callAi(prompt);
         } catch (Exception e) {
@@ -190,8 +207,11 @@ public class AiNewsGenerator {
     public NewsGenerationResult generateCumulativeSalesNews(long seasonId, int day, String storeName, String menuName,
             long totalSales, int milestone) {
         String style = getRandomStyle();
-        String prompt = "%s 매장 %s 누적%d개(마일스톤:%d개). 단골 코멘트 포함. 제목에 매장명과 판매 마일스톤 포함. 스타일: %s"
-                .formatted(storeName, menuName, totalSales, milestone, style);
+        String prompt = ("%s 매장이 %s 누적 판매로 놀라운 기록을 세웠다. "
+                + "꾸준히 찾아오는 단골들의 반응, 매장 분위기, 사장님의 소감 등을 묘사해. "
+                + "같은 메뉴를 파는 인근 매장들의 반응도 포함해. "
+                + "제목에 매장명과 판매 기록 달성 사실을 포함해. 스타일: %s")
+                .formatted(storeName, menuName, style);
         try {
             return callAi(prompt);
         } catch (Exception e) {
@@ -214,7 +234,10 @@ public class AiNewsGenerator {
                 })
                 .collect(Collectors.joining(", "));
 
-        String prompt = "지역별 매장이동: %s(+유입,-유출). 유입=경쟁심화, 유출=기회. 제목에 이동이 큰 지역명과 변화 방향 포함. 스타일: %s"
+        String prompt = ("지역별 매장 이동 현황: %s (양수는 유입, 음수는 유출). "
+                + "유입이 많은 지역은 경쟁이 치열해지고, 유출이 많은 지역은 새로운 기회가 생긴다. "
+                + "이사하는 점주들의 심경, 남아있는 점주들의 반응 등을 현장감 있게 묘사해. "
+                + "제목에 변화가 가장 큰 지역명을 포함해. 스타일: %s")
                 .formatted(changesText, style);
         try {
             return callAi(prompt);
@@ -231,7 +254,10 @@ public class AiNewsGenerator {
 
     public NewsGenerationResult generateIntroNews(long seasonId) {
         String style = getRandomStyle();
-        String prompt = "버블팝업 팝업스토어 주간 개막. 홍대·강남·성수·여의도·잠실·이태원·명동·건대입구 8곳 상권. 경쟁과 설렘 분위기. 스타일: %s"
+        String prompt = ("버블팝업 팝업스토어 주간이 드디어 개막한다. "
+                + "서울 8개 상권(홍대, 강남, 성수, 여의도, 잠실, 이태원, 명동, 건대입구)에 야심 찬 점주들이 모여든다. "
+                + "각 상권의 특색, 점주들의 설렘과 긴장감, 거리에 풍기는 음식 냄새 등을 생생하게 묘사해. "
+                + "이번 시즌의 치열한 경쟁을 예고하는 분위기를 전달해. 스타일: %s")
                 .formatted(style);
         try {
             return callAi(prompt);
@@ -364,7 +390,7 @@ public class AiNewsGenerator {
     private NewsGenerationResult callAi(String promptText) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", model);
-        requestBody.put("max_tokens", 350);
+        requestBody.put("max_tokens", 700);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", SYSTEM_PROMPT),
                 Map.of("role", "user", "content", promptText)));

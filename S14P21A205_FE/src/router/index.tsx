@@ -16,6 +16,7 @@ import CozyPrepPage from "../pages/CozyPrepPage";
 import WaitingPage from "../pages/WaitingPage";
 import AuthCallbackPage from "../pages/AuthCallbackPage";
 import BadRequestPage from "../pages/BadRequestPage";
+import AdminDemoSkipPage from "../pages/AdminDemoSkipPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
 import InternalServerErrorPage from "../pages/InternalServerErrorPage";
 import NotFoundPage from "../pages/NotFoundPage";
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: "/auth/callback", element: <AuthCallbackPage /> },
       { path: "/news", element: <NewsPage /> },
       { path: "/cozy/prep", element: <CozyPrepPage /> },
+      { path: "/admin/demo-skip", element: <AdminDemoSkipPage /> },
       { path: "/403", element: <ForbiddenPage /> },
       {
         element: <PrivateRoute />,

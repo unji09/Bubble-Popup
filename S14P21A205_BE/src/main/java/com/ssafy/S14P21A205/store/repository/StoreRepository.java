@@ -11,34 +11,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface StoreRepository extends JpaRepository<Store, Long> {
 
-    // For in-progress seasons, a bankrupt store is treated as already eliminated.
-    @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
-    @Query("""
-            select s
-            from Store s
-            where s.user.id = :userId
-              and s.season.status = :seasonStatus
-              and (
-                    :seasonStatus <> com.ssafy.S14P21A205.game.season.entity.SeasonStatus.IN_PROGRESS
-                    or not exists (
-                        select 1
-                        from DailyReport report
-                        where report.store = s
-                          and report.day = (
-                                select max(latest.day)
-                                from DailyReport latest
-                                where latest.store = s
-                          )
-                          and report.isBankrupt = true
-                    )
-              )
-            order by s.id desc
-            """)
-    Optional<Store> findFirstByUser_IdAndSeasonStatusOrderByIdDesc(
-            @Param("userId") Integer userId,
-            @Param("seasonStatus") SeasonStatus seasonStatus
-    );
-
     // Reuse the same active-store rule for list queries used by gameplay services.
     @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
     @Query("""
@@ -67,6 +39,10 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
             @Param("seasonStatus") SeasonStatus seasonStatus
     );
 
+    default Optional<Store> findFirstByUser_IdAndSeasonStatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus) {
+        return findActiveStoresByUserIdAndSeasonStatusOrderByIdDesc(userId, seasonStatus).stream().findFirst();
+    }
+
     // Report view may still need the in-progress store even after it has gone bankrupt.
     @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
     Optional<Store> findFirstByUser_IdAndSeason_StatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus);
@@ -83,10 +59,17 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
               and s.season.status = :seasonStatus
             order by s.id desc
             """)
-    Optional<Store> findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(
+    List<Store> findStoresIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(
             @Param("userId") Integer userId,
             @Param("seasonStatus") SeasonStatus seasonStatus
     );
+
+    default Optional<Store> findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(
+            Integer userId,
+            SeasonStatus seasonStatus
+    ) {
+        return findStoresIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(userId, seasonStatus).stream().findFirst();
+    }
 
     boolean existsByUser_IdAndSeason_Id(Integer userId, Long seasonId);
 
@@ -160,10 +143,6 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
             @Param("seasonId") Long seasonId,
             @Param("menuId") Long menuId
     );
-
-    default Optional<Store> findFirstActiveByUser_IdAndSeasonStatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus) {
-        return findActiveStoresByUserIdAndSeasonStatusOrderByIdDesc(userId, seasonStatus).stream().findFirst();
-    }
 
     @Query("""
             SELECT s.menu.menuName, COUNT(s)

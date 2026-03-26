@@ -137,8 +137,7 @@ class GameDayStartServiceTests {
                 .when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(any(), eq(OrderType.EMERGENCY)))
                 .thenReturn(List.of());
         org.mockito.Mockito.lenient()
-                .when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
-                        any(),
+                .when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
                         any(),
                         any()
                 ))
@@ -387,10 +386,9 @@ class GameDayStartServiceTests {
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
         when(orderRepository.findDailyStartOrders(15L, 2)).thenReturn(List.of());
-        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
                 15L,
-                2,
-                OrderType.NORMAL
+                2
         )).thenReturn(Optional.of(latestRegularOrder));
         when(valueOperations.get("season:9:weather:day:2")).thenReturn(
                 """

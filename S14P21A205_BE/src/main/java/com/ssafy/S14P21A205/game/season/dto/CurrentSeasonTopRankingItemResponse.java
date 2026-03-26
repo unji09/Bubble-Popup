@@ -9,6 +9,7 @@ public record CurrentSeasonTopRankingItemResponse(
         String storeName,
         BigDecimal roi,
         Long totalRevenue,
-        Integer rewardPoints
+        Integer rewardPoints,
+        Boolean isMine
 ) {
 }

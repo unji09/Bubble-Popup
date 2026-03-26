@@ -42,11 +42,12 @@ public class SeasonRankingService {
     private final UserService userService;
     private final Clock clock;
 
-    public CurrentSeasonTopRankingsResponse getCurrentTopRankings() {
+    public CurrentSeasonTopRankingsResponse getCurrentTopRankings(Authentication authentication) {
+        Integer userId = userService.getCurrentUser(authentication).getId();
         CurrentSeasonTopRankingsResponse cachedResponse = seasonRankingRedisRepository.findCurrentTopRankings()
                 .orElseGet(this::buildEmptyCurrentTopRankingsResponse);
 
-        List<CurrentSeasonTopRankingItemResponse> rankings = normalizeTopRankings(cachedResponse.rankings())
+        List<CurrentSeasonTopRankingItemResponse> rankings = normalizeTopRankings(cachedResponse.rankings(), userId)
                 .stream()
                 .limit(10)
                 .toList();
@@ -70,7 +71,7 @@ public class SeasonRankingService {
         List<RankingView> allRankings = seasonRankingRecordRepository
                 .findByStore_Season_IdOrderByFinalRankAsc(season.getId())
                 .stream()
-                .map(record -> toRankingView(record, bankruptcyDays.get(record.getStore().getId())))
+                .map(record -> toRankingView(record, bankruptcyDays.get(record.getStore().getId()), userId))
                 .sorted(rankingViewComparator())
                 .toList();
         if (allRankings.isEmpty()) {
@@ -117,7 +118,10 @@ public class SeasonRankingService {
         throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
-    private List<CurrentSeasonTopRankingItemResponse> normalizeTopRankings(List<CurrentSeasonTopRankingItemResponse> rankings) {
+    private List<CurrentSeasonTopRankingItemResponse> normalizeTopRankings(
+            List<CurrentSeasonTopRankingItemResponse> rankings,
+            Integer userId
+    ) {
         if (rankings == null || rankings.isEmpty()) {
             return List.of();
         }
@@ -125,6 +129,7 @@ public class SeasonRankingService {
         return rankings.stream()
                 .filter(ranking -> ranking != null && ranking.rank() != null && ranking.userId() != null)
                 .sorted(Comparator.comparing(CurrentSeasonTopRankingItemResponse::rank))
+                .map(ranking -> withMine(ranking, ranking.userId().equals(userId)))
                 .toList();
     }
 
@@ -135,7 +140,7 @@ public class SeasonRankingService {
         return new CurrentSeasonTopRankingsResponse(seasonId, List.of(), null);
     }
 
-    private RankingView toRankingView(SeasonRankingRecord record, Integer bankruptcyDay) {
+    private RankingView toRankingView(SeasonRankingRecord record, Integer bankruptcyDay, Integer userId) {
         CurrentSeasonRankingItemResponse item = new CurrentSeasonRankingItemResponse(
                 Boolean.TRUE.equals(record.getIsBankruptcy()) ? null : record.getFinalRank(),
                 record.getStore().getUser().getId(),
@@ -146,7 +151,8 @@ public class SeasonRankingService {
                 normalizeRoi(record.getRoi()),
                 valueOf(record.getTotalRevenue()),
                 record.getRewardPoints(),
-                record.getIsBankruptcy()
+                record.getIsBankruptcy(),
+                record.getStore().getUser().getId().equals(userId)
         );
         return new RankingView(
                 record.getStore().getId(),
@@ -209,6 +215,19 @@ public class SeasonRankingService {
             }
         }
         return displayedStoreIds;
+    }
+
+    private CurrentSeasonTopRankingItemResponse withMine(CurrentSeasonTopRankingItemResponse ranking, boolean isMine) {
+        return new CurrentSeasonTopRankingItemResponse(
+                ranking.rank(),
+                ranking.userId(),
+                ranking.nickname(),
+                ranking.storeName(),
+                ranking.roi(),
+                ranking.totalRevenue(),
+                ranking.rewardPoints(),
+                isMine
+        );
     }
 
     private Comparator<RankingView> rankingViewComparator() {
