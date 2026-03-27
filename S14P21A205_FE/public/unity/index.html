@@ -11,9 +11,48 @@
 <div id="unity-container" class="unity-desktop">
     <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
     <div id="unity-loading-bar">
-        <div id="unity-logo"></div>
-        <div id="unity-progress-bar-empty">
-            <div id="unity-progress-bar-full"></div>
+        <div class="site-dust dust-1"></div>
+        <div class="site-dust dust-2"></div>
+        <div class="site-dust dust-3"></div>
+        <div class="site-dust dust-4"></div>
+        <div class="site-panel">
+            <div class="site-badge">POP-UP STORE SETUP</div>
+            <div class="site-title">팝업스토어 준비 중</div>
+            <div class="site-subtitle">현장을 환하게 정리하고 손님 맞을 준비를 하고 있어요.</div>
+
+            <div class="site-illustration" aria-hidden="true">
+                <div class="site-crane">
+                    <div class="site-crane-arm"></div>
+                    <div class="site-crane-hook"></div>
+                </div>
+                <div class="site-store-shell">
+                    <div class="site-awning"></div>
+                    <div class="site-window window-left"></div>
+                    <div class="site-window window-right"></div>
+                    <div class="site-door"></div>
+                </div>
+                <div class="site-worker worker-left">
+                    <div class="worker-helmet"></div>
+                    <div class="worker-body"></div>
+                </div>
+                <div class="site-worker worker-right">
+                    <div class="worker-helmet"></div>
+                    <div class="worker-body"></div>
+                </div>
+                <div class="site-dust-puff puff-1"></div>
+                <div class="site-dust-puff puff-2"></div>
+                <div class="site-dust-puff puff-3"></div>
+            </div>
+
+            <div id="unity-loading-message" class="site-message">인테리어 공사 중... 조명을 하나씩 켜고 있어요.</div>
+
+            <div class="site-progress-meta">
+                <span>오픈 준비율</span>
+                <span id="unity-progress-label">0%</span>
+            </div>
+            <div id="unity-progress-bar-empty">
+                <div id="unity-progress-bar-full"></div>
+            </div>
         </div>
     </div>
     <div id="unity-warning"> </div>
@@ -85,6 +124,32 @@
     }
     var unityInstanceRef = null;
     var messageQueue = [];
+    var loadingMessages = [
+        "인테리어 공사 중... 조명을 하나씩 켜고 있어요.",
+        "간판 설치 중... 멀리서도 잘 보이게 다듬는 중이에요.",
+        "진열대 정리 중... 메뉴가 더 맛있어 보이게 배치하고 있어요.",
+        "바닥 먼지 청소 중... 손님 동선까지 꼼꼼하게 손보고 있어요.",
+        "포토존 세팅 중... 들어오자마자 눈에 띄게 꾸미는 중이에요.",
+        "시식 동선 점검 중... 첫 손님이 바로 즐길 수 있게 맞추고 있어요."
+    ];
+    var loadingMessageIndex = 0;
+    var loadingMessageTimer = null;
+    var loadingMessageElement = document.querySelector("#unity-loading-message");
+    function startLoadingMessages() {
+        if (!loadingMessageElement) return;
+        loadingMessageElement.textContent = loadingMessages[0];
+        if (loadingMessageTimer) clearInterval(loadingMessageTimer);
+        loadingMessageTimer = setInterval(function() {
+            loadingMessageIndex = (loadingMessageIndex + 1) % loadingMessages.length;
+            loadingMessageElement.textContent = loadingMessages[loadingMessageIndex];
+        }, 2200);
+    }
+    function stopLoadingMessages() {
+        if (loadingMessageTimer) {
+            clearInterval(loadingMessageTimer);
+            loadingMessageTimer = null;
+        }
+    }
     function handleUnityMessage(method, payload) {
         console.log("[WebGLBridge] SendMessage:", method, payload);
         unityInstanceRef.SendMessage("WebGLBridge", method, payload);
@@ -150,14 +215,17 @@
         canvas.style.height = "100%";
     }
     document.querySelector("#unity-loading-bar").style.display = "block";
+    startLoadingMessages();
     canvas.style.visibility = "hidden";
     var script = document.createElement("script");
     script.src = loaderUrl;
     script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
             document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
+            document.querySelector("#unity-progress-label").textContent = Math.round(progress * 100) + "%";
         }).then((unityInstance) => {
             unityInstanceRef = unityInstance;
+            stopLoadingMessages();
             document.querySelector("#unity-loading-bar").style.display = "none";
             canvas.style.visibility = "hidden";
             window.unityApp.instance = unityInstance;
@@ -183,6 +251,7 @@
                 parent.postMessage({ type: "unity-ready" }, "*");
             }, 3000);
         }).catch((message) => {
+            stopLoadingMessages();
             alert(message);
         });
     };

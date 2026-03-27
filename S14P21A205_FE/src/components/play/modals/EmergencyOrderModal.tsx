@@ -53,10 +53,6 @@ function resolveInitialMenuIndex(menuItems: EmergencyMenuItem[], currentMenuId: 
   return currentMenuIndex >= 0 ? currentMenuIndex : 0;
 }
 
-function roundToHundreds(value: number) {
-  return Math.round(value / 100) * 100;
-}
-
 function clampPrice(price: number, min: number, max: number) {
   return Math.min(Math.max(price, min), max);
 }
