@@ -11,6 +11,10 @@ public class CaptureRatePolicy {
     private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
 
+    public BigDecimal defaultCaptureRate() {
+        return normalizeCaptureRate(BASE_CAPTURE_RATE);
+    }
+
     public BigDecimal resolveStartingCaptureRate(BigDecimal... multipliers) {
         BigDecimal captureRate = BASE_CAPTURE_RATE;
         if (multipliers == null) {

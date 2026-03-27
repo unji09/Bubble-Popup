@@ -530,7 +530,7 @@ public class ActionServiceImpl implements ActionService {
                 ? state.captureRate()
                 : state.startResponse() != null && state.startResponse().captureRate() != null
                 ? state.startResponse().captureRate()
-                : BigDecimal.ZERO;
+                : captureRatePolicy.defaultCaptureRate();
         return captureRatePolicy.applyMultiplier(currentRate, multiplier);
     }
 

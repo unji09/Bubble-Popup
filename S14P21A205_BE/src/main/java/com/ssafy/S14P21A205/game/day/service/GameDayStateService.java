@@ -665,7 +665,7 @@ public class GameDayStateService {
         if (state.startResponse() != null && state.startResponse().captureRate() != null) {
             return captureRatePolicy.normalizeCaptureRate(state.startResponse().captureRate());
         }
-        return captureRatePolicy.normalizeCaptureRate(BigDecimal.ZERO);
+        return captureRatePolicy.defaultCaptureRate();
     }
 
     private PopulationPolicy.PopulationSnapshot resolvePopulationSnapshot(

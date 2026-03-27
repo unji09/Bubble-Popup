@@ -474,7 +474,7 @@ public class GameDayReportService {
         if (state.startResponse() != null && state.startResponse().captureRate() != null) {
             return captureRatePolicy.normalizeCaptureRate(state.startResponse().captureRate());
         }
-        return captureRatePolicy.normalizeCaptureRate(java.math.BigDecimal.ZERO);
+        return captureRatePolicy.defaultCaptureRate();
     }
 
     private int safeToInt(long value) {
