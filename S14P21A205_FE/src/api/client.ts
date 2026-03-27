@@ -1,4 +1,8 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
+import axios, {
+  type AxiosError,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from "axios";
 import { refreshAccessToken } from "./auth";
 import { clearAuthSession } from "../hooks/useAuth";
 import {
@@ -8,6 +12,15 @@ import {
 } from "../stores/useAppNoticeStore";
 
 export const GAME_EXIT_CODES = new Set(["STORE-001", "GAME-003"]);
+
+export interface AppRequestConfig extends AxiosRequestConfig {
+  suppressGlobalErrorHandling?: boolean;
+}
+
+type AppInternalAxiosRequestConfig = InternalAxiosRequestConfig &
+  AppRequestConfig & {
+    _retried?: boolean;
+  };
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -45,6 +58,10 @@ function showServerIssue() {
   useAppNoticeStore.getState().showServerNotice(SERVER_ISSUE_NOTICE);
 }
 
+function shouldSuppressGlobalErrorHandling(config?: AppRequestConfig | null) {
+  return config?.suppressGlobalErrorHandling === true;
+}
+
 function handleExpiredSession() {
   clearAuthSession();
   useAppNoticeStore.getState().clearServerNotice();
@@ -65,11 +82,13 @@ function handleExpiredSession() {
 client.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
+    const originalRequest = error.config as AppInternalAxiosRequestConfig | undefined;
     const status = error.response?.status;
 
     if (status === 500 || status === 503 || (status == null && error.request)) {
-      showServerIssue();
+      if (!shouldSuppressGlobalErrorHandling(originalRequest)) {
+        showServerIssue();
+      }
       return Promise.reject(error);
     }
 
@@ -78,7 +97,9 @@ client.interceptors.response.use(
     }
 
     if (!originalRequest || originalRequest._retried) {
-      handleExpiredSession();
+      if (!shouldSuppressGlobalErrorHandling(originalRequest)) {
+        handleExpiredSession();
+      }
       return Promise.reject(error);
     }
 
@@ -104,6 +125,10 @@ client.interceptors.response.use(
       return client(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null);
+
+      if (shouldSuppressGlobalErrorHandling(originalRequest)) {
+        return Promise.reject(refreshError);
+      }
 
       if (axios.isAxiosError(refreshError)) {
         const refreshStatus = refreshError.response?.status;

@@ -13,6 +13,7 @@ export function clearAuthSession() {
   localStorage.removeItem("profileNickname");
   useAppNoticeStore.getState().clearServerNotice();
   useAppNoticeStore.getState().clearAuthNotice();
+  useAppNoticeStore.getState().clearFlashNotice();
   useGameStore.getState().clearGame();
   useGameStore.getState().clearBankruptNotice();
   useUserStore.getState().clearUser();

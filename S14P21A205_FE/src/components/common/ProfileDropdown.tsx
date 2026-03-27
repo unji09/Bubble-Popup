@@ -12,6 +12,8 @@ export default function ProfileDropdown({ nickname = "Owner" }: ProfileDropdownP
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const role = useUserStore((state) => state.role);
+  const isAdmin = role === "ADMIN";
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -46,6 +48,18 @@ export default function ProfileDropdown({ nickname = "Owner" }: ProfileDropdownP
 
       {open && (
         <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-premium border border-slate-100 py-2 z-50 animate-[fadeIn_0.15s_ease-out]">
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => { setOpen(false); navigate("/admin/demo-skip"); }}
+                className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+              >
+                <span className="material-symbols-outlined text-slate-400 text-lg">shield_person</span>
+                관리자 페이지
+              </button>
+              <div className="h-px bg-slate-100 mx-3" />
+            </>
+          )}
           <button
             onClick={() => { setOpen(false); navigate("/mypage"); }}
             className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"

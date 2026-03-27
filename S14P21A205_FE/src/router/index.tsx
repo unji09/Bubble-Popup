@@ -32,8 +32,13 @@ const router = createBrowserRouter([
       { path: "/auth/callback", element: <AuthCallbackPage /> },
       { path: "/news", element: <NewsPage /> },
       { path: "/cozy/prep", element: <CozyPrepPage /> },
-      { path: "/admin/demo-skip", element: <AdminDemoSkipPage /> },
       { path: "/403", element: <ForbiddenPage /> },
+      {
+        element: <PrivateRoute requiredRole="ADMIN" unauthorizedRedirectTo="/" />,
+        children: [
+          { path: "/admin/demo-skip", element: <AdminDemoSkipPage /> },
+        ],
+      },
       {
         element: <PrivateRoute />,
         children: [

@@ -567,8 +567,6 @@ class GameDayReportServiceTests {
                 .thenReturn(Optional.empty());
         when(storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.empty());
-        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.FINISHED))
-                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> gameDayReportService.getDayReport(mock(Authentication.class), 1))
                 .isInstanceOf(BaseException.class)

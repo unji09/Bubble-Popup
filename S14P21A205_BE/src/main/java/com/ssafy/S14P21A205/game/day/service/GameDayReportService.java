@@ -292,9 +292,7 @@ public class GameDayReportService {
             return bankruptInProgressStore.get();
         }
 
-        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.FINISHED)
-                .map(this::applyPendingLocationIfDue)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_PARTICIPATING));
+        throw new BaseException(ErrorCode.NOT_PARTICIPATING);
     }
 
     private Store applyPendingLocationIfDue(Store store) {

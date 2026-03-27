@@ -94,6 +94,14 @@ export function setStoredSelectedDashboardItems(items: DashboardSelectedItem[]) 
   return items;
 }
 
+export function clearStoredSelectedDashboardItems() {
+  try {
+    localStorage.removeItem(DASHBOARD_SELECTED_ITEMS_STORAGE_KEY);
+  } catch {
+    // Ignore storage write failures and keep the in-memory state.
+  }
+}
+
 export function hydrateSelectedDashboardItems(
   selectedIds: number[],
   allItems: DashboardSelectedItem[],

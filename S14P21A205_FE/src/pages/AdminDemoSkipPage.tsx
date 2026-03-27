@@ -114,8 +114,8 @@ export default function AdminDemoSkipPage() {
                 시연용 3일 게임 만들기
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-                시즌 시작 전 특정 시즌에 데모 스킵 예약을 생성합니다. 페이지
-                접근은 열어두고, 실제 권한 검증은 서버에서 처리합니다.
+                시즌 시작 전 특정 시즌에 데모 스킵 예약을 생성합니다. 이 페이지는
+                관리자 계정으로 로그인한 경우에만 접근할 수 있습니다.
               </p>
             </div>
           </div>

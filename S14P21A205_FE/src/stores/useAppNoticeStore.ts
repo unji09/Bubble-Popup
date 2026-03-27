@@ -42,15 +42,19 @@ function persistAuthNotice(message: string | null) {
 interface AppNoticeState {
   authNotice: string | null;
   serverNotice: string | null;
+  flashNotice: string | null;
   showAuthNotice: (message?: string) => void;
   clearAuthNotice: () => void;
   showServerNotice: (message?: string) => void;
   clearServerNotice: () => void;
+  showFlashNotice: (message: string) => void;
+  clearFlashNotice: () => void;
 }
 
 export const useAppNoticeStore = create<AppNoticeState>((set) => ({
   authNotice: readPersistedAuthNotice(),
   serverNotice: null,
+  flashNotice: null,
 
   showAuthNotice: (message = AUTH_EXPIRED_NOTICE) => {
     persistAuthNotice(message);
@@ -68,5 +72,13 @@ export const useAppNoticeStore = create<AppNoticeState>((set) => ({
 
   clearServerNotice: () => {
     set({ serverNotice: null });
+  },
+
+  showFlashNotice: (message) => {
+    set({ flashNotice: message });
+  },
+
+  clearFlashNotice: () => {
+    set({ flashNotice: null });
   },
 }));

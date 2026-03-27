@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import type { GameGuardContext } from "../router/GameGuard";
 import { getGameWaitingStatus, getSeasonTime, joinCurrentSeason, type GameWaitingResponse } from "../api/game";
+import { purchaseItems } from "../api/shop";
 import { getLocationList } from "../api/store";
 import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
 import CountdownTimer from "../components/common/CountdownTimer";
@@ -11,13 +12,16 @@ import SeoulMap3D from "../components/game/SeoulMap3D";
 import { seoulDistricts } from "../components/game/seoulDistricts";
 import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
 import { clearStoredBrandName, setStoredBrandName } from "../hooks/useBrandName";
+import { useAppNoticeStore } from "../stores/useAppNoticeStore";
 import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
 import { clearSeasonJoinIntent } from "../utils/seasonJoinIntent";
 import {
   applyDiscount,
+  clearStoredSelectedDashboardItems,
   getSelectedDiscountMultiplier,
   getSelectedDiscountPercent,
+  getStoredSelectedDashboardItemIds,
   getStoredSelectedDashboardItems,
 } from "../utils/dashboardItems";
 
@@ -31,6 +35,8 @@ const DEFAULT_PREP_DAY = 1;
 const INITIAL_CAPITAL = 5_000_000;
 const MIDSEASON_CUTOFF_DAY = 6;
 const BRAND_NAME_MAX_LENGTH = 10;
+const PURCHASE_FAILURE_NOTICE =
+  "매장은 생성되었지만 아이템 구매에 실패했습니다. 포인트는 차감되지 않았습니다.";
 
 type SelectionMode = "opening_window" | "midseason";
 
@@ -183,6 +189,8 @@ export default function LocationSelectPage() {
   const [serverLocations, setServerLocations] = useState<Array<{locationId: number; locationName: string; rent: number; interiorCost: number; discount: number}>>([]);
   const [trafficRanking, setTrafficRanking] = useState<AreaRankingItemResponse[]>([]);
   const navigate = useNavigate();
+  const showFlashNotice = useAppNoticeStore((state) => state.showFlashNotice);
+  const clearFlashNotice = useAppNoticeStore((state) => state.clearFlashNotice);
 
   // --- 서버 시간 동기화 ---
   const resyncDeadline = useCallback(async () => {
@@ -350,6 +358,7 @@ export default function LocationSelectPage() {
 
     setJoinError(null);
     setIsJoining(true);
+    clearFlashNotice();
     setStoredBrandName(normalizedBrandName);
 
     try {
@@ -362,6 +371,16 @@ export default function LocationSelectPage() {
       // join 응답의 playableFromDay를 store에 저장 (GameGuard에서 참조)
       useGameStore.getState().setPlayableFromDay(joinResponse.playableFromDay);
       useGameStore.getState().setCurrentLocationName(selectedDistrict.name);
+      const selectedItemIds = getStoredSelectedDashboardItemIds();
+      if (selectedItemIds.length > 0) {
+        try {
+          await purchaseItems({ itemId: selectedItemIds });
+          clearStoredSelectedDashboardItems();
+          clearFlashNotice();
+        } catch {
+          showFlashNotice(PURCHASE_FAILURE_NOTICE);
+        }
+      }
       const nextPrepPath = `/game/${joinResponse.playableFromDay ?? DEFAULT_PREP_DAY}/prep`;
       const remainingSelectionSeconds = Math.max(
         0,
@@ -369,25 +388,19 @@ export default function LocationSelectPage() {
       );
 
       // playableFromDay가 현재 day보다 크면 대기 필요
-      const latestStatusForCheck = await getGameWaitingStatus();
-      const needsWaiting = joinResponse.playableFromDay > (latestStatusForCheck.currentDay ?? 1);
+      const needsWaiting = joinResponse.playableFromDay > guardContext.day;
 
       if (needsWaiting) {
         clearLocationSelectionDeadline();
 
         // 다음 영업준비까지 남은 시간 계산
-        const secondsUntilNextPrep = getSecondsUntilDayStart(
-          latestStatusForCheck,
-          joinResponse.playableFromDay,
-        );
-
         const waitingState: WaitingRouteState = {
           mode: "next_business_day",
           brandName: normalizedBrandName,
           districtName: selectedDistrict.name,
           nextPath: nextPrepPath,
           targetDay: joinResponse.playableFromDay,
-          endTimestampMs: Date.now() + secondsUntilNextPrep * 1000,
+          endTimestampMs: selectionWindow.endTimestampMs,
         };
 
         navigate("/game/waiting", { state: waitingState });

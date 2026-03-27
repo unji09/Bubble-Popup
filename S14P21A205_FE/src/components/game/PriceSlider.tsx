@@ -14,6 +14,10 @@ interface PriceSliderProps {
   onChange: (price: number) => void;
 }
 
+function clampPrice(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 export default function PriceSlider({
   menuName,
   price,
@@ -32,12 +36,6 @@ export default function PriceSlider({
   const [isFocused, setIsFocused] = useState(false);
   const normalizedStep = Number.isFinite(step) && step > 0 ? step : 1;
   const sliderMaxIndex = Math.max(0, Math.ceil((max - min) / normalizedStep));
-  const sliderValue =
-    sliderMaxIndex === 0
-      ? 0
-      : price >= max
-        ? sliderMaxIndex
-        : Math.max(0, Math.min(sliderMaxIndex, Math.round((price - min) / normalizedStep)));
 
   const toPriceFromSliderIndex = (index: number) => {
     if (sliderMaxIndex === 0) {
@@ -51,12 +49,38 @@ export default function PriceSlider({
     return Math.min(max, min + index * normalizedStep);
   };
 
+  const toSliderIndexFromPrice = (value: number) => {
+    const clampedValue = clampPrice(value, min, max);
+
+    if (sliderMaxIndex === 0) {
+      return 0;
+    }
+
+    if (clampedValue >= max) {
+      return sliderMaxIndex;
+    }
+
+    return Math.max(0, Math.min(sliderMaxIndex, Math.round((clampedValue - min) / normalizedStep)));
+  };
+
+  const normalizePrice = (value: number) => toPriceFromSliderIndex(toSliderIndexFromPrice(value));
+  const normalizedPrice = normalizePrice(price);
+  const normalizedDefaultPrice = normalizePrice(defaultPrice);
+  const sliderValue = toSliderIndexFromPrice(normalizedPrice);
+
   useEffect(() => {
     if (!isFocused) {
-      setInputValue(String(price));
+      setInputValue(String(normalizedPrice));
     }
-  }, [price, isFocused]);
-  const margin = price - discountedCostPrice;
+  }, [normalizedPrice, isFocused]);
+
+  useEffect(() => {
+    if (price !== normalizedPrice) {
+      onChange(normalizedPrice);
+    }
+  }, [price, normalizedPrice, onChange]);
+
+  const margin = normalizedPrice - discountedCostPrice;
   const isProfit = margin > 0;
 
   return (
@@ -91,21 +115,22 @@ export default function PriceSlider({
             <input
               type="text"
               inputMode="numeric"
-              value={isFocused ? inputValue : price.toLocaleString()}
+              value={isFocused ? inputValue : normalizedPrice.toLocaleString()}
               onChange={(event) => {
                 setInputValue(event.target.value.replace(/[^0-9]/g, ""));
               }}
               onFocus={() => {
                 setIsFocused(true);
-                setInputValue(String(price));
+                setInputValue(String(normalizedPrice));
               }}
               onBlur={() => {
                 setIsFocused(false);
                 const value = Number(inputValue);
+
                 if (!Number.isNaN(value) && inputValue !== "") {
-                  onChange(Math.max(min, Math.min(max, value)));
+                  onChange(normalizePrice(value));
                 } else {
-                  setInputValue(String(price));
+                  setInputValue(String(normalizedPrice));
                 }
               }}
               onKeyDown={(event) => {
@@ -117,7 +142,7 @@ export default function PriceSlider({
             />
           </div>
           <p className="mt-2.5 text-[13px] font-semibold text-primary-dark">
-            {defaultPriceLabel} ₩{defaultPrice.toLocaleString()}
+            {defaultPriceLabel} ₩{normalizedDefaultPrice.toLocaleString()}
           </p>
           <p className="mt-1.5 text-xs font-medium text-slate-400">
             ₩{min.toLocaleString()} ~ ₩{max.toLocaleString()}

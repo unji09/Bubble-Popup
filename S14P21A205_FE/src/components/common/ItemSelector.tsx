@@ -22,6 +22,8 @@ interface ItemSelectorProps {
   selectedIds: number[];
   onToggle: (id: number) => void;
   availablePoints?: number | null;
+  disabled?: boolean;
+  disabledMessage?: string;
   isLoading?: boolean;
   emptyMessage?: string;
 }
@@ -31,6 +33,8 @@ export default function ItemSelector({
   selectedIds,
   onToggle,
   availablePoints = null,
+  disabled = false,
+  disabledMessage = "",
   isLoading = false,
   emptyMessage = "선택 가능한 아이템이 없습니다.",
 }: ItemSelectorProps) {
@@ -57,6 +61,12 @@ export default function ItemSelector({
           )}
         </div>
       </div>
+
+      {disabled && disabledMessage && (
+        <div className="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-soft">
+          {disabledMessage}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="rounded-[20px] bg-white p-5 shadow-soft">
@@ -102,6 +112,7 @@ export default function ItemSelector({
                       availablePoints !== null &&
                       item.price > availablePoints + (selectedInGroup?.price ?? 0);
                     const isDisabled =
+                      disabled ||
                       cannotAfford ||
                       (!isSelected &&
                         !selectedInGroup &&
@@ -111,6 +122,7 @@ export default function ItemSelector({
                       <button
                         key={item.id}
                         type="button"
+                        disabled={isDisabled}
                         onClick={() => !isDisabled && onToggle(item.id)}
                         className={`relative rounded-xl p-4 text-left transition-all ${
                           isDisabled

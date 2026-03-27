@@ -145,9 +145,19 @@ export async function getDayReport(day: number) {
   return data;
 }
 
-export async function getAllDayReports(currentDay: number) {
-  const promises = Array.from({ length: currentDay }, (_, i) =>
-    getDayReport(i + 1),
+// History helper for report charts. Callers should not use this as a fallback
+// for the current day's primary report.
+export async function getAllDayReports(startDay: number, endDay: number) {
+  const normalizedStartDay = Math.max(1, Math.floor(startDay));
+  const normalizedEndDay = Math.max(0, Math.floor(endDay));
+
+  if (normalizedStartDay > normalizedEndDay) {
+    return [];
+  }
+
+  const promises = Array.from(
+    { length: normalizedEndDay - normalizedStartDay + 1 },
+    (_, i) => getDayReport(normalizedStartDay + i),
   );
   const results = await Promise.allSettled(promises);
   return results
