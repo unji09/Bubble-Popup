@@ -1277,7 +1277,7 @@ function PlayPageSession({
 
   const schedulePlannedVisitors = (
     customerPlanByHour: CustomerPlanByHourItem[] | null | undefined,
-    backendCustomerCount: number,
+    _backendCustomerCount: number,
   ) => {
     const normalizedPlan = [...(customerPlanByHour ?? [])]
       .filter(
@@ -1321,20 +1321,7 @@ function PlayPageSession({
       }
 
       const dispatchedCustomers = dispatchedVisitorsByHourRef.current.get(planItem.gameHour) ?? 0;
-      let remainingCustomers = Math.max(0, plannedCustomers - dispatchedCustomers);
-
-      if (elapsedBusinessSeconds >= hourWindow.start) {
-        const realizedCurrentHour = clampNumber(
-          backendCustomerCount - cumulativePlannedCustomers,
-          0,
-          plannedCustomers,
-        );
-
-        remainingCustomers = Math.max(
-          0,
-          plannedCustomers - Math.max(dispatchedCustomers, realizedCurrentHour),
-        );
-      }
+      const remainingCustomers = Math.max(0, plannedCustomers - dispatchedCustomers);
 
       cumulativePlannedCustomers += plannedCustomers;
 
@@ -1600,7 +1587,9 @@ function PlayPageSession({
     setTrafficStatus(state.traffic?.status ?? null);
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
     syncUnityCongestionLevel(state.traffic?.status);
-    schedulePlannedVisitors(state.customerPlanByHour, state.customerCount);
+    if (source !== "poll") {
+      schedulePlannedVisitors(state.customerPlanByHour, state.customerCount);
+    }
     const nextTodayEventSchedule = state.todayEventSchedule ?? [];
     const nextTodayEventScheduleSignature = buildTodayEventScheduleSignature(nextTodayEventSchedule);
     if (todayEventScheduleSignatureRef.current !== nextTodayEventScheduleSignature) {
