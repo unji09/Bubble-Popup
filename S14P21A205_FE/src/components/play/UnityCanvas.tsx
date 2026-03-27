@@ -108,7 +108,9 @@ const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function Uni
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
+      const currentIframeWindow = internalIframeRef.current?.contentWindow;
+
+      if (currentIframeWindow && event.source !== currentIframeWindow) {
         return;
       }
 
