@@ -1289,7 +1289,7 @@ function PlayPageSession({
       .sort((a, b) => a.gameHour - b.gameHour);
 
     latestCustomerPlanRef.current = normalizedPlan;
-    latestBackendCustomerCountRef.current = backendCustomerCount;
+    latestBackendCustomerCountRef.current = _backendCustomerCount;
 
     clearScheduledVisitorTimers();
 
