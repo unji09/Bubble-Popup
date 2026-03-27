@@ -64,6 +64,9 @@ export default function ReportPage() {
   const guardContext = useOutletContext<GameGuardContext>();
   const day = Number(dayParam) || 1;
   const { brandName } = useBrandName();
+  const playableFromDay = useGameStore((state) => state.playableFromDay);
+  const reportHistoryStartDay = Math.max(1, playableFromDay ?? 1);
+  const setBankruptReportDay = useGameStore((state) => state.setBankruptReportDay);
 
   const [reportEndTimestampMs, setReportEndTimestampMs] = useState(guardContext.phaseEndTimestamp);
   const [report, setReport] = useState<GameDayReportResponse | null>(null);
@@ -102,12 +105,14 @@ export default function ReportPage() {
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     const fetchPreviousReports = async (): Promise<GameDayReportResponse[]> => {
-      if (day <= 1) {
+      if (day <= reportHistoryStartDay) {
         return [];
       }
 
       try {
-        return await getAllDayReports(day - 1);
+        return (await getAllDayReports(reportHistoryStartDay, day - 1)).sort(
+          (a, b) => a.day - b.day,
+        );
       } catch {
         return [];
       }
@@ -119,7 +124,12 @@ export default function ReportPage() {
 
         if (cancelled) return false;
 
-        const reports = [...previousReports, todayReport];
+        const reports = previousReports
+          .filter((item) => item.seasonId === todayReport.seasonId)
+          .sort((a, b) => a.day - b.day);
+        if (!reports.some((item) => item.day === todayReport.day)) {
+          reports.push(todayReport);
+        }
         setAllReports(reports);
         setReport(todayReport);
         setError(null);
@@ -127,8 +137,14 @@ export default function ReportPage() {
       } catch {
         if (cancelled) return false;
 
-        setAllReports(previousReports);
-        const fallback = previousReports[previousReports.length - 1] ?? null;
+        const fallbackSeasonId = previousReports[previousReports.length - 1]?.seasonId ?? null;
+        const fallbackReports =
+          fallbackSeasonId == null
+            ? previousReports
+            : previousReports.filter((item) => item.seasonId === fallbackSeasonId);
+
+        setAllReports(fallbackReports);
+        const fallback = fallbackReports[fallbackReports.length - 1] ?? null;
         setReport(fallback);
         if (fallback) {
           setError(null);
@@ -195,14 +211,18 @@ export default function ReportPage() {
       cancelled = true;
       for (const t of timers) clearTimeout(t);
     };
-  }, [day]);
+  }, [day, reportHistoryStartDay]);
 
   const handleBankruptExit = () => {
     if (report?.seasonId != null) {
       useGameStore.getState().setBankruptNoticeSeasonNumber(report.seasonId);
+      setBankruptReportDay(report.day);
     }
 
-    navigate("/", { replace: true });
+    navigate("/", {
+      replace: true,
+      state: { hideGameReturnButton: true },
+    });
   };
 
   if (loading) {
