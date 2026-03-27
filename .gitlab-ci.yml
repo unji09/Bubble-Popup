@@ -35,10 +35,6 @@ build-frontend:
     - test -d public/unity || { echo "Missing $FRONTEND_DIR/public/unity"; exit 1; }
     - npm ci
     - npm run build
-  artifacts:
-    expire_in: 1 day
-    paths:
-      - S14P21A205_FE/dist/
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
@@ -95,7 +91,7 @@ bootstrap-monitoring-server:
 
 deploy-web:
   stage: deploy
-  image: alpine:3.20
+  image: node:22-alpine
   needs:
     - build-backend
     - build-frontend
@@ -106,6 +102,11 @@ deploy-web:
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -H "$WEB_SERVER_IP" >> ~/.ssh/known_hosts
   script:
+    - cd "$FRONTEND_DIR"
+    - test -d public/unity || { echo "Missing $FRONTEND_DIR/public/unity"; exit 1; }
+    - npm ci
+    - npm run build
+    - cd -
     - ssh "$WEB_USER@$WEB_SERVER_IP" "mkdir -p '$WEB_APP_DIR/build/libs' '$WEB_APP_DIR/ops' '$WEB_APP_DIR/frontend/dist'"
     - rsync -az "$BACKEND_DIR/Dockerfile" "$BACKEND_DIR/.dockerignore" "$BACKEND_DIR/docker-compose.yml" "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/"
     - rsync -az "$BACKEND_DIR/ops/" "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/ops/"
