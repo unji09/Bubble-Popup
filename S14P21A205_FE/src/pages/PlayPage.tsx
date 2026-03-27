@@ -1442,7 +1442,8 @@ function PlayPageSession({
   // Unity UNITY_POPUP_ARRIVAL 이벤트 수신
   useEffect(() => {
     const handleUnityMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+      const currentUnityWindow = unityIframeRef.current?.contentWindow;
+      if (currentUnityWindow && event.source !== currentUnityWindow) return;
       if (event.data?.type !== "UNITY_POPUP_ARRIVAL") return;
 
       const signalValue = Number(event.data.signalValue ?? 1);
@@ -2213,7 +2214,6 @@ function PlayPageSession({
           iframeRef={unityIframeRef}
           className="relative z-0 flex-1 bg-slate-950"
           onReady={handleUnityReady}
-          onPopupArrival={handlePopupArrival}
         />
 
         <EventEffect3DOverlay />

@@ -126,11 +126,20 @@
             );
         }
     }
+    function notifyLegacyPopupArrival(signalValue) {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage(
+                { type: "UNITY_POPUP_ARRIVAL", signalValue: signalValue | 0 },
+                parentTargetOrigin,
+            );
+        }
+    }
     function dispatchPopupArrival(popupStoreIndex) {
         var parsedPopupStoreIndex = Number(popupStoreIndex);
         notifyParent("popup-arrival", {
             popupStoreIndex: Number.isFinite(parsedPopupStoreIndex) ? parsedPopupStoreIndex : null,
         });
+        notifyLegacyPopupArrival(1);
     }
     window.notifyPopupArrival = dispatchPopupArrival;
     window.NotifyPopupArrival = dispatchPopupArrival;
@@ -139,9 +148,11 @@
     // NPCReactBridge.jslib 연결 (signalValue는 도착 신호이므로 popupStoreIndex는 null)
     window.onNpcPopupArrival = function(signalValue) {
         notifyParent("popup-arrival", { popupStoreIndex: null });
+        notifyLegacyPopupArrival(signalValue);
     };
     window.addEventListener("npc-popup-arrival", function(event) {
         notifyParent("popup-arrival", { popupStoreIndex: null });
+        notifyLegacyPopupArrival(event && event.detail ? event.detail : 1);
     });
     // Shows a temporary message banner/ribbon for a few seconds, or
     // a permanent error message on top of the canvas if type=='error'.
