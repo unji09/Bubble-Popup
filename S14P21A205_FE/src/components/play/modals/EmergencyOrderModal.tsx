@@ -57,10 +57,6 @@ function roundToHundreds(value: number) {
   return Math.round(value / 100) * 100;
 }
 
-function getRecommendedPrice(costPrice: number) {
-  return roundToHundreds(costPrice * 2.5);
-}
-
 function clampPrice(price: number, min: number, max: number) {
   return Math.min(Math.max(price, min), max);
 }

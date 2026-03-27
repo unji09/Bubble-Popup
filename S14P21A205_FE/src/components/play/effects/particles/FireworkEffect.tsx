@@ -142,7 +142,7 @@ export default function FireworkEffect({ durationMs }: Props) {
   const trailTex = useMemo(() => createTrailTexture(), []);
 
   const burstData = useMemo(() => {
-    return Array.from({ length: BURST_COUNT }, (_, b) => {
+    return Array.from({ length: BURST_COUNT }, () => {
       const rays = Array.from({ length: RAYS_PER_BURST }, (_, r) => {
         const baseAngle = (r / RAYS_PER_BURST) * Math.PI * 2;
         const angle = baseAngle + (Math.random() - 0.5) * 0.12;
