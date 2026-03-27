@@ -44,6 +44,8 @@ interface PendingUnityMessage {
   payload: string;
 }
 
+const UNITY_LOADING_VERSION = "20260327-2";
+
 function getUnityApp(frame: HTMLIFrameElement | null) {
   try {
     return (frame?.contentWindow as UnityFrameWindow | null)?.unityApp ?? null;
@@ -59,6 +61,7 @@ const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function Uni
   const internalIframeRef = useRef<HTMLIFrameElement | null>(null);
   const pendingMessagesRef = useRef<PendingUnityMessage[]>([]);
   const [isReady, setIsReady] = useState(false);
+  const resolvedSrc = `${src}${src.includes("?") ? "&" : "?"}v=${UNITY_LOADING_VERSION}`;
 
   const setIframeRef = (element: HTMLIFrameElement | null) => {
     internalIframeRef.current = element;
@@ -157,7 +160,7 @@ const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function Uni
     <div className={className}>
       <iframe
         ref={setIframeRef}
-        src={src}
+        src={resolvedSrc}
         title="Unity Game"
         className="h-full w-full border-0"
         allow="fullscreen"

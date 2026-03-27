@@ -18,24 +18,10 @@
             <div class="site-badge">POP-UP STORE</div>
             <div class="site-title">팝업스토어 준비 중</div>
             <div class="site-subtitle">공간을 정리하고 조명을 맞추는 중이에요. 잠시만 기다려주세요.</div>
-
-            <div class="site-illustration" aria-hidden="true">
-                <div class="site-floor"></div>
-                <div class="site-plant plant-left"></div>
-                <div class="site-plant plant-right"></div>
-                <div class="site-store-shell">
-                    <div class="site-signboard">BUBBLE POP-UP</div>
-                    <div class="site-awning"></div>
-                    <div class="site-window window-left"></div>
-                    <div class="site-window window-right"></div>
-                    <div class="site-door"></div>
-                    <div class="site-door-handle"></div>
-                </div>
-                <div class="site-table table-left"></div>
-                <div class="site-table table-right"></div>
-                <div class="site-sparkle sparkle-1"></div>
-                <div class="site-sparkle sparkle-2"></div>
-                <div class="site-sparkle sparkle-3"></div>
+            <div class="site-status-row" aria-hidden="true">
+                <span class="site-status-dot"></span>
+                <span class="site-status-dot"></span>
+                <span class="site-status-dot"></span>
             </div>
 
             <div id="unity-loading-message" class="site-message">매장 불을 켜고 있어요.</div>
@@ -158,12 +144,13 @@
         handleUnityMessage(event.data.method, event.data.payload);
     });
     var buildUrl = "Build";
-    var loaderUrl = buildUrl + "/dasdasd.loader.js";
+    var assetVersion = "20260327-2";
+    var loaderUrl = buildUrl + "/dasdasd.loader.js?v=" + assetVersion;
     var config = {
         arguments: [],
-        dataUrl: buildUrl + "/dasdasd.data",
-        frameworkUrl: buildUrl + "/dasdasd.framework.js",
-        codeUrl: buildUrl + "/dasdasd.wasm",
+        dataUrl: buildUrl + "/dasdasd.data?v=" + assetVersion,
+        frameworkUrl: buildUrl + "/dasdasd.framework.js?v=" + assetVersion,
+        codeUrl: buildUrl + "/dasdasd.wasm?v=" + assetVersion,
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "Setup Guide In-Editor Tutorial",
