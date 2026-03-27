@@ -195,8 +195,7 @@ export default function EmergencyOrderModal({
     originalCostPrice,
     ingredientDiscountMultiplier,
   );
-  const recommendedPrice = selectedMenu.recommendedPrice ?? 0;
-  const maxSellingPrice = selectedMenu.maxSellingPrice ?? Math.max(recommendedPrice * 2, originalCostPrice * 2);
+  const maxSellingPrice = selectedMenu.maxSellingPrice;
   const minSellingPrice = originalCostPrice;
   const defaultSalePrice = getDefaultSalePrice(
     selectedMenu,

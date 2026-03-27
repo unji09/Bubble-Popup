@@ -36,8 +36,8 @@ public class AiNewsGenerator {
             "너는 '버블팝업' 팝업스토어 상권을 취재하는 속보 전문 기자다. "
             + "이 세계에서 점주들이 서울 8개 상권(홍대, 강남, 성수, 여의도, 잠실, 이태원, 명동, 건대입구)에서 팝업 음식 매장을 운영하고 있다. "
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
-            + "제목: 10~20자. 짧고 임팩트 있게. 핵심 키워드만. "
-            + "본문: 300~400자 엄수. 리드문 → 상세 → 코멘트 순서. 400자 넘기지 마. "
+            + "제목: 10자 이내. 매장명이나 점주명 넣지 마. 핵심 키워드만. "
+            + "본문: 100~150자 엄수. 리드문 → 상세 순서. 150자 절대 넘기지 마. "
             + "문체: 간결하고 힘 있는 뉴스 보도체. ~했다, ~밝혔다, ~전했다 등 기사 어미 사용. "
             + "반드시 한국어(한글, 숫자, 한국어 문장부호)만 사용. 영어, 일본어, 중국어, 아랍어, 특수문자, 외국어 단어를 절대 포함하지 마. 알파벳도 금지. "
             + "마크다운 금지. 이모지 금지. 줄바꿈 넣지 마. "
@@ -206,7 +206,7 @@ public class AiNewsGenerator {
         String prompt = ("%s에 위치한 %s 점주의 %s 매장이 오늘의 매출 왕에 올랐다. 판매 메뉴는 %s이고 엄청난 매출과 판매량을 기록했다. "
                 + "매장 앞 긴 줄, 분주한 주방, 사장님의 소감 등을 현장감 있게 묘사해. "
                 + "인근 점주들의 반응도 포함해. "
-                + "제목에 매장명과 점주 이름을 포함해. 스타일: %s")
+                + "본문에 매장명과 점주 이름을 포함해. 스타일: %s")
                 .formatted(locationName, ownerNickname, storeName, menuName, style);
         try {
             return callAi(prompt);
@@ -227,7 +227,7 @@ public class AiNewsGenerator {
         String prompt = ("%s에서 운영 중인 %s 점주의 %s 매장이 %s 누적 판매로 놀라운 기록을 세웠다. "
                 + "꾸준히 찾아오는 단골들의 반응, 매장 분위기, 사장님의 소감 등을 묘사해. "
                 + "같은 메뉴를 파는 인근 매장들의 반응도 포함해. "
-                + "제목에 매장명과 점주 이름, 판매 기록 달성 사실을 포함해. 스타일: %s")
+                + "본문에 매장명과 점주 이름을 포함해. 스타일: %s")
                 .formatted(locationName, ownerNickname, storeName, menuName, style);
         try {
             return callAi(prompt);
@@ -408,7 +408,7 @@ public class AiNewsGenerator {
     private NewsGenerationResult callAi(String promptText) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", model);
-        requestBody.put("max_tokens", 400);
+        requestBody.put("max_tokens", 500);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", SYSTEM_PROMPT),
                 Map.of("role", "user", "content", promptText)));

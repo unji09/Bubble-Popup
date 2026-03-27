@@ -98,7 +98,7 @@ export default function DistrictMesh({
           </div>
           {(isSelected || isHovered) && (
             <div className="mt-1 bg-slate-800/90 text-white text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap">
-              {district.grade} · {district.rent}
+              {district.grade} · {district.rent}/일
             </div>
           )}
         </div>

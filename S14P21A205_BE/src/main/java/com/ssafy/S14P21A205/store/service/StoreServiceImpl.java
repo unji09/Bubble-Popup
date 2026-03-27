@@ -259,11 +259,7 @@ public class StoreServiceImpl implements StoreService {
             SeasonTimePoint seasonTimePoint,
             LocalDateTime now
     ) {
-        if (seasonTimePoint.phase() == SeasonPhase.DAY_PREPARING
-                || seasonTimePoint.phase() == SeasonPhase.LOCATION_SELECTION) {
-            return seasonTimelineService.day(store.getSeason(), day).businessStart();
-        }
-        return now;
+        return seasonTimelineService.day(store.getSeason(), day).businessStart();
     }
 
     private int resolveCurrentDay(Store store, LocalDateTime now) {

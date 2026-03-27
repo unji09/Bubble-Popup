@@ -172,7 +172,7 @@ export default function WaitingPage() {
     return {
       eyebrow: "Opening Window",
       title: "오픈 대기 중",
-      description: `${effectiveState.districtName}에서 "${effectiveState.brandName}" 매장이 등록됐습니다. 설정 시간이 끝나면 영업 준비 화면으로 자동 이동합니다.`,
+      description: `${effectiveState.districtName}에서 "${effectiveState.brandName}" 매장이 등록됐습니다.\n설정 시간이 끝나면 영업 준비 화면으로 자동 이동합니다.`,
       statusLabel: "설정 시간 종료까지",
       badgeTone: "border-primary/20 bg-primary/12 text-primary-dark",
       iconTone: "bg-primary-dark text-white",
@@ -220,7 +220,7 @@ export default function WaitingPage() {
               <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-900 sm:text-[2.35rem]">
                 {content.title}
               </h1>
-              <p className="mt-3 max-w-lg text-sm leading-7 text-slate-500 sm:text-[15px]">
+              <p className="mt-3 max-w-lg whitespace-pre-line text-sm leading-7 text-slate-500 sm:text-[15px]">
                 {content.description}
               </p>
 

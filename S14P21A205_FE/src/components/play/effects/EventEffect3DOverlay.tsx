@@ -1,20 +1,34 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import { Canvas } from "@react-three/fiber";
 import { useEventEffectStore } from "./useEventEffect";
 import type { EventEffectType } from "./effects";
 import { EFFECT_CONFIG } from "./effects";
+import LazyLoadErrorBoundary from "../../common/LazyLoadErrorBoundary";
 
-const FloodEffect = lazy(() => import("./particles/FloodEffect"));
-const FireEffect = lazy(() => import("./particles/FireEffect"));
-const TyphoonDebrisEffect = lazy(() => import("./particles/TyphoonDebrisEffect"));
-const CoinRainEffect = lazy(() => import("./particles/CoinRainEffect"));
-const StarBurstEffect = lazy(() => import("./particles/StarBurstEffect"));
-const ConfettiEffect = lazy(() => import("./particles/ConfettiEffect"));
-const VirusFogEffect = lazy(() => import("./particles/VirusFogEffect"));
-const DocumentEffect = lazy(() => import("./particles/DocumentEffect"));
-const FireworkEffect = lazy(() => import("./particles/FireworkEffect"));
-const PriceArrowEffect = lazy(() => import("./particles/PriceArrowEffect"));
-const EarthquakeEffect = lazy(() => import("./particles/EarthquakeEffect"));
+function lazyWithRetry(importFn: () => Promise<{ default: ComponentType<any> }>) {
+  return lazy(() =>
+    importFn().catch(() => {
+      const hasReloaded = sessionStorage.getItem("chunk_reload");
+      if (!hasReloaded) {
+        sessionStorage.setItem("chunk_reload", "1");
+        window.location.reload();
+      }
+      return { default: () => null } as { default: ComponentType<any> };
+    }),
+  );
+}
+
+const FloodEffect = lazyWithRetry(() => import("./particles/FloodEffect"));
+const FireEffect = lazyWithRetry(() => import("./particles/FireEffect"));
+const TyphoonDebrisEffect = lazyWithRetry(() => import("./particles/TyphoonDebrisEffect"));
+const CoinRainEffect = lazyWithRetry(() => import("./particles/CoinRainEffect"));
+const StarBurstEffect = lazyWithRetry(() => import("./particles/StarBurstEffect"));
+const ConfettiEffect = lazyWithRetry(() => import("./particles/ConfettiEffect"));
+const VirusFogEffect = lazyWithRetry(() => import("./particles/VirusFogEffect"));
+const DocumentEffect = lazyWithRetry(() => import("./particles/DocumentEffect"));
+const FireworkEffect = lazyWithRetry(() => import("./particles/FireworkEffect"));
+const PriceArrowEffect = lazyWithRetry(() => import("./particles/PriceArrowEffect"));
+const EarthquakeEffect = lazyWithRetry(() => import("./particles/EarthquakeEffect"));
 
 const EFFECT_COMPONENT: Partial<
   Record<EventEffectType, React.LazyExoticComponent<React.ComponentType<{ durationMs: number }>>>
@@ -53,13 +67,15 @@ export default function EventEffect3DOverlay() {
         style={{ background: "transparent" }}
       >
         <ambientLight intensity={0.5} />
-        <Suspense fallback={null}>
-          <EffectComp
-            durationMs={config.durationMs}
-            {...(activeEffect === "PRICE_DOWN" ? { direction: "down" } : {})}
-            {...(activeEffect === "PRICE_UP" ? { direction: "up" } : {})}
-          />
-        </Suspense>
+        <LazyLoadErrorBoundary>
+          <Suspense fallback={null}>
+            <EffectComp
+              durationMs={config.durationMs}
+              {...(activeEffect === "PRICE_DOWN" ? { direction: "down" } : {})}
+              {...(activeEffect === "PRICE_UP" ? { direction: "up" } : {})}
+            />
+          </Suspense>
+        </LazyLoadErrorBoundary>
       </Canvas>
     </div>
   );

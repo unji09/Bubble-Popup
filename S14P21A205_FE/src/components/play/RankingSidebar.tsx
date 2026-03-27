@@ -35,18 +35,17 @@ export default function RankingSidebar({ rankings }: RankingSidebarProps) {
         <div className="flex items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                <span className="material-symbols-outlined text-[18px] text-primary">leaderboard</span>
-                실시간 랭킹
-              </h2>
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setShowTooltip((prev) => !prev)}
-                  className="flex size-5 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-400 transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-primary-dark"
+                  className="flex items-center gap-2 text-sm font-bold text-slate-800"
                   aria-label="ROI 기준 안내 보기"
                 >
-                  <span className="material-symbols-outlined text-[12px]">info</span>
+                  <span className="inline-flex items-center justify-center size-6 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors">
+                    <span className="material-symbols-outlined text-[16px] text-primary">leaderboard</span>
+                  </span>
+                  실시간 랭킹
                 </button>
                 {showTooltip && (
                   <div className="absolute left-0 top-8 z-20 w-56 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-[12px] leading-relaxed text-slate-600 shadow-lg">
@@ -87,11 +86,11 @@ export default function RankingSidebar({ rankings }: RankingSidebarProps) {
                     entry.isMe ? "bg-primary/8 ring-1 ring-primary/10" : "hover:bg-white/50"
                   }`}
                 >
-                  <div className="w-7 shrink-0 text-center">
+                  <div className="w-7 shrink-0 text-center flex flex-col items-center">
                     {medalMap[displayRank] ? (
-                      <span className="text-base">{medalMap[displayRank]}</span>
+                      <span className="text-base leading-none">{medalMap[displayRank]}</span>
                     ) : (
-                      <span className="text-[12px] font-bold text-slate-400">{displayRank}</span>
+                      <span className="text-[12px] font-bold text-slate-400">{displayRank}위</span>
                     )}
                   </div>
 

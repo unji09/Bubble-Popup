@@ -410,10 +410,18 @@ export default function DashboardPage() {
     () => resolveSeasonCardData(waitingStatus, currentSeasonNumber),
     [currentSeasonNumber, waitingStatus],
   );
-  const showMidSeasonNotice = Boolean(
+  const noticeDay = waitingStatus?.currentDay ?? null;
+  const showDeadlineNotice = Boolean(
     waitingStatus?.status === "IN_PROGRESS" &&
-      isJoinableDay(waitingStatus.currentDay ?? null) &&
       participation !== null &&
+      typeof noticeDay === "number" &&
+      !isActiveSeasonParticipant,
+  );
+  const showBankruptRetryNotice = Boolean(
+    isBankruptWarningVisible &&
+      waitingStatus?.status === "IN_PROGRESS" &&
+      participation !== null &&
+      isJoinableDay(noticeDay) &&
       !isActiveSeasonParticipant,
   );
   const recentSeasonNumber = useMemo(() => {
@@ -828,7 +836,7 @@ export default function DashboardPage() {
               </button>
             )}
 
-            {showMidSeasonNotice && (
+            {showDeadlineNotice && (
               <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 p-5 shadow-soft">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex size-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
@@ -845,7 +853,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {isBankruptWarningVisible && <BankruptWarning />}
+            {showBankruptRetryNotice && <BankruptWarning />}
           </div>
         </div>
       </main>

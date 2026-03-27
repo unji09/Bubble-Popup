@@ -35,21 +35,21 @@ interface PrepMenu {
   previousSalePrice: number;
   hasPreviousPrice: boolean;
   ingredientDiscountMultiplier: number;
-  recommendedPrice?: number;
-  maxSellingPrice?: number;
+  recommendedPrice: number;
+  maxSellingPrice: number;
 }
 
 const fallbackMenus: PrepMenu[] = [
-  { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 4, emoji: "🍽️", name: "떡볶이", costPrice: 2500, previousSalePrice: 4300, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 5, emoji: "🍔", name: "햄버거", costPrice: 3100, previousSalePrice: 5600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 6, emoji: "🍨", name: "아이스크림", costPrice: 1400, previousSalePrice: 2600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 7, emoji: "🍗", name: "닭강정", costPrice: 2800, previousSalePrice: 4900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 8, emoji: "🌮", name: "타코", costPrice: 2600, previousSalePrice: 4500, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 9, emoji: "🌭", name: "핫도그", costPrice: 1700, previousSalePrice: 3000, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
-  { id: 10, emoji: "🧋", name: "버블티", costPrice: 2300, previousSalePrice: 4100, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 4500, maxSellingPrice: 9000 },
+  { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 5500, maxSellingPrice: 11000 },
+  { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 2250, maxSellingPrice: 4500 },
+  { id: 4, emoji: "🍽️", name: "떡볶이", costPrice: 2500, previousSalePrice: 4300, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 6250, maxSellingPrice: 12500 },
+  { id: 5, emoji: "🍔", name: "햄버거", costPrice: 3100, previousSalePrice: 5600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 7750, maxSellingPrice: 15500 },
+  { id: 6, emoji: "🍨", name: "아이스크림", costPrice: 1400, previousSalePrice: 2600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 3500, maxSellingPrice: 7000 },
+  { id: 7, emoji: "🍗", name: "닭강정", costPrice: 2800, previousSalePrice: 4900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 7000, maxSellingPrice: 14000 },
+  { id: 8, emoji: "🌮", name: "타코", costPrice: 2600, previousSalePrice: 4500, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 6500, maxSellingPrice: 13000 },
+  { id: 9, emoji: "🌭", name: "핫도그", costPrice: 1700, previousSalePrice: 3000, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 4250, maxSellingPrice: 8500 },
+  { id: 10, emoji: "🧋", name: "버블티", costPrice: 2300, previousSalePrice: 4100, hasPreviousPrice: false, ingredientDiscountMultiplier: 1, recommendedPrice: 5750, maxSellingPrice: 11500 },
 ];
 
 const mockPopulationRanking = [
@@ -106,9 +106,6 @@ interface PrepNewsRankingSection {
   meta?: string[];
 }
 
-function roundToHundreds(value: number) {
-  return Math.round(value / 100) * 100;
-}
 
 function formatRankingChange(changeRate: number) {
   return `${Math.abs(changeRate).toFixed(1)}%`;
@@ -166,9 +163,6 @@ function mapTodayNews(items: { newsId: number; newsTitle: string; newsContent: s
   }));
 }
 
-function getRecommendedPrice(costPrice: number) {
-  return roundToHundreds(costPrice * 2.5);
-}
 
 function getSellingPriceDefault(
   recommendedPrice: number,
@@ -235,9 +229,6 @@ function mapStoreMenusToPrepMenus(
 ) {
   return menus.map((menu) => {
     const fallbackMenu = fallbackMenus.find((entry) => entry.id === menu.menuId);
-    // 이전 판매가는 이전에 선택했던 메뉴에만 적용
-    const costBasedRecommendedPrice = getRecommendedPrice(menu.ingredientPrice);
-    const costBasedMaxSellingPrice = roundToHundreds(costBasedRecommendedPrice * 2);
     const isCurrentSellingMenu = currentOrder?.menuId === menu.menuId;
 
     return {
@@ -247,15 +238,15 @@ function mapStoreMenusToPrepMenus(
       costPrice: menu.ingredientPrice,
       previousSalePrice: isCurrentSellingMenu
         ? currentOrder.sellingPrice
-        : costBasedRecommendedPrice,
+        : menu.recommendedPrice,
       hasPreviousPrice: isCurrentSellingMenu,
       ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
       recommendedPrice: isCurrentSellingMenu
         ? currentOrder.recommendedPrice
-        : costBasedRecommendedPrice,
+        : menu.recommendedPrice,
       maxSellingPrice: isCurrentSellingMenu
         ? currentOrder.maxSellingPrice
-        : costBasedMaxSellingPrice,
+        : menu.maxSellingPrice,
     } satisfies PrepMenu;
   });
 }
@@ -295,9 +286,8 @@ export default function PrepPage() {
     originalCostPrice,
     ingredientDiscountMultiplier,
   );
-  const recommendedPrice = selectedMenuData.recommendedPrice ?? getRecommendedPrice(originalCostPrice);
-  const maxSellingPrice =
-    selectedMenuData.maxSellingPrice ?? roundToHundreds(recommendedPrice * 2);
+  const recommendedPrice = selectedMenuData.recommendedPrice;
+  const maxSellingPrice = selectedMenuData.maxSellingPrice;
   const defaultSellingPrice = getSellingPriceDefault(
     recommendedPrice,
     selectedMenuData.previousSalePrice,
@@ -633,15 +623,7 @@ export default function PrepPage() {
     return () => clearTimeout(timer);
   }, [isRegularOrderRouteDay, regularOrderStatus, prepEndTimestampMs]);
 
-  // 토스트 5초 후 자동 숨김
-  useEffect(() => {
-    if (!showOrderReminder) {
-      return;
-    }
 
-    const dismissTimer = setTimeout(() => setShowOrderReminder(false), 5_000);
-    return () => clearTimeout(dismissTimer);
-  }, [showOrderReminder]);
 
   const handleRegularOrderSubmit = async () => {
     if (!canSubmitRegularOrder) {
@@ -686,21 +668,20 @@ export default function PrepPage() {
       setCurrentStoreMenuName(syncedBaseOrder.menuName);
       setMenus((currentMenus) =>
         currentMenus.map((menu) => {
-          const costBasedRecommendedPrice = getRecommendedPrice(menu.costPrice);
           const isSelectedMenu = menu.id === syncedBaseOrder.menuId;
 
           return {
             ...menu,
             previousSalePrice: isSelectedMenu
               ? syncedBaseOrder.sellingPrice
-              : costBasedRecommendedPrice,
+              : menu.recommendedPrice,
             hasPreviousPrice: isSelectedMenu,
             recommendedPrice: isSelectedMenu
               ? syncedBaseOrder.recommendedPrice
-              : costBasedRecommendedPrice,
+              : menu.recommendedPrice,
             maxSellingPrice: isSelectedMenu
               ? syncedBaseOrder.maxSellingPrice
-              : roundToHundreds(costBasedRecommendedPrice * 2),
+              : menu.maxSellingPrice,
           };
         }),
       );
@@ -832,7 +813,7 @@ export default function PrepPage() {
                     </span>
                     <p className="leading-6">
                       정규 발주는 반드시 <span className="font-bold">발주신청하기</span> 버튼을 눌러야
-                      정상적으로 반영됩니다. 발주 완료 후에는 50초가 지나 자동으로 다음 화면으로 이동합니다.
+                      정상적으로 반영됩니다. 발주 완료 후에는 40초가 지나 자동으로 다음 화면으로 이동합니다.
                     </p>
                   </div>
                 )}

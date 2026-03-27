@@ -588,7 +588,7 @@ public class GameDayStateService {
             cumulativeCustomerCount += actualCustomerCount;
             cumulativePurchaseCount += soldUnits;
             cumulativeSales += tickSales;
-            stock = availableStock - soldUnits;
+            stock = Math.max(0, availableStock - soldUnits);
             purchaseCursor = nextCursor;
             currentPopulationSnapshot = populationSnapshot;
             currentCustomerScore = customerScore;

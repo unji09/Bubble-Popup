@@ -628,10 +628,11 @@ public class ActionServiceImpl implements ActionService {
             return BigDecimal.ONE;
         }
 
+        LocalDateTime effectiveAt = seasonTimelineService.day(store.getSeason(), day).businessStart();
         return eventEffectResolver.resolve(
                 store.getSeason(),
                 day,
-                now,
+                effectiveAt,
                 store.getLocation().getId(),
                 menu.getId()
         ).ingredientCostMultiplier();
