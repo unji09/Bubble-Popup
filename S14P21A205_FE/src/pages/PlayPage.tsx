@@ -1418,20 +1418,6 @@ function PlayPageSession({
     }
   }, [unityReady, dayWeatherType]);
 
-  const handlePopupArrival = (popupStoreIndex: number | null) => {
-    const currentPopupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
-
-    if (currentPopupStoreIndex === null) {
-      return;
-    }
-
-    if (popupStoreIndex !== null && popupStoreIndex !== currentPopupStoreIndex) {
-      return;
-    }
-
-    applyOneArrival();
-  };
-
   const applyOneArrival = () => {
     // 유니티 손님 도착 → 헤더 손님 수 +1
     setGuests((prev) => prev + 1);
