@@ -15,15 +15,15 @@ interface DistrictMeshProps {
 }
 
 const gradeColors: Record<string, string> = {
-  "S등급": "#fecdd3",
-  "A등급": "#fef08a",
-  "B등급": "#bfdbfe",
+  "S등급": "#f9a8b8",
+  "A등급": "#f5d86e",
+  "B등급": "#8bb8f0",
 };
 
 const gradeHoverColors: Record<string, string> = {
-  "S등급": "#fda4af",
-  "A등급": "#fde047",
-  "B등급": "#93c5fd",
+  "S등급": "#f47a95",
+  "A등급": "#f0c830",
+  "B등급": "#5a9ce8",
 };
 
 const selectedColor = "#A8BFA9";
@@ -77,9 +77,9 @@ export default function DistrictMesh({
         <meshStandardMaterial
           color={color}
           metalness={0}
-          roughness={0.85}
+          roughness={0.7}
           transparent
-          opacity={isSelected ? 1 : isHovered ? 0.97 : 0.93}
+          opacity={isSelected ? 1 : isHovered ? 0.97 : 0.95}
         />
       </mesh>
 

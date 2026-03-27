@@ -321,6 +321,7 @@ export default function DashboardPage() {
   const [gameReturnPath, setGameReturnPath] = useState<string | null>(null);
   const [isBankruptWarningVisible, setIsBankruptWarningVisible] = useState(false);
   const bankruptNoticeSeasonNumber = useGameStore((state) => state.bankruptNoticeSeasonNumber);
+  const bankruptReportDay = useGameStore((state) => state.bankruptReportDay);
   const clearBankruptNotice = useGameStore((state) => state.clearBankruptNotice);
 
   const routeState = useMemo(
@@ -602,6 +603,7 @@ export default function DashboardPage() {
     // 파산 유저 또는 시즌 종료 시 버튼 숨김
     if (
       bankruptNoticeSeasonNumber != null ||
+      (bankruptReportDay != null && !(phase === "DAY_REPORT" && currentDay === bankruptReportDay)) ||
       phase === "SEASON_SUMMARY" ||
       phase === "NEXT_SEASON_WAITING" ||
       !RETURNABLE_GAME_PHASES.has(phase)
@@ -619,6 +621,7 @@ export default function DashboardPage() {
     setGameReturnPath(path && path !== "/" ? path : null);
   }, [
     bankruptNoticeSeasonNumber,
+    bankruptReportDay,
     hasForcedExitSuppression,
     isActiveSeasonParticipant,
     participation,

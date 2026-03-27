@@ -139,7 +139,7 @@ export default function PlayHeader({
       <div className="flex items-center gap-3 sm:gap-5 rounded-xl border border-white/50 bg-white/60 px-3 sm:px-5 py-1.5 shadow-sm backdrop-blur-sm shrink-0">
         <StatItem label="유동인구" icon="groups" value={congestionInfo.label} valueColor={congestionInfo.color} />
         <div className="h-6 w-px bg-slate-200" />
-        <StatItem label="손님" icon="person" value={String(guests)} />
+        <StatItem label="일일 방문객" icon="person" value={String(guests)} />
         <div className="h-6 w-px bg-slate-200" />
         <StatItem label="재고" icon="inventory_2" value={String(stock)} />
         <div className="h-6 w-px bg-slate-200" />

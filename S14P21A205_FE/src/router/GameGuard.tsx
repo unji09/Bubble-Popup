@@ -277,8 +277,13 @@ export default function GameGuard() {
         allowed = isAllowedForJoinedUser(phase, day, pathname, waitingForPlayableDay);
         target = resolveJoinedUserTarget(phase, day, waitingForPlayableDay, timeData, storeData);
       } else if (reportOnly) {
-        allowed = isAllowedForReportOnlyUser(phase, day, pathname);
-        target = resolveReportOnlyUserTarget(phase, day, Boolean(joinEnabled && joinIntent));
+        const canEnterSetup = Boolean(joinEnabled && joinIntent);
+        if (canEnterSetup && isSetupPath(pathname)) {
+          allowed = isAllowedForNewUser(phase, pathname);
+        } else {
+          allowed = isAllowedForReportOnlyUser(phase, day, pathname);
+        }
+        target = resolveReportOnlyUserTarget(phase, day, canEnterSetup);
       } else {
         allowed = isAllowedForNewUser(phase, pathname);
         if (!allowed) {
@@ -353,7 +358,9 @@ export default function GameGuard() {
         const stillAllowed = joined
           ? isAllowedForJoinedUser(phase, day, location.pathname, waiting)
           : reportOnly
-            ? isAllowedForReportOnlyUser(phase, day, location.pathname)
+            ? (canEnterSetup && isSetupPath(location.pathname)
+                ? isAllowedForNewUser(phase, location.pathname)
+                : isAllowedForReportOnlyUser(phase, day, location.pathname))
             : isAllowedForNewUser(phase, location.pathname);
 
         const shouldAutoRedirectToReport =
