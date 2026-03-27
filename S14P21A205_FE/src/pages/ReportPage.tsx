@@ -67,7 +67,6 @@ export default function ReportPage() {
   const playableFromDay = useGameStore((state) => state.playableFromDay);
   const reportHistoryStartDay = Math.max(1, playableFromDay ?? 1);
   const setBankruptReportDay = useGameStore((state) => state.setBankruptReportDay);
-  const reportHistoryStartDay = Math.max(1, playableFromDay ?? day);
 
   const [reportEndTimestampMs, setReportEndTimestampMs] = useState(guardContext.phaseEndTimestamp);
   const [report, setReport] = useState<GameDayReportResponse | null>(null);

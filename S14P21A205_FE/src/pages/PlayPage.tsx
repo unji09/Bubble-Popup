@@ -1405,6 +1405,14 @@ function PlayPageSession({
     }
   }, [unityReady, dayWeatherType]);
 
+  useEffect(() => {
+    if (!unityReady) {
+      return;
+    }
+
+    unityBridgeRef.current?.setPopupStockAvailable(stock > 0);
+  }, [stock, unityReady]);
+
   const applyOneArrival = () => {
     // 유니티 손님 도착 → 헤더 손님 수 +1
     setGuests((prev) => prev + 1);

@@ -12,7 +12,8 @@ const UNITY_FRAME_MESSAGE_SOURCE = "unity-webgl";
 type UnityMethodName =
   | "SpawnPopupVisitors"
   | "SpawnSinglePopupVisitor"
-  | "SetCongestionLevel";
+  | "SetCongestionLevel"
+  | "SetPopupStockAvailable";
 
 export interface UnityBridgeHandle {
   isReady: () => boolean;
@@ -20,6 +21,7 @@ export interface UnityBridgeHandle {
   spawnPopupVisitors: (popupStoreIndex: number, count: number, hasStock?: boolean) => boolean;
   spawnSinglePopupVisitor: (popupStoreIndex: number) => boolean;
   setCongestionLevel: (level: number) => boolean;
+  setPopupStockAvailable: (hasStock: boolean) => boolean;
 }
 
 interface UnityCanvasProps {
@@ -86,6 +88,13 @@ const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function Uni
         true),
       setCongestionLevel: (level: number) =>
         sendMessage("SetCongestionLevel", String(level)),
+      setPopupStockAvailable: (hasStock: boolean) =>
+        sendMessage("SetPopupStockAvailable", hasStock ? "1" : "0") ||
+        (pendingMessagesRef.current.push({
+          methodName: "SetPopupStockAvailable",
+          payload: hasStock ? "1" : "0",
+        }),
+        true),
     }),
     [isReady],
   );
