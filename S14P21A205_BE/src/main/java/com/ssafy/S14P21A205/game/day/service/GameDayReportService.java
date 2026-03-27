@@ -20,6 +20,7 @@ import com.ssafy.S14P21A205.game.time.model.DayWindow;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
+import com.ssafy.S14P21A205.monitoring.service.ApplicationMonitoringService;
 import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
@@ -64,6 +65,7 @@ public class GameDayReportService {
     private final GameDayStateService gameDayStateService;
     private final PurchaseListGenerator purchaseListGenerator;
     private final ShopService shopService;
+    private final ApplicationMonitoringService monitoringService;
     private final Clock clock;
 
     @Transactional
@@ -169,7 +171,7 @@ public class GameDayReportService {
 
         int stockRemaining = normalizeStock(state.stock());
 
-        dailyReportRepository.save(DailyReport.create(
+        DailyReport report = DailyReport.create(
                 store,
                 day,
                 reportLocationName,
@@ -184,7 +186,9 @@ public class GameDayReportService {
                 isBankrupt,
                 safeToInt(reportBalance),
                 resolveCaptureRate(state)
-        ));
+        );
+        dailyReportRepository.save(report);
+        monitoringService.recordDailyReport(report);
         store.changePurchaseCursor(
                 purchaseListGenerator.advanceCursor(store.getPurchaseCursor(), defaultInt(state.purchaseCursor()))
         );
@@ -261,9 +265,22 @@ public class GameDayReportService {
         }
 
         log.info("[DayReport] Missing report on read. attempting materialization. storeId={} day={}", store.getId(), day);
-        recordClosedDayReport(store, day);
-        return dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
-                .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
+        try {
+            recordClosedDayReport(store, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordReportMaterialization("failure");
+            throw e;
+        }
+        DailyReport report;
+        try {
+            report = dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
+                    .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
+        } catch (RuntimeException e) {
+            monitoringService.recordReportMaterialization("failure");
+            throw e;
+        }
+        monitoringService.recordReportMaterialization("success");
+        return report;
     }
 
     private Store getReportStore(Integer userId) {

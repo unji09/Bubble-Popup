@@ -16,6 +16,7 @@ import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
 import com.ssafy.S14P21A205.game.news.repository.NewsArticleRepository;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.AiNewsGenerator.NewsGenerationResult;
+import com.ssafy.S14P21A205.monitoring.service.ApplicationMonitoringService;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -55,6 +57,7 @@ public class NewsDataSaver {
     private final LocationRepository locationRepository;
     private final DailyEventRepository dailyEventRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
+    private final ApplicationMonitoringService monitoringService;
 
     @Transactional
     public void saveNewsData(
@@ -84,11 +87,18 @@ public class NewsDataSaver {
 
             if (!mentions.isEmpty()) {
                 log.info("[NEWS] Calling AI for trend news day {}/{}", day, totalDays);
-                NewsGenerationResult result = aiNewsGenerator.generateTrendNews(seasonId, day, mentions);
-                NewsArticle article = NewsArticle.create(
-                        report, day, NewsCategory.TREND, result.title(), result.content());
-                newsArticleRepository.save(article);
-                log.info("[NEWS] Generated trend news for season {} day {}: {}", seasonId, day, result.title());
+                Timer.Sample sample = monitoringService.startTimerSample();
+                try {
+                    NewsGenerationResult result = aiNewsGenerator.generateTrendNews(seasonId, day, mentions);
+                    NewsArticle article = NewsArticle.create(
+                            report, day, NewsCategory.TREND, result.title(), result.content());
+                    newsArticleRepository.save(article);
+                    monitoringService.recordNewsGeneration("trend", "success", sample);
+                    log.info("[NEWS] Generated trend news for season {} day {}: {}", seasonId, day, result.title());
+                } catch (RuntimeException e) {
+                    monitoringService.recordNewsGeneration("trend", "failure", sample);
+                    throw e;
+                }
             }
 
             if (day == 1) {
@@ -173,6 +183,7 @@ public class NewsDataSaver {
     // ---- 마감 뉴스 (팝업 이동 / 매출 1위 / 누적 판매량 중 1건) ----
 
     private void generateClosingNewsInternal(NewsReport report, Long seasonId, int day) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         List<Runnable> candidates = new ArrayList<>();
         candidates.add(() -> generateTopStoreNews(report, seasonId, day));
         candidates.add(() -> generateCumulativeSalesNews(report, seasonId, day));
@@ -185,16 +196,19 @@ public class NewsDataSaver {
                 candidate.run();
                 newsArticleRepository.flush();
                 if (newsArticleRepository.countByNewsReportId(report.getId()) > countBefore) {
+                    monitoringService.recordNewsGeneration("closing", "success", sample);
                     return;
                 }
             } catch (Exception e) {
                 log.warn("Closing news candidate failed, trying next. seasonId={} day={}", seasonId, day, e);
             }
         }
+        monitoringService.recordNewsGeneration("closing", "failure", sample);
         log.warn("All closing news candidates failed. seasonId={} day={}", seasonId, day);
     }
 
     private void generateMenuEntryNews(NewsReport report, Long seasonId, int day) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         List<Object[]> rows = storeRepository.countStoresByMenu(seasonId);
         if (rows.isEmpty()) {
             return;
@@ -209,14 +223,21 @@ public class NewsDataSaver {
                 })
                 .toList();
 
-        NewsGenerationResult result = aiNewsGenerator.generateMenuEntryNews(seasonId, day, ranking);
-        NewsArticle article = NewsArticle.create(
-                report, report.getDay(), NewsCategory.MENU_ENTRY, result.title(), result.content());
-        newsArticleRepository.save(article);
-        log.info("Generated menu entry news for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateMenuEntryNews(seasonId, day, ranking);
+            NewsArticle article = NewsArticle.create(
+                    report, report.getDay(), NewsCategory.MENU_ENTRY, result.title(), result.content());
+            newsArticleRepository.save(article);
+            monitoringService.recordNewsGeneration("menu_entry", "success", sample);
+            log.info("Generated menu entry news for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("menu_entry", "failure", sample);
+            throw e;
+        }
     }
 
     private void generateAreaEntryNews(NewsReport report, Long seasonId, int day) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         List<Object[]> rows = storeRepository.countStoresByLocation(seasonId);
         if (rows.isEmpty()) {
             return;
@@ -231,27 +252,39 @@ public class NewsDataSaver {
                 })
                 .toList();
 
-        NewsGenerationResult result = aiNewsGenerator.generateAreaEntryNews(seasonId, day, ranking);
-        NewsArticle article = NewsArticle.create(
-                report, report.getDay(), NewsCategory.AREA_ENTRY, result.title(), result.content());
-        newsArticleRepository.save(article);
-        log.info("Generated area entry news for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateAreaEntryNews(seasonId, day, ranking);
+            NewsArticle article = NewsArticle.create(
+                    report, report.getDay(), NewsCategory.AREA_ENTRY, result.title(), result.content());
+            newsArticleRepository.save(article);
+            monitoringService.recordNewsGeneration("area_entry", "success", sample);
+            log.info("Generated area entry news for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("area_entry", "failure", sample);
+            throw e;
+        }
     }
 
     private void generateDay1GuideNews(NewsReport report, long seasonId) {
         try {
+            Timer.Sample introSample = monitoringService.startTimerSample();
             NewsGenerationResult intro = aiNewsGenerator.generateIntroNews(seasonId);
             newsArticleRepository.save(NewsArticle.create(report, 1, NewsCategory.GUIDE, intro.title(), intro.content()));
+            monitoringService.recordNewsGeneration("guide", "success", introSample);
         } catch (Exception e) {
+            monitoringService.recordNewsGeneration("guide", "failure", null);
             log.error("Failed to generate intro news. seasonId={}", seasonId, e);
         }
 
         try {
+            Timer.Sample tipsSample = monitoringService.startTimerSample();
             List<NewsGenerationResult> tips = aiNewsGenerator.generateRandomTipNews(seasonId);
             for (NewsGenerationResult tip : tips) {
                 newsArticleRepository.save(NewsArticle.create(report, 1, NewsCategory.GUIDE, tip.title(), tip.content()));
             }
+            monitoringService.recordNewsGeneration("guide", "success", tipsSample);
         } catch (Exception e) {
+            monitoringService.recordNewsGeneration("guide", "failure", null);
             log.error("Failed to generate tip news. seasonId={}", seasonId, e);
         }
 
@@ -259,6 +292,7 @@ public class NewsDataSaver {
     }
 
     private void generateEventPreviewNews(NewsReport report, Long seasonId, int day, int totalDays) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         if (day + 1 > totalDays) {
             return;
         }
@@ -294,14 +328,21 @@ public class NewsDataSaver {
                 })
                 .toList();
 
-        NewsGenerationResult result = aiNewsGenerator.generateEventPreviewNews(seasonId, day, eventData);
-        NewsArticle article = NewsArticle.create(
-                report, day, NewsCategory.EXTRA, result.title(), result.content());
-        newsArticleRepository.save(article);
-        log.info("Generated event preview news for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateEventPreviewNews(seasonId, day, eventData);
+            NewsArticle article = NewsArticle.create(
+                    report, day, NewsCategory.EXTRA, result.title(), result.content());
+            newsArticleRepository.save(article);
+            monitoringService.recordNewsGeneration("extra", "success", sample);
+            log.info("Generated event preview news for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("extra", "failure", sample);
+            throw e;
+        }
     }
 
     private void generateTopStoreNews(NewsReport report, Long seasonId, int day) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         if (day < 1) {
             return;
         }
@@ -321,15 +362,22 @@ public class NewsDataSaver {
         String ownerNickname = store.getUser().getNickname();
         String locationName = store.getLocation().getLocationName();
 
-        NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
-                seasonId, day, storeName, menuName, revenue, salesCount, ownerNickname, locationName);
-        NewsArticle article = NewsArticle.create(
-                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
-        newsArticleRepository.save(article);
-        log.info("Generated top store news for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
+                    seasonId, day, storeName, menuName, revenue, salesCount, ownerNickname, locationName);
+            NewsArticle article = NewsArticle.create(
+                    report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
+            newsArticleRepository.save(article);
+            monitoringService.recordNewsGeneration("extra", "success", sample);
+            log.info("Generated top store news for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("extra", "failure", sample);
+            throw e;
+        }
     }
 
     private void generateCumulativeSalesNews(NewsReport report, Long seasonId, int day) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         List<Object[]> salesData = dailyReportRepository.sumSalesCountBySeasonId(seasonId);
         if (salesData.isEmpty()) {
             return;
@@ -371,20 +419,27 @@ public class NewsDataSaver {
             ownerNickname = topMilestoneStore.getUser().getNickname();
             locationName = topMilestoneStore.getLocation().getLocationName();
         }
-        NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
-                seasonId, day,
-                (String) topMilestone.get("storeName"),
-                (String) topMilestone.get("menuName"),
-                ((Number) topMilestone.get("totalSales")).longValue(),
-                ((Number) topMilestone.get("milestone")).intValue(),
-                ownerNickname, locationName);
-        NewsArticle article = NewsArticle.create(
-                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
-        newsArticleRepository.save(article);
-        log.info("Generated cumulative sales news for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
+                    seasonId, day,
+                    (String) topMilestone.get("storeName"),
+                    (String) topMilestone.get("menuName"),
+                    ((Number) topMilestone.get("totalSales")).longValue(),
+                    ((Number) topMilestone.get("milestone")).intValue(),
+                    ownerNickname, locationName);
+            NewsArticle article = NewsArticle.create(
+                    report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
+            newsArticleRepository.save(article);
+            monitoringService.recordNewsGeneration("extra", "success", sample);
+            log.info("Generated cumulative sales news for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("extra", "failure", sample);
+            throw e;
+        }
     }
 
     private void generateMigrationNews(NewsReport report, Long seasonId, int day) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         if (day < 2) {
             return;
         }
@@ -423,11 +478,17 @@ public class NewsDataSaver {
             return;
         }
 
-        NewsGenerationResult result = aiNewsGenerator.generateMigrationNews(seasonId, day, changes);
-        NewsArticle article = NewsArticle.create(
-                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
-        newsArticleRepository.save(article);
-        log.info("Generated migration news for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateMigrationNews(seasonId, day, changes);
+            NewsArticle article = NewsArticle.create(
+                    report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
+            newsArticleRepository.save(article);
+            monitoringService.recordNewsGeneration("extra", "success", sample);
+            log.info("Generated migration news for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("extra", "failure", sample);
+            throw e;
+        }
     }
 
     /**
@@ -462,6 +523,7 @@ public class NewsDataSaver {
     // ---- Redis 기반 마감 뉴스 (매출 1위 / 누적 판매량 / 팝업 이동 중 1건) ----
 
     private void generateClosingNewsFromRedis(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         List<Runnable> candidates = new ArrayList<>();
         candidates.add(() -> generateTopStoreNewsFromRedis(report, seasonId, day, stores));
         candidates.add(() -> generateCumulativeSalesNewsFromRedis(report, seasonId, day, stores));
@@ -474,16 +536,19 @@ public class NewsDataSaver {
                 candidate.run();
                 newsArticleRepository.flush();
                 if (newsArticleRepository.countByNewsReportId(report.getId()) > countBefore) {
+                    monitoringService.recordNewsGeneration("closing", "success", sample);
                     return;
                 }
             } catch (Exception e) {
                 log.warn("Closing news candidate failed, trying next. seasonId={} day={}", seasonId, day, e);
             }
         }
+        monitoringService.recordNewsGeneration("closing", "failure", sample);
         log.warn("All closing news candidates from Redis failed. seasonId={} day={}", seasonId, day);
     }
 
     private void generateTopStoreNewsFromRedis(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         Store topStore = null;
         long topSales = 0;
         int topPurchaseCount = 0;
@@ -504,16 +569,23 @@ public class NewsDataSaver {
             return;
         }
 
-        NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
-                seasonId, day, topStore.getStoreName(), topStore.getMenu().getMenuName(),
-                (int) topSales, topPurchaseCount,
-                topStore.getUser().getNickname(), topStore.getLocation().getLocationName());
-        newsArticleRepository.save(NewsArticle.create(
-                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
-        log.info("Generated top store news from Redis for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
+                    seasonId, day, topStore.getStoreName(), topStore.getMenu().getMenuName(),
+                    (int) topSales, topPurchaseCount,
+                    topStore.getUser().getNickname(), topStore.getLocation().getLocationName());
+            newsArticleRepository.save(NewsArticle.create(
+                    report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
+            monitoringService.recordNewsGeneration("extra", "success", sample);
+            log.info("Generated top store news from Redis for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("extra", "failure", sample);
+            throw e;
+        }
     }
 
     private void generateCumulativeSalesNewsFromRedis(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         // 과거 daily_report 누적(이미 DB에 있음) + 오늘 Redis cumulative_purchase_count
         List<Object[]> pastSalesData = dailyReportRepository.sumSalesCountBySeasonId(seasonId);
         Map<Long, Long> pastSalesByStore = new LinkedHashMap<>();
@@ -550,19 +622,26 @@ public class NewsDataSaver {
         for (SalesEntry entry : entries) {
             for (int threshold : thresholds) {
                 if (entry.totalSales() >= threshold) {
-                    NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
-                            seasonId, day, entry.storeName(), entry.menuName(), entry.totalSales(), threshold,
-                            entry.ownerNickname(), entry.locationName());
-                    newsArticleRepository.save(NewsArticle.create(
-                            report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
-                    log.info("Generated cumulative sales news from Redis for season {} day {}", seasonId, day);
-                    return;
+                    try {
+                        NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
+                                seasonId, day, entry.storeName(), entry.menuName(), entry.totalSales(), threshold,
+                                entry.ownerNickname(), entry.locationName());
+                        newsArticleRepository.save(NewsArticle.create(
+                                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
+                        monitoringService.recordNewsGeneration("extra", "success", sample);
+                        log.info("Generated cumulative sales news from Redis for season {} day {}", seasonId, day);
+                        return;
+                    } catch (RuntimeException e) {
+                        monitoringService.recordNewsGeneration("extra", "failure", sample);
+                        throw e;
+                    }
                 }
             }
         }
     }
 
     private void generateMigrationNewsFromStores(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        Timer.Sample sample = monitoringService.startTimerSample();
         if (day < 2) {
             return;
         }
@@ -606,10 +685,16 @@ public class NewsDataSaver {
             return;
         }
 
-        NewsGenerationResult result = aiNewsGenerator.generateMigrationNews(seasonId, day, changes);
-        newsArticleRepository.save(NewsArticle.create(
-                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
-        log.info("Generated migration news from stores for season {} day {}", seasonId, day);
+        try {
+            NewsGenerationResult result = aiNewsGenerator.generateMigrationNews(seasonId, day, changes);
+            newsArticleRepository.save(NewsArticle.create(
+                    report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
+            monitoringService.recordNewsGeneration("extra", "success", sample);
+            log.info("Generated migration news from stores for season {} day {}", seasonId, day);
+        } catch (RuntimeException e) {
+            monitoringService.recordNewsGeneration("extra", "failure", sample);
+            throw e;
+        }
     }
 
     /**

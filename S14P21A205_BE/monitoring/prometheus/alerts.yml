@@ -1,0 +1,140 @@
+groups:
+  - name: platform-health
+    rules:
+      - alert: BackendDown
+        expr: up{job="spring-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Backend target is down
+          description: spring-backend target has been unreachable for more than 1 minute.
+
+      - alert: NodeExporterDown
+        expr: up{job=~"monitoring-node-exporter|web-node-exporter|data-node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Node exporter target is down
+          description: A node exporter target has been unreachable for more than 2 minutes.
+
+      - alert: Backend5xxRateHigh
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="spring-backend",status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_server_requests_seconds_count{job="spring-backend"}[5m])), 1)
+          ) > 0.02
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Backend 5xx rate is high
+          description: 5xx rate on spring-backend has been above 2% for 5 minutes.
+
+      - alert: BackendP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="spring-backend"}[5m]))
+          ) > 1.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Backend p95 latency is high
+          description: Backend p95 latency has been above 1.5 seconds for 5 minutes.
+
+      - alert: BackendJvmHeapHigh
+        expr: |
+          (
+            sum(jvm_memory_used_bytes{job="spring-backend",area="heap"})
+            /
+            clamp_min(sum(jvm_memory_max_bytes{job="spring-backend",area="heap"}), 1)
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: JVM heap usage is high
+          description: JVM heap usage has been above 85% for 10 minutes.
+
+      - alert: HikariPendingConnections
+        expr: sum(hikaricp_connections_pending{job="spring-backend"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Hikari pending connections detected
+          description: Pending DB connections have remained above zero for 5 minutes.
+
+      - alert: HostDiskUsageHigh
+        expr: |
+          (
+            1 - (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/"}
+              /
+              clamp_min(node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/"}, 1)
+            )
+          ) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host disk usage is high
+          description: A monitored host root filesystem is above 80% usage.
+
+      - alert: HostDiskUsageCritical
+        expr: |
+          (
+            1 - (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/"}
+              /
+              clamp_min(node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/"}, 1)
+            )
+          ) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Host disk usage is critical
+          description: A monitored host root filesystem is above 90% usage.
+
+  - name: game-operations
+    rules:
+      - alert: SeasonStartFailuresDetected
+        expr: increase(game_season_start_total{result="failure"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Season start failures detected
+          description: At least one season start failure was recorded in the last 10 minutes.
+
+      - alert: SourceBatchPendingSpike
+        expr: increase(game_source_batch_pending_total[10m]) > 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Source batch pending spikes detected
+          description: Source batch pending events exceeded 3 in the last 10 minutes.
+
+      - alert: AiTimeoutSpike
+        expr: increase(game_ai_request_total{result="timeout"}[10m]) > 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: AI timeouts are spiking
+          description: AI timeout count exceeded 3 in the last 10 minutes.
+
+      - alert: NewsGenerationFailures
+        expr: increase(game_news_generation_total{result="failure"}[10m]) > 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: News generation failures are increasing
+          description: News generation failures exceeded 3 in the last 10 minutes.

@@ -5,9 +5,11 @@ import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
+import com.ssafy.S14P21A205.monitoring.service.ApplicationMonitoringService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +26,7 @@ public class SeasonDayClosingService {
     private final SeasonFinalRankingService seasonFinalRankingService;
     private final NewsService newsService;
     private final Executor dayClosingExecutor;
+    private final ApplicationMonitoringService monitoringService;
 
     public SeasonDayClosingService(
             SeasonRepository seasonRepository,
@@ -31,6 +34,7 @@ public class SeasonDayClosingService {
             GameDayReportService gameDayReportService,
             SeasonFinalRankingService seasonFinalRankingService,
             NewsService newsService,
+            ApplicationMonitoringService monitoringService,
             @Qualifier("dayClosingExecutor") Executor dayClosingExecutor
     ) {
         this.seasonRepository = seasonRepository;
@@ -38,6 +42,7 @@ public class SeasonDayClosingService {
         this.gameDayReportService = gameDayReportService;
         this.seasonFinalRankingService = seasonFinalRankingService;
         this.newsService = newsService;
+        this.monitoringService = monitoringService;
         this.dayClosingExecutor = dayClosingExecutor;
     }
 
@@ -58,6 +63,8 @@ public class SeasonDayClosingService {
         }
 
         boolean isLastDay = day == season.resolveRuntimePlayableDays();
+        AtomicBoolean reportFailure = new AtomicBoolean(false);
+        AtomicBoolean newsFailure = new AtomicBoolean(false);
 
         CompletableFuture<Void> reportFuture = CompletableFuture.runAsync(() -> {
             int successCount = 0;
@@ -69,6 +76,7 @@ public class SeasonDayClosingService {
                     successCount++;
                 } catch (Exception e) {
                     failureCount++;
+                    reportFailure.set(true);
                     log.error(
                             "Failed to save daily report. seasonId={} day={} storeId={}",
                             seasonId,
@@ -95,13 +103,16 @@ public class SeasonDayClosingService {
             try {
                 newsService.updateDayRankingsFromRedis(seasonId, day, stores);
             } catch (Exception e) {
+                newsFailure.set(true);
                 log.error("Failed to update rankings/news from Redis. seasonId={} day={}", seasonId, day, e);
             }
         }, dayClosingExecutor);
 
         try {
             CompletableFuture.allOf(reportFuture, newsFuture).join();
+            monitoringService.recordDayClosing(reportFailure.get() || newsFailure.get() ? "failure" : "success");
         } catch (Exception e) {
+            monitoringService.recordDayClosing("failure");
             log.error("Day closing tasks failed. seasonId={} day={}", seasonId, day, e);
         }
     }

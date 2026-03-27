@@ -1,0 +1,67 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "up{job=~\"spring-backend|monitoring-node-exporter|web-node-exporter|data-node-exporter\"}", "legendFormat": "{{job}}", "refId": "A"}],
+      "title": "Target Availability",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 9, "x": 6, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{job=~\"monitoring-node-exporter|web-node-exporter|data-node-exporter\",mode=\"idle\"}[5m]))", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Host CPU Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 9, "x": 15, "y": 0},
+      "id": 3,
+      "targets": [{"expr": "1 - (node_memory_MemAvailable_bytes{job=~\"monitoring-node-exporter|web-node-exporter|data-node-exporter\"} / node_memory_MemTotal_bytes{job=~\"monitoring-node-exporter|web-node-exporter|data-node-exporter\"})", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Host Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "1 - (node_filesystem_avail_bytes{job=~\"monitoring-node-exporter|web-node-exporter|data-node-exporter\",fstype!~\"tmpfs|overlay\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=~\"monitoring-node-exporter|web-node-exporter|data-node-exporter\",fstype!~\"tmpfs|overlay\",mountpoint=\"/\"})", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Root Disk Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 5,
+      "targets": [
+        {"expr": "sum by (instance) (rate(node_network_receive_bytes_total{job=~\"monitoring-node-exporter|web-node-exporter|data-node-exporter\",device!~\"lo\"}[5m]))", "legendFormat": "{{instance}} rx", "refId": "A"},
+        {"expr": "sum by (instance) (rate(node_network_transmit_bytes_total{job=~\"monitoring-node-exporter|web-node-exporter|data-node-exporter\",device!~\"lo\"}[5m]))", "legendFormat": "{{instance}} tx", "refId": "B"}
+      ],
+      "title": "Network Throughput",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["infrastructure"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Infrastructure Overview",
+  "version": 1
+}

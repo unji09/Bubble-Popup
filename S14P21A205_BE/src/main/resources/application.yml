@@ -74,6 +74,10 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
 # endregion
 
 # region ===== Auth Redirect Policy =====

@@ -9,6 +9,7 @@ import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.monitoring.service.ApplicationMonitoringService;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.dto.LocationListResponse;
@@ -50,6 +51,7 @@ public class StoreServiceImpl implements StoreService {
     private final StoreRankingPolicy storeRankingPolicy;
     private final NewsRankingResolver newsRankingResolver;
     private final EventEffectResolver eventEffectResolver;
+    private final ApplicationMonitoringService monitoringService;
     private final Clock clock;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -71,48 +73,54 @@ public class StoreServiceImpl implements StoreService {
     @Override
     @Transactional
     public UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request) {
-        Store store = getStoreByUserId(userId);
-        LocalDateTime now = LocalDateTime.now(clock);
-        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, now);
-        Long storeId = store.getId();
-        int currentDay = resolveCurrentDay(store, now);
+        try {
+            Store store = getStoreByUserId(userId);
+            LocalDateTime now = LocalDateTime.now(clock);
+            STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, now);
+            Long storeId = store.getId();
+            int currentDay = resolveCurrentDay(store, now);
 
-        if (currentDay >= store.getSeason().resolveRuntimePlayableDays()) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Location changes are unavailable on the last day.");
+            if (currentDay >= store.getSeason().resolveRuntimePlayableDays()) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Location changes are unavailable on the last day.");
+            }
+            if (STORE_LOCATION_TRANSITION_SUPPORT.hasFuturePendingLocationChange(store, currentDay)) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "A location change is already reserved for the next day.");
+            }
+
+            Location location = locationRepository.findById(request.locationId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+
+            if (store.getLocation().getId().equals(location.getId())) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "The store is already using this location.");
+            }
+
+            Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
+            recordLocationChangeCost(storeId, currentDay, location.getInteriorCost());
+            store.reserveLocationChange(location, currentDay + 1);
+            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                    storeId,
+                    currentDay,
+                    resolveDebugTick(store, now),
+                    new TickDebugActionNote(
+                            "이동(%s)".formatted(location.getLocationName()),
+                            0L,
+                            0L,
+                            0L,
+                            0L,
+                            location.getInteriorCost() == null ? 0L : location.getInteriorCost().longValue(),
+                            0
+                    )
+            );
+
+            monitoringService.recordLocationChange("success");
+            return new UpdateStoreLocationResponse(
+                    location.getId(),
+                    updatedBalance
+            );
+        } catch (RuntimeException e) {
+            monitoringService.recordLocationChange("failure");
+            throw e;
         }
-        if (STORE_LOCATION_TRANSITION_SUPPORT.hasFuturePendingLocationChange(store, currentDay)) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "A location change is already reserved for the next day.");
-        }
-
-        Location location = locationRepository.findById(request.locationId())
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-
-        if (store.getLocation().getId().equals(location.getId())) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "The store is already using this location.");
-        }
-
-        Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
-        recordLocationChangeCost(storeId, currentDay, location.getInteriorCost());
-        store.reserveLocationChange(location, currentDay + 1);
-        gameDayStoreStateRedisRepository.appendTickDebugActionNote(
-                storeId,
-                currentDay,
-                resolveDebugTick(store, now),
-                new TickDebugActionNote(
-                        "이동(%s)".formatted(location.getLocationName()),
-                        0L,
-                        0L,
-                        0L,
-                        0L,
-                        location.getInteriorCost() == null ? 0L : location.getInteriorCost().longValue(),
-                        0
-                )
-        );
-
-        return new UpdateStoreLocationResponse(
-                location.getId(),
-                updatedBalance
-        );
     }
 
     @Override

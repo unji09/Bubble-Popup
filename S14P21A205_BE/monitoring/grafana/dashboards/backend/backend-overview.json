@@ -1,0 +1,83 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum(rate(http_server_requests_seconds_count{job=\"spring-backend\"}[5m]))", "legendFormat": "rps", "refId": "A"}],
+      "title": "Request Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [
+        {"expr": "sum(rate(http_server_requests_seconds_count{job=\"spring-backend\",status=~\"4..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"spring-backend\"}[5m])), 1)", "legendFormat": "4xx", "refId": "A"},
+        {"expr": "sum(rate(http_server_requests_seconds_count{job=\"spring-backend\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"spring-backend\"}[5m])), 1)", "legendFormat": "5xx", "refId": "B"}
+      ],
+      "title": "HTTP Error Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"spring-backend\"}[5m])))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"spring-backend\"}[5m])))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"spring-backend\"}[5m])))", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "HTTP Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+      "id": 4,
+      "targets": [
+        {"expr": "sum(jvm_memory_used_bytes{job=\"spring-backend\",area=\"heap\"})", "legendFormat": "used", "refId": "A"},
+        {"expr": "sum(jvm_memory_max_bytes{job=\"spring-backend\",area=\"heap\"})", "legendFormat": "max", "refId": "B"}
+      ],
+      "title": "JVM Heap",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+      "id": 5,
+      "targets": [
+        {"expr": "jvm_threads_live_threads{job=\"spring-backend\"}", "legendFormat": "live", "refId": "A"},
+        {"expr": "hikaricp_connections_active{job=\"spring-backend\"}", "legendFormat": "hikari active", "refId": "B"},
+        {"expr": "hikaricp_connections_pending{job=\"spring-backend\"}", "legendFormat": "hikari pending", "refId": "C"}
+      ],
+      "title": "Threads / DB Connections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "id": 6,
+      "targets": [{"expr": "topk(10, histogram_quantile(0.95, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\"spring-backend\"}[5m]))))", "legendFormat": "{{uri}}", "refId": "A"}],
+      "title": "Slowest Endpoints by p95",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["backend"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "Backend Overview",
+  "version": 1
+}

@@ -33,6 +33,7 @@ import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
+import com.ssafy.S14P21A205.monitoring.service.ApplicationMonitoringService;
 import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
@@ -92,6 +93,7 @@ public class SeasonLifecycleService {
     private final NewsReportRepository newsReportRepository;
     private final NewsService newsService;
     private final EtlJobRequestRepository etlJobRequestRepository;
+    private final ApplicationMonitoringService monitoringService;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private final Clock clock;
@@ -155,6 +157,8 @@ public class SeasonLifecycleService {
         List<Location> locations = requireLocations();
         String sourceBatchKey = resolveStartableSourceBatchKey(scheduledSeason, locations);
         if (sourceBatchKey == null) {
+            monitoringService.recordSeasonStartDelay("source_batch");
+            monitoringService.recordSourceBatchPending();
             logScheduledSeasonState(
                     now,
                     scheduledSeason,
@@ -167,23 +171,30 @@ public class SeasonLifecycleService {
 
         prepareDailyEventsIfMissing(scheduledSeason, locations);
         boolean shouldGenerateNewsAfterStart = !newsReportRepository.existsBySeasonId(scheduledSeason.getId());
+        try {
+            scheduledSeason.startAt(now, sourceBatchKey);
+            scheduledSeason.applyReservedDemoSkip();
+            Random random = new Random(resolveSeed(scheduledSeason));
 
-        scheduledSeason.startAt(now, sourceBatchKey);
-        scheduledSeason.applyReservedDemoSkip();
-        Random random = new Random(resolveSeed(scheduledSeason));
+            List<WeatherLocation> weatherSchedule = rebuildWeatherSchedule(scheduledSeason, locations, random);
+            List<Traffic> trafficSchedule = rebuildTrafficSchedule(scheduledSeason, locations, sourceBatchKey);
+            rebuildPopulationSchedule(scheduledSeason, locations, sourceBatchKey);
+            preloadWeatherDay(scheduledSeason.getId(), weatherSchedule, 1);
+            preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
+            scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
+            if (shouldGenerateNewsAfterStart) {
+                registerSeasonNewsGenerationAfterCommit(scheduledSeason.getId());
+            }
 
-        List<WeatherLocation> weatherSchedule = rebuildWeatherSchedule(scheduledSeason, locations, random);
-        List<Traffic> trafficSchedule = rebuildTrafficSchedule(scheduledSeason, locations, sourceBatchKey);
-        rebuildPopulationSchedule(scheduledSeason, locations, sourceBatchKey);
-        preloadWeatherDay(scheduledSeason.getId(), weatherSchedule, 1);
-        preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
-        scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
-        if (shouldGenerateNewsAfterStart) {
-            registerSeasonNewsGenerationAfterCommit(scheduledSeason.getId());
+            synchronizeInProgressSeason(scheduledSeason, now);
+            monitoringService.recordSourceBatchReady();
+            monitoringService.recordSeasonStart("success");
+            return SeasonStartResult.STARTED;
+        } catch (RuntimeException e) {
+            monitoringService.recordSeasonStart("failure");
+            monitoringService.recordSeasonStartDelay(resolveSeasonStartFailureReason(e));
+            throw e;
         }
-
-        synchronizeInProgressSeason(scheduledSeason, now);
-        return SeasonStartResult.STARTED;
     }
     /**
      * Spark ETL + 뉴스 생성을 트랜잭션 밖에서 실행.
@@ -216,6 +227,14 @@ public class SeasonLifecycleService {
         } catch (Exception e) {
             log.error("Failed to prepare scheduled season. seasonId={}", seasonId, e);
         }
+    }
+
+    private String resolveSeasonStartFailureReason(RuntimeException exception) {
+        String message = exception == null ? "" : exception.getMessage();
+        if (message != null && message.toLowerCase().contains("lock wait timeout")) {
+            return "lock_timeout";
+        }
+        return "other";
     }
 
     private void synchronizeInProgressSeason(Season season, LocalDateTime now) {

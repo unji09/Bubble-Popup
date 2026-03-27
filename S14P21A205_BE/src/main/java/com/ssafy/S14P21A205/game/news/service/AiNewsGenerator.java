@@ -3,6 +3,8 @@ package com.ssafy.S14P21A205.game.news.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
+import com.ssafy.S14P21A205.monitoring.service.ApplicationMonitoringService;
+import io.micrometer.core.instrument.Timer;
 import java.util.Collections;
 import java.util.List;
 import java.util.HashMap;
@@ -46,12 +48,15 @@ public class AiNewsGenerator {
 
     private final RestClient restClient;
     private final String model;
+    private final ApplicationMonitoringService monitoringService;
 
     public AiNewsGenerator(
+            ApplicationMonitoringService monitoringService,
             @Value("${GMS_BASE_URL:https://gms.ssafy.io/gmsapi}") String baseUrl,
             @Value("${GMS_KEY:}") String apiKey,
             @Value("${GMS_MODEL:gpt-4.1-nano}") String model) {
         this.model = model;
+        this.monitoringService = monitoringService;
         log.info("GMS AI base-url={}, model={}", baseUrl, model);
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
@@ -85,8 +90,9 @@ public class AiNewsGenerator {
                 + "필요하면 메뉴명은 자연스럽게 녹여 써줘. 스타일: %s")
                 .formatted(rankingText, focusMenu, style);
         try {
-            return callAi(prompt);
+            return callAi("trend", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("trend");
             log.error("AI trend news failed day {}", day, e);
             return fallbackTrendNews(day, rankedMenus);
         }
@@ -129,8 +135,9 @@ public class AiNewsGenerator {
                 + "제목에 가장 매장이 많은 메뉴명을 포함해. 스타일: %s")
                 .formatted(rankingText, style);
         try {
-            return callAi(prompt);
+            return callAi("menu_entry", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("menu_entry");
             log.error("AI menu entry news failed day {}", day, e);
             String topMenu = ranking.isEmpty() ? "음식" : (String) ranking.get(0).get("name");
             return new NewsGenerationResult(
@@ -155,8 +162,9 @@ public class AiNewsGenerator {
                 + "제목에 가장 매장이 많은 지역명을 포함해. 스타일: %s")
                 .formatted(rankingText, style);
         try {
-            return callAi(prompt);
+            return callAi("area_entry", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("area_entry");
             log.error("AI area entry news failed day {}", day, e);
             String topArea = ranking.isEmpty() ? "지역" : (String) ranking.get(0).get("name");
             return new NewsGenerationResult(
@@ -188,8 +196,9 @@ public class AiNewsGenerator {
                     .formatted(festivalName, style);
         }
         try {
-            return callAi(prompt);
+            return callAi("event_preview", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("event_preview");
             log.error("AI event preview news failed day {}", day, e);
             return new NewsGenerationResult(
                     "'" + festivalName + "' 개최 소식에 상권 들썩",
@@ -209,8 +218,9 @@ public class AiNewsGenerator {
                 + "본문에 매장명과 점주 이름을 포함해. 스타일: %s")
                 .formatted(locationName, ownerNickname, storeName, menuName, style);
         try {
-            return callAi(prompt);
+            return callAi("top_store", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("top_store");
             log.error("AI top store news failed day {}", day, e);
             return new NewsGenerationResult(
                     locationName + " '" + storeName + "' 앞 긴 줄… 무슨 일이?",
@@ -230,8 +240,9 @@ public class AiNewsGenerator {
                 + "본문에 매장명과 점주 이름을 포함해. 스타일: %s")
                 .formatted(locationName, ownerNickname, storeName, menuName, style);
         try {
-            return callAi(prompt);
+            return callAi("cumulative_sales", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("cumulative_sales");
             log.error("AI cumulative sales news failed day {}", day, e);
             return new NewsGenerationResult(
                     locationName + " '" + storeName + "', 놀라운 판매 기록 달성",
@@ -258,8 +269,9 @@ public class AiNewsGenerator {
                 + "제목에 변화가 가장 큰 지역명을 포함해. 스타일: %s")
                 .formatted(changesText, style);
         try {
-            return callAi(prompt);
+            return callAi("migration", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("migration");
             log.error("AI migration news failed day {}", day, e);
             return new NewsGenerationResult(
                     "팝업 매장 대이동, 상권 판도 바뀌나",
@@ -278,8 +290,9 @@ public class AiNewsGenerator {
                 + "이번 시즌의 치열한 경쟁을 예고하는 분위기를 전달해. 스타일: %s")
                 .formatted(style);
         try {
-            return callAi(prompt);
+            return callAi("guide", prompt);
         } catch (Exception e) {
+            monitoringService.recordAiFallback("guide");
             log.error("AI intro news failed for season {}", seasonId, e);
             return new NewsGenerationResult(
                     "서울 팝업 주간 개막, 버블팝업 축제의 막이 오르다",
@@ -394,13 +407,26 @@ public class AiNewsGenerator {
             String style = getRandomStyle();
             String prompt = tip.promptTemplate().formatted(style);
             try {
-                results.add(callAi(prompt));
+                results.add(callAi("guide", prompt));
             } catch (Exception e) {
+                monitoringService.recordAiFallback("guide");
                 log.error("AI tip news failed for season {}", seasonId, e);
                 results.add(new NewsGenerationResult(tip.fallbackTitle(), tip.fallbackContent()));
             }
         }
         return results;
+    }
+
+    private NewsGenerationResult callAi(String type, String promptText) throws Exception {
+        Timer.Sample sample = monitoringService.startTimerSample();
+        try {
+            NewsGenerationResult result = callAi(promptText);
+            monitoringService.recordAiRequest(type, "success", sample);
+            return result;
+        } catch (Exception e) {
+            monitoringService.recordAiRequest(type, monitoringService.classifyAiFailure(e), sample);
+            throw e;
+        }
     }
 
     // ---- Common AI call ----

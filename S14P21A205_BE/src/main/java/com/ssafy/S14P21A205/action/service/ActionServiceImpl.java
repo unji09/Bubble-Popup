@@ -31,6 +31,7 @@ import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
+import com.ssafy.S14P21A205.monitoring.service.ApplicationMonitoringService;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
@@ -109,6 +110,7 @@ public class ActionServiceImpl implements ActionService {
     private final CaptureRatePolicy captureRatePolicy;
     private final GameDayStateService gameDayStateService;
     private final GameDayStartService gameDayStartService;
+    private final ApplicationMonitoringService monitoringService;
     private final Clock clock;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -129,331 +131,355 @@ public class ActionServiceImpl implements ActionService {
     @Override
     @Transactional
     public ActionResponse executePromotion(Integer userId, PromotionRequest request) {
-        LocalDateTime actionTime = LocalDateTime.now(clock);
-        Store store = findStore(userId, actionTime);
-        ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
-        int day = context.day();
-        String legacyField = request.promotionType().name().toLowerCase();
+        try {
+            LocalDateTime actionTime = LocalDateTime.now(clock);
+            Store store = findStore(userId, actionTime);
+            ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
+            int day = context.day();
+            String legacyField = request.promotionType().name().toLowerCase();
 
-        validateNotUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
+            validateNotUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
 
-        Action action = actionRepository
-                .findByCategoryAndPromotionType(ActionCategory.PROMOTION, request.promotionType())
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-        GameDayLiveState state = resolveCurrentLiveState(store, context);
-        long updatedBalance = resolveUpdatedBalance("PROMOTION", userId, store, day, valueOf(action.getCost()), state);
+            Action action = actionRepository
+                    .findByCategoryAndPromotionType(ActionCategory.PROMOTION, request.promotionType())
+                    .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+            GameDayLiveState state = resolveCurrentLiveState(store, context);
+            long updatedBalance = resolveUpdatedBalance("PROMOTION", userId, store, day, valueOf(action.getCost()), state);
 
-        BigDecimal multiplier = action.getCaptureRate();
-        BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, multiplier);
+            BigDecimal multiplier = action.getCaptureRate();
+            BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, multiplier);
 
-        actionLogRepository.save(new ActionLog(action, store, day, null));
-        afterCommit(() -> synchronizeActionState("PROMOTION", store.getId(), day, () -> {
-            gameDayStoreStateRedisRepository.updateField(
-                    store.getId(),
+            actionLogRepository.save(new ActionLog(action, store, day, null));
+            afterCommit(() -> synchronizeActionState("PROMOTION", store.getId(), day, () -> {
+                gameDayStoreStateRedisRepository.updateField(
+                        store.getId(),
+                        day,
+                        "capture_rate",
+                        newCaptureRate.toPlainString()
+                );
+                gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
+                gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, legacyField);
+                gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+                gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                        store.getId(),
+                        day,
+                        resolveDebugTick(store, actionTime),
+                        new TickDebugActionNote(
+                                "홍보(%s)".formatted(request.promotionType().name()),
+                                valueOf(action.getCost()),
+                                0L,
+                                0L,
+                                0L,
+                                0L,
+                                0
+                        )
+                );
+            }));
+
+            logActionExecution(
+                    "PROMOTION",
+                    userId,
+                    store,
                     day,
-                    "capture_rate",
-                    newCaptureRate.toPlainString()
+                    "promotionType=%s actionCost=%s captureRateMultiplier=%s"
+                            .formatted(request.promotionType(), action.getCost(), multiplier.toPlainString()),
+                    updatedBalance
             );
-            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
-            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, legacyField);
-            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
-                    store.getId(),
-                    day,
-                    resolveDebugTick(store, actionTime),
-                    new TickDebugActionNote(
-                            "홍보(%s)".formatted(request.promotionType().name()),
-                            valueOf(action.getCost()),
-                            0L,
-                            0L,
-                            0L,
-                            0L,
-                            0
-                    )
+            monitoringService.recordAction("promotion", "success");
+            return new ActionResponse(
+                    "PROMOTION_" + request.promotionType().name(),
+                    action.getCost(),
+                    "Promotion executed."
             );
-        }));
-
-        logActionExecution(
-                "PROMOTION",
-                userId,
-                store,
-                day,
-                "promotionType=%s actionCost=%s captureRateMultiplier=%s"
-                        .formatted(request.promotionType(), action.getCost(), multiplier.toPlainString()),
-                updatedBalance
-        );
-        return new ActionResponse(
-                "PROMOTION_" + request.promotionType().name(),
-                action.getCost(),
-                "Promotion executed."
-        );
+        } catch (RuntimeException e) {
+            monitoringService.recordAction("promotion", "failure");
+            throw e;
+        }
     }
 
     @Override
     @Transactional
     public DiscountResponse executeDiscount(Integer userId, DiscountRequest request) {
-        LocalDateTime actionTime = LocalDateTime.now(clock);
-        Store store = findStore(userId, actionTime);
-        ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
-        int day = context.day();
+        try {
+            LocalDateTime actionTime = LocalDateTime.now(clock);
+            Store store = findStore(userId, actionTime);
+            ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
+            int day = context.day();
 
-        validateNotUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
+            validateNotUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
 
-        Action action = findSingleAction(ActionCategory.DISCOUNT);
-        int previousPrice = store.getPrice();
-        int newPrice = previousPrice - request.discountValue();
+            Action action = findSingleAction(ActionCategory.DISCOUNT);
+            int previousPrice = store.getPrice();
+            int newPrice = previousPrice - request.discountValue();
 
-        if (newPrice < store.getMenu().getOriginPrice()) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
-        }
+            if (newPrice < store.getMenu().getOriginPrice()) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+            }
 
-        GameDayLiveState state = resolveCurrentLiveState(store, context);
-        long updatedBalance = resolveUpdatedBalance("DISCOUNT", userId, store, day, valueOf(action.getCost()), state);
+            GameDayLiveState state = resolveCurrentLiveState(store, context);
+            long updatedBalance = resolveUpdatedBalance("DISCOUNT", userId, store, day, valueOf(action.getCost()), state);
 
-        int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
-                store.getSeason().getId(),
-                store.getMenu().getId()
-        );
-        if (averagePrice <= 0) {
-            averagePrice = store.getMenu().getOriginPrice();
-        }
-        PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
-
-        BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, priceRange.multiplier());
-
-        actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier()));
-        afterCommit(() -> synchronizeActionState("DISCOUNT", store.getId(), day, () -> {
-            gameDayStoreStateRedisRepository.updateField(store.getId(), day, "sale_price", String.valueOf(newPrice));
-            gameDayStoreStateRedisRepository.updateField(
-                    store.getId(),
-                    day,
-                    "capture_rate",
-                    newCaptureRate.toPlainString()
+            int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
+                    store.getSeason().getId(),
+                    store.getMenu().getId()
             );
-            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
-            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
-                    store.getId(),
-                    day,
-                    resolveDebugTick(store, actionTime),
-                    new TickDebugActionNote(
-                            "할인(%d->%d)".formatted(previousPrice, newPrice),
-                            0L,
-                            valueOf(action.getCost()),
-                            0L,
-                            0L,
-                            0L,
-                            0
-                    )
-            );
-        }));
+            if (averagePrice <= 0) {
+                averagePrice = store.getMenu().getOriginPrice();
+            }
+            PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
 
-        logActionExecution(
-                "DISCOUNT",
-                userId,
-                store,
-                day,
-                "discountValue=%s previousPrice=%s newPrice=%s priceRange=%s priceRangeMultiplier=%s"
-                        .formatted(
-                                request.discountValue(),
-                                previousPrice,
-                                newPrice,
-                                priceRange.label(),
-                                priceRange.multiplier().toPlainString()
-                        ),
-                updatedBalance
-        );
-        return new DiscountResponse(
-                previousPrice,
-                newPrice,
-                priceRange.label(),
-                priceRange.multiplier(),
-                "Discount applied."
-        );
+            BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, priceRange.multiplier());
+
+            actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier()));
+            afterCommit(() -> synchronizeActionState("DISCOUNT", store.getId(), day, () -> {
+                gameDayStoreStateRedisRepository.updateField(store.getId(), day, "sale_price", String.valueOf(newPrice));
+                gameDayStoreStateRedisRepository.updateField(
+                        store.getId(),
+                        day,
+                        "capture_rate",
+                        newCaptureRate.toPlainString()
+                );
+                gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
+                gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+                gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                        store.getId(),
+                        day,
+                        resolveDebugTick(store, actionTime),
+                        new TickDebugActionNote(
+                                "할인(%d->%d)".formatted(previousPrice, newPrice),
+                                0L,
+                                valueOf(action.getCost()),
+                                0L,
+                                0L,
+                                0L,
+                                0
+                        )
+                );
+            }));
+
+            logActionExecution(
+                    "DISCOUNT",
+                    userId,
+                    store,
+                    day,
+                    "discountValue=%s previousPrice=%s newPrice=%s priceRange=%s priceRangeMultiplier=%s"
+                            .formatted(
+                                    request.discountValue(),
+                                    previousPrice,
+                                    newPrice,
+                                    priceRange.label(),
+                                    priceRange.multiplier().toPlainString()
+                            ),
+                    updatedBalance
+            );
+            monitoringService.recordAction("discount", "success");
+            return new DiscountResponse(
+                    previousPrice,
+                    newPrice,
+                    priceRange.label(),
+                    priceRange.multiplier(),
+                    "Discount applied."
+            );
+        } catch (RuntimeException e) {
+            monitoringService.recordAction("discount", "failure");
+            throw e;
+        }
     }
 
     @Override
     @Transactional
     public DonationResponse executeDonation(Integer userId, DonationRequest request) {
-        LocalDateTime actionTime = LocalDateTime.now(clock);
-        Store store = findStore(userId, actionTime);
-        ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
-        int day = context.day();
+        try {
+            LocalDateTime actionTime = LocalDateTime.now(clock);
+            Store store = findStore(userId, actionTime);
+            ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
+            int day = context.day();
 
-        validateNotUsed(store.getId(), day, ACTION_FIELD_DONATION);
+            validateNotUsed(store.getId(), day, ACTION_FIELD_DONATION);
 
-        Action action = findSingleAction(ActionCategory.DONATION);
-        GameDayLiveState state = resolveCurrentLiveState(store, context);
-        int currentStock = normalizeStock(state.stock());
-        if (currentStock < request.quantity()) {
-            throw new BaseException(ErrorCode.INSUFFICIENT_STOCK);
+            Action action = findSingleAction(ActionCategory.DONATION);
+            GameDayLiveState state = resolveCurrentLiveState(store, context);
+            int currentStock = normalizeStock(state.stock());
+            if (currentStock < request.quantity()) {
+                throw new BaseException(ErrorCode.INSUFFICIENT_STOCK);
+            }
+
+            long updatedBalance = resolveUpdatedBalance("DONATION", userId, store, day, valueOf(action.getCost()), state);
+            BigDecimal captureRateBonus = DONATION_CAPTURE_RATE_BONUS.setScale(2, RoundingMode.HALF_UP);
+
+            int newStock = normalizeStock(currentStock - request.quantity());
+            BigDecimal multiplier = BigDecimal.ONE.add(captureRateBonus);
+            BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, multiplier);
+
+            actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
+            afterCommit(() -> synchronizeActionState("DONATION", store.getId(), day, () -> {
+                gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", String.valueOf(newStock));
+                gameDayStoreStateRedisRepository.updateField(
+                        store.getId(),
+                        day,
+                        "capture_rate",
+                        newCaptureRate.toPlainString()
+                );
+                gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DONATION);
+                gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+                gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                        store.getId(),
+                        day,
+                        resolveDebugTick(store, actionTime),
+                        new TickDebugActionNote(
+                                "나눔(%d개)".formatted(request.quantity()),
+                                0L,
+                                0L,
+                                0L,
+                                valueOf(action.getCost()),
+                                0L,
+                                request.quantity()
+                        )
+                );
+            }));
+
+            logActionExecution(
+                    "DONATION",
+                    userId,
+                    store,
+                    day,
+                    "quantity=%s stockAfter=%s captureRateBonus=%s"
+                            .formatted(request.quantity(), newStock, captureRateBonus.toPlainString()),
+                    updatedBalance
+            );
+            monitoringService.recordAction("donation", "success");
+            return new DonationResponse(
+                    request.quantity(),
+                    captureRateBonus,
+                    "Donation executed."
+            );
+        } catch (RuntimeException e) {
+            monitoringService.recordAction("donation", "failure");
+            throw e;
         }
-
-        long updatedBalance = resolveUpdatedBalance("DONATION", userId, store, day, valueOf(action.getCost()), state);
-        BigDecimal captureRateBonus = DONATION_CAPTURE_RATE_BONUS.setScale(2, RoundingMode.HALF_UP);
-
-        int newStock = normalizeStock(currentStock - request.quantity());
-        BigDecimal multiplier = BigDecimal.ONE.add(captureRateBonus);
-        BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, multiplier);
-
-        actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
-        afterCommit(() -> synchronizeActionState("DONATION", store.getId(), day, () -> {
-            gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", String.valueOf(newStock));
-            gameDayStoreStateRedisRepository.updateField(
-                    store.getId(),
-                    day,
-                    "capture_rate",
-                    newCaptureRate.toPlainString()
-            );
-            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DONATION);
-            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
-                    store.getId(),
-                    day,
-                    resolveDebugTick(store, actionTime),
-                    new TickDebugActionNote(
-                            "나눔(%d개)".formatted(request.quantity()),
-                            0L,
-                            0L,
-                            0L,
-                            valueOf(action.getCost()),
-                            0L,
-                            request.quantity()
-                    )
-            );
-        }));
-
-        logActionExecution(
-                "DONATION",
-                userId,
-                store,
-                day,
-                "quantity=%s stockAfter=%s captureRateBonus=%s"
-                        .formatted(request.quantity(), newStock, captureRateBonus.toPlainString()),
-                updatedBalance
-        );
-        return new DonationResponse(
-                request.quantity(),
-                captureRateBonus,
-                "Donation executed."
-        );
     }
 
     @Override
     @Transactional
     public EmergencyOrderResponse executeEmergencyOrder(Integer userId, EmergencyOrderRequest request) {
-        LocalDateTime now = LocalDateTime.now(clock);
-        Store store = findStore(userId, now);
-        ActionExecutionContext context = resolveActionExecutionContext(store, now);
-        int day = context.day();
-        Menu menu = getMenuById(request.menuId());
+        try {
+            LocalDateTime now = LocalDateTime.now(clock);
+            Store store = findStore(userId, now);
+            ActionExecutionContext context = resolveActionExecutionContext(store, now);
+            int day = context.day();
+            Menu menu = getMenuById(request.menuId());
 
-        if (request.salePrice() < menu.getOriginPrice()) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
-        }
+            if (request.salePrice() < menu.getOriginPrice()) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+            }
 
-        validateNotUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
+            validateNotUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
 
-        Action action = findSingleAction(ActionCategory.EMERGENCY_ORDER);
-        GameDayLiveState state = resolveCurrentLiveState(store, context);
+            Action action = findSingleAction(ActionCategory.EMERGENCY_ORDER);
+            GameDayLiveState state = resolveCurrentLiveState(store, context);
 
-        BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, menu, day, state, now);
-        int menuTrendRank = resolveMenuEntryRank(store, day, menu);
-        int minimumSellingPrice = storeRankingPolicy.apply(
-                menu.getOriginPrice(),
-                storeRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
-                ingredientCostMultiplier
-        );
-        int recommendedPrice = BigDecimal.valueOf(minimumSellingPrice)
-                .multiply(RECOMMENDED_PRICE_MULTIPLIER)
-                .setScale(0, RoundingMode.HALF_UP)
-                .intValue();
-        int maxSellingPrice = Math.multiplyExact(recommendedPrice, 2);
+            BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, menu, day, state, now);
+            int menuTrendRank = resolveMenuEntryRank(store, day, menu);
+            int minimumSellingPrice = storeRankingPolicy.apply(
+                    menu.getOriginPrice(),
+                    storeRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
+                    ingredientCostMultiplier
+            );
+            int recommendedPrice = BigDecimal.valueOf(minimumSellingPrice)
+                    .multiply(RECOMMENDED_PRICE_MULTIPLIER)
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .intValue();
+            int maxSellingPrice = Math.multiplyExact(recommendedPrice, 2);
 
-        if (request.salePrice() < minimumSellingPrice || request.salePrice() > maxSellingPrice) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
-        }
-        int adjustedOriginPrice = storeRankingPolicy.apply(
-                menu.getOriginPrice(),
-                storeRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
-                resolveIngredientDiscountRate(store.getUser().getId()),
-                ingredientCostMultiplier
-        );
-        int totalCost = BigDecimal.valueOf(adjustedOriginPrice)
-                .multiply(BigDecimal.valueOf(request.quantity()))
-                .multiply(EMERGENCY_COST_MULTIPLIER)
-                .intValue();
+            if (request.salePrice() < minimumSellingPrice || request.salePrice() > maxSellingPrice) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+            }
+            int adjustedOriginPrice = storeRankingPolicy.apply(
+                    menu.getOriginPrice(),
+                    storeRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
+                    resolveIngredientDiscountRate(store.getUser().getId()),
+                    ingredientCostMultiplier
+            );
+            int totalCost = BigDecimal.valueOf(adjustedOriginPrice)
+                    .multiply(BigDecimal.valueOf(request.quantity()))
+                    .multiply(EMERGENCY_COST_MULTIPLIER)
+                    .intValue();
 
-        long updatedBalance = resolveUpdatedBalance(
-                "EMERGENCY_ORDER",
-                userId,
-                store,
-                day,
-                valueOf(action.getCost()) + totalCost,
-                state
-        );
-        int deliverySeconds = trafficDelayResolver.resolve(
-                store.getSeason().getId(),
-                store.getLocation().getId(),
-                day,
-                store.getSeason().resolveRuntimePlayableDays(),
-                state.startedAt(),
-                now
-        ).delaySeconds();
-        LocalDateTime arrivedTime = now.plusSeconds(deliverySeconds);
-
-        if (!Objects.equals(store.getPrice(), request.salePrice())) {
-            store.changePrice(request.salePrice());
-        }
-
-        actionLogRepository.save(new ActionLog(action, store, day, null));
-        Order order = orderRepository.save(
-                Order.createEmergency(
-                        menu,
-                        store,
-                        request.quantity(),
-                        totalCost,
-                        request.salePrice(),
-                        day,
-                        arrivedTime
-                )
-        );
-
-        afterCommit(() -> synchronizeActionState("EMERGENCY_ORDER", store.getId(), day, () -> {
-            gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
-            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
-                    store.getId(),
+            long updatedBalance = resolveUpdatedBalance(
+                    "EMERGENCY_ORDER",
+                    userId,
+                    store,
                     day,
-                    resolveDebugTick(store, now),
-                    new TickDebugActionNote(
-                            "긴급발주(%d개)".formatted(request.quantity()),
-                            0L,
-                            0L,
-                            valueOf(action.getCost()) + totalCost,
-                            0L,
-                            0L,
-                            0
+                    valueOf(action.getCost()) + totalCost,
+                    state
+            );
+            int deliverySeconds = trafficDelayResolver.resolve(
+                    store.getSeason().getId(),
+                    store.getLocation().getId(),
+                    day,
+                    store.getSeason().resolveRuntimePlayableDays(),
+                    state.startedAt(),
+                    now
+            ).delaySeconds();
+            LocalDateTime arrivedTime = now.plusSeconds(deliverySeconds);
+
+            if (!Objects.equals(store.getPrice(), request.salePrice())) {
+                store.changePrice(request.salePrice());
+            }
+
+            actionLogRepository.save(new ActionLog(action, store, day, null));
+            Order order = orderRepository.save(
+                    Order.createEmergency(
+                            menu,
+                            store,
+                            request.quantity(),
+                            totalCost,
+                            request.salePrice(),
+                            day,
+                            arrivedTime
                     )
             );
-        }));
 
-        logActionExecution(
-                "EMERGENCY_ORDER",
-                userId,
-                store,
-                day,
-                "orderId=%s quantity=%s totalCost=%s deliverySeconds=%s arrivedTime=%s"
-                        .formatted(order.getId(), request.quantity(), totalCost, deliverySeconds, arrivedTime),
-                updatedBalance
-        );
-        return new EmergencyOrderResponse(
-                order.getId(),
-                request.quantity(),
-                totalCost,
-                arrivedTime,
-                "Emergency order accepted."
-        );
+            afterCommit(() -> synchronizeActionState("EMERGENCY_ORDER", store.getId(), day, () -> {
+                gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
+                gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
+                gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                        store.getId(),
+                        day,
+                        resolveDebugTick(store, now),
+                        new TickDebugActionNote(
+                                "긴급발주(%d개)".formatted(request.quantity()),
+                                0L,
+                                0L,
+                                valueOf(action.getCost()) + totalCost,
+                                0L,
+                                0L,
+                                0
+                        )
+                );
+            }));
+
+            logActionExecution(
+                    "EMERGENCY_ORDER",
+                    userId,
+                    store,
+                    day,
+                    "orderId=%s quantity=%s totalCost=%s deliverySeconds=%s arrivedTime=%s"
+                            .formatted(order.getId(), request.quantity(), totalCost, deliverySeconds, arrivedTime),
+                    updatedBalance
+            );
+            monitoringService.recordAction("emergency_order", "success");
+            return new EmergencyOrderResponse(
+                    order.getId(),
+                    request.quantity(),
+                    totalCost,
+                    arrivedTime,
+                    "Emergency order accepted."
+            );
+        } catch (RuntimeException e) {
+            monitoringService.recordAction("emergency_order", "failure");
+            throw e;
+        }
     }
 
     private Store findStore(Integer userId) {

@@ -34,4 +34,6 @@ public interface SeasonRepository extends JpaRepository<Season, Long> {
     Optional<Season> findByIdAndStatus(Long id, SeasonStatus status);
 
     boolean existsByStatusAndStartTime(SeasonStatus status, LocalDateTime startTime);
+
+    long countByStatus(SeasonStatus status);
 }

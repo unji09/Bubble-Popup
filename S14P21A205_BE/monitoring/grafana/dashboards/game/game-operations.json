@@ -1,0 +1,102 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "game_in_progress_season_count", "refId": "A"}],
+      "title": "In-Progress Seasons",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "game_current_day", "refId": "A"}],
+      "title": "Current Day",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "game_active_store_count", "refId": "A"}],
+      "title": "Active Stores",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "sum(increase(game_customer_total[1h]))", "refId": "A"}],
+      "title": "Customers (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "id": 5,
+      "targets": [
+        {"expr": "sum by (result) (increase(game_season_start_total[6h]))", "legendFormat": "season start {{result}}", "refId": "A"},
+        {"expr": "sum by (result) (increase(game_day_close_total[6h]))", "legendFormat": "day close {{result}}", "refId": "B"}
+      ],
+      "title": "Season / Day Lifecycle",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "id": 6,
+      "targets": [{"expr": "sum by (type, result) (increase(game_action_total[6h]))", "legendFormat": "{{type}} {{result}}", "refId": "A"}],
+      "title": "Action Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "id": 7,
+      "targets": [
+        {"expr": "increase(game_stockout_total[6h])", "legendFormat": "stockout", "refId": "A"},
+        {"expr": "increase(game_bankrupt_total[6h])", "legendFormat": "bankrupt", "refId": "B"},
+        {"expr": "increase(game_store_location_change_total{result=\"success\"}[6h])", "legendFormat": "location change", "refId": "C"}
+      ],
+      "title": "Game Incidents",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "id": 8,
+      "targets": [
+        {"expr": "increase(game_state_restore_total[6h])", "legendFormat": "state restore", "refId": "A"},
+        {"expr": "increase(game_state_missing_total[6h])", "legendFormat": "state missing", "refId": "B"},
+        {"expr": "increase(game_report_materialization_total[6h])", "legendFormat": "report materialization", "refId": "C"}
+      ],
+      "title": "State Recovery",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["game"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "Game Operations",
+  "version": 1
+}
