@@ -12,14 +12,14 @@ interface SeoulMap3DProps {
 }
 
 // 한강 — 강북 남쪽 경계(north bank)와 강남 북쪽 경계(south bank) 사이
-// 강북 구의 최남단 경계점들 (z값이 가장 큰 점들)
+// 각 bank를 0.2만큼 바깥으로 확장하여 구역과의 틈 제거
 const NORTH_BANK: [number, number][] = [
-  [-10.2, -2.3], [-7.5, -0.2], [-6.56, 0.31], [-3.67, 0.98],
-  [-2.92, 1.56], [-1.74, 2.76], [-1.13, 2.98],
-  [0.98, 2.98], [1.71, 2.64], [2.2, 2.39],
-  [2.89, 1.7], [4.42, 0.76], [6.69, 1.59],
-  [7.57, 1.93], [8.07, 2.05], [10.27, 1.71],
-  [11.19, 0.37], [12.35, 0.79], [15.75, 0.24],
+  [-10.2, -2.5], [-7.5, -0.4], [-6.56, 0.11], [-3.67, 0.78],
+  [-2.92, 1.36], [-1.74, 2.56], [-1.13, 2.78],
+  [0.98, 2.78], [1.71, 2.44], [2.2, 2.19],
+  [2.89, 1.5], [4.42, 0.56], [6.69, 1.39],
+  [7.57, 1.73], [8.07, 1.85], [10.27, 1.51],
+  [11.19, 0.17], [12.35, 0.59], [15.75, 0.04],
 ];
 
 // 강남 구의 최북단 경계점들 (강남 구역이 z+2.5 offset 됨)
@@ -48,7 +48,7 @@ function HanRiver() {
 
   return (
     <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.15, 0]}>
-      <meshStandardMaterial color="#a8d4f0" metalness={0.1} roughness={0.3} />
+      <meshStandardMaterial color="#a8d4f0" metalness={0} roughness={0.5} />
     </mesh>
   );
 }
@@ -58,9 +58,10 @@ function MapScene({ districts, selectedId, onSelect }: SeoulMap3DProps) {
 
   return (
     <>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[10, 20, 10]} intensity={0.7} castShadow shadow-mapSize={1024} />
-      <directionalLight position={[-8, 12, -6]} intensity={0.2} />
+      <ambientLight intensity={1.2} />
+      <hemisphereLight args={["#b1e1ff", "#b97a20", 0.8]} />
+      <directionalLight position={[10, 20, 10]} intensity={1.0} castShadow shadow-mapSize={1024} />
+      <directionalLight position={[-8, 12, -6]} intensity={0.5} />
 
       {/* Background gu (flat) */}
       {backgroundGus.map((gu) => (

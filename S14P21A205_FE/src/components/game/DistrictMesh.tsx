@@ -16,14 +16,14 @@ interface DistrictMeshProps {
 
 const gradeColors: Record<string, string> = {
   "S등급": "#fecdd3",
-  "A등급": "#fde68a",
-  "B등급": "#bae6fd",
+  "A등급": "#fef08a",
+  "B등급": "#bfdbfe",
 };
 
 const gradeHoverColors: Record<string, string> = {
   "S등급": "#fda4af",
-  "A등급": "#fcd34d",
-  "B등급": "#7dd3fc",
+  "A등급": "#fde047",
+  "B등급": "#93c5fd",
 };
 
 const selectedColor = "#A8BFA9";
@@ -76,10 +76,10 @@ export default function DistrictMesh({
       >
         <meshStandardMaterial
           color={color}
-          metalness={0.05}
-          roughness={0.7}
+          metalness={0}
+          roughness={0.85}
           transparent
-          opacity={isSelected ? 1 : isHovered ? 0.95 : 0.88}
+          opacity={isSelected ? 1 : isHovered ? 0.97 : 0.93}
         />
       </mesh>
 
@@ -114,7 +114,7 @@ export function BackgroundMesh({ polygon, name, center }: { polygon: [number, nu
   return (
     <group>
       <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} receiveShadow>
-        <meshStandardMaterial color="#e8e4dd" metalness={0} roughness={0.9} />
+        <meshStandardMaterial color="#f5f3ef" metalness={0} roughness={0.9} />
       </mesh>
       {/* Label */}
       <Html
