@@ -325,7 +325,7 @@ export default function ReportPage() {
                 <Badge variant="gold" size="sm">{report.menuName}</Badge>
               </div>
               <h1 className="text-4xl font-black leading-tight tracking-tight">
-                {brandName}
+                {report.storeName || brandName}
               </h1>
               {isBankrupt ? (
                 <p className="text-base font-medium text-rose-dark">

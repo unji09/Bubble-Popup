@@ -58,7 +58,7 @@ import { classifyEventEffect, EFFECT_CONFIG } from "../components/play/effects/e
 import { mapWeatherToUnity } from "../utils/unity";
 import { useEventEffectStore } from "../components/play/effects/useEventEffect";
 import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
-import useBrandName from "../hooks/useBrandName";
+import useBrandName, { setStoredBrandName } from "../hooks/useBrandName";
 import useStatQueue from "../hooks/useStatQueue";
 import { useGameStore } from "../stores/useGameStore";
 import { useUserStore } from "../stores/useUserStore";
@@ -1812,6 +1812,10 @@ function PlayPageSession({
       if (storeResult.status === "fulfilled") {
         setCurrentLocationName(storeResult.value.location);
         useGameStore.getState().setCurrentLocationName(storeResult.value.location);
+        // 서버 브랜드명으로 zustand 동기화
+        if (storeResult.value.popupName) {
+          setStoredBrandName(storeResult.value.popupName);
+        }
         // 매장 지역의 Unity 인덱스 계산 (locationId - 1 = 0-based index)
         if (locationResult.status === "fulfilled") {
           const matched = locationResult.value.locations.find(

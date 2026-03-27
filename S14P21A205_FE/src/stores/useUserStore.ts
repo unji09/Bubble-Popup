@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getUser, getUserPoints, patchNickname } from "../api/user";
+import { useAppNoticeStore } from "./useAppNoticeStore";
 
 interface UserState {
   nickname: string | null;
@@ -38,7 +39,13 @@ export const useUserStore = create<UserState>((set) => ({
         isLoaded: true,
       });
     } catch {
-      // getUser 자체 실패 → 기존 데이터 유지하고 로드 완료 표시
+      // 토큰이 제거됐으면(인터셉터가 refresh 실패 처리) 로그인 페이지로
+      if (!localStorage.getItem("accessToken")) {
+        window.location.href = "/login";
+        return;
+      }
+      // 토큰은 있지만 서버 문제(502 등)로 실패 → 서버 오류 모달 표시
+      useAppNoticeStore.getState().showServerNotice();
       set((prev) => ({ ...prev, isLoaded: true }));
     }
   },

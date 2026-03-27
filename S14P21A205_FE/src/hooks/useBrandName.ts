@@ -1,80 +1,41 @@
-import { useEffect, useState } from "react";
+import { useBrandStore } from "../stores/useBrandStore";
 
-const BRAND_NAME_STORAGE_KEY = "brandName";
-const BRAND_NAME_CHANGE_EVENT = "profile:brand-name-changed";
-const DEFAULT_BRAND_NAME = "버블스토리";
-
-function dispatchBrandNameChange() {
-  window.dispatchEvent(new Event(BRAND_NAME_CHANGE_EVENT));
-}
-
-export function getStoredBrandName() {
-  try {
-    const storedBrandName = localStorage.getItem(BRAND_NAME_STORAGE_KEY)?.trim();
-    return storedBrandName || DEFAULT_BRAND_NAME;
-  } catch {
-    return DEFAULT_BRAND_NAME;
-  }
-}
-
+/** 스토어 외부에서 브랜드명 설정 (GameGuard, API 응답 등) */
 export function setStoredBrandName(nextBrandName: string) {
-  const trimmedBrandName = nextBrandName.trim();
-
-  if (!trimmedBrandName) {
-    return DEFAULT_BRAND_NAME;
+  const trimmed = nextBrandName.trim();
+  if (trimmed) {
+    useBrandStore.getState().setBrandName(trimmed);
   }
-
-  try {
-    localStorage.setItem(BRAND_NAME_STORAGE_KEY, trimmedBrandName);
-    dispatchBrandNameChange();
-  } catch {
-    return trimmedBrandName;
-  }
-
-  return trimmedBrandName;
+  return trimmed || useBrandStore.getState().brandName;
 }
 
+/** 스토어 외부에서 브랜드명 초기화 */
 export function clearStoredBrandName() {
-  try {
-    localStorage.removeItem(BRAND_NAME_STORAGE_KEY);
-    dispatchBrandNameChange();
-  } catch {
-    // Ignore storage access failures and fall back to default brand name.
-  }
-
-  return DEFAULT_BRAND_NAME;
+  useBrandStore.getState().clearBrandName();
+  return useBrandStore.getState().brandName;
 }
 
+/** 현재 브랜드명 조회 (비-React 컨텍스트용) */
+export function getStoredBrandName() {
+  return useBrandStore.getState().brandName;
+}
+
+/** React 컴포넌트용 hook */
 export default function useBrandName() {
-  const [brandName, setBrandNameState] = useState(getStoredBrandName);
-
-  useEffect(() => {
-    const syncBrandName = () => {
-      setBrandNameState(getStoredBrandName());
-    };
-
-    window.addEventListener("storage", syncBrandName);
-    window.addEventListener("focus", syncBrandName);
-    window.addEventListener(BRAND_NAME_CHANGE_EVENT, syncBrandName);
-
-    return () => {
-      window.removeEventListener("storage", syncBrandName);
-      window.removeEventListener("focus", syncBrandName);
-      window.removeEventListener(BRAND_NAME_CHANGE_EVENT, syncBrandName);
-    };
-  }, []);
+  const brandName = useBrandStore((s) => s.brandName);
+  const setBrandName = useBrandStore((s) => s.setBrandName);
+  const clearBrandName = useBrandStore((s) => s.clearBrandName);
 
   return {
     brandName,
     setBrandName: (nextBrandName: string) => {
-      const savedBrandName = setStoredBrandName(nextBrandName);
-      setBrandNameState(savedBrandName);
-      return savedBrandName;
+      const trimmed = nextBrandName.trim();
+      if (trimmed) setBrandName(trimmed);
+      return trimmed || brandName;
     },
     clearBrandName: () => {
-      const clearedBrandName = clearStoredBrandName();
-      setBrandNameState(clearedBrandName);
-      return clearedBrandName;
+      clearBrandName();
+      return useBrandStore.getState().brandName;
     },
   };
 }
