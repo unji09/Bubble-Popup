@@ -44,6 +44,59 @@
 </div>
 <script>
     var canvas = document.querySelector("#unity-canvas");
+    var unityDebugEnabled = new URLSearchParams(window.location.search).get("unityDebug") === "1";
+    var unitySuppressedLogPatterns = [
+        "[WebGLBridge]",
+        "[UnityMemory]",
+        "[Physics::Module]",
+        "Input Manager initialize...",
+        "Input System initialize...",
+        "Loading player data from data.unity3d",
+        "Initialize engine version:",
+        "Renderer:",
+        "Vendor:",
+        "Version:",
+        "GLES:",
+        "OPENGL LOG:",
+        "Trying to get length of sound which is not loaded yet.",
+        "UnloadTime:",
+        "Audio context resumed after",
+        "WebGL: INVALID_ENUM: getInternalformatParameter: invalid internalformat",
+        "ERROR: Shader",
+        "shader is not supported on this GPU"
+    ];
+    function shouldSuppressUnityConsoleMessage(args) {
+        if (unityDebugEnabled) return false;
+        return Array.prototype.some.call(args, function(arg) {
+            if (typeof arg === "string") {
+                return unitySuppressedLogPatterns.some(function(pattern) {
+                    return arg.indexOf(pattern) !== -1;
+                });
+            }
+            if (arg && typeof arg.message === "string") {
+                return unitySuppressedLogPatterns.some(function(pattern) {
+                    return arg.message.indexOf(pattern) !== -1;
+                });
+            }
+            return false;
+        });
+    }
+    (function() {
+        if (unityDebugEnabled) return;
+        var originalConsole = {
+            log: console.log.bind(console),
+            info: console.info.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console),
+        };
+        ["log", "info", "warn", "error"].forEach(function(level) {
+            var original = originalConsole[level];
+            console[level] = function() {
+                if (shouldSuppressUnityConsoleMessage(arguments)) return;
+                return original.apply(console, arguments);
+            };
+        });
+    })();
     window.unityApp = {
         instance: null,
         isReady: false,
@@ -53,11 +106,23 @@
             return true;
         },
     };
+    function getParentTargetOrigin() {
+        if (!document.referrer) {
+            return "*";
+        }
+
+        try {
+            return new URL(document.referrer).origin;
+        } catch (error) {
+            return "*";
+        }
+    }
+    var parentTargetOrigin = getParentTargetOrigin();
     function notifyParent(type, payload) {
         if (window.parent && window.parent !== window) {
             window.parent.postMessage(
                 Object.assign({ source: "unity-webgl", type: type }, payload || {}),
-                window.location.origin,
+                parentTargetOrigin,
             );
         }
     }
@@ -130,15 +195,12 @@
         }
     }
     function handleUnityMessage(method, payload) {
-        console.log("[WebGLBridge] SendMessage:", method, payload);
         unityInstanceRef.SendMessage("WebGLBridge", method, payload);
     }
     window.addEventListener("message", function (event) {
         if (!event.data || event.data.type !== "unity") return;
-        console.log("[WebGLBridge] Received postMessage:", event.data.method, event.data.payload, "unityReady:", !!unityInstanceRef);
         if (!unityInstanceRef) {
             messageQueue.push(event.data);
-            console.log("[WebGLBridge] Queued, queue size:", messageQueue.length);
             return;
         }
         handleUnityMessage(event.data.method, event.data.payload);
@@ -156,6 +218,14 @@
         productName: "Setup Guide In-Editor Tutorial",
         productVersion: "2.0.1",
         showBanner: unityShowBanner,
+        print: function(message) {
+            if (shouldSuppressUnityConsoleMessage([message])) return;
+            console.log(message);
+        },
+        printErr: function(message) {
+            if (shouldSuppressUnityConsoleMessage([message])) return;
+            console.error(message);
+        },
         // errorHandler: function(err, url, line) {
         //    alert("error " + err + " occurred at line " + line);
         //    // Return 'true' if you handled this error and don't want Unity
@@ -217,7 +287,6 @@
 
             // Unity 내부 초기화 완료 대기 후 큐 flush + ready 시그널
             setTimeout(function () {
-                console.log("[WebGLBridge] Flushing queue, size:", messageQueue.length);
                 messageQueue.forEach(function (msg) {
                     handleUnityMessage(msg.method, msg.payload);
                 });
@@ -226,7 +295,6 @@
                 requestAnimationFrame(function () {
                     canvas.style.visibility = "visible";
                 });
-                console.log("[WebGLBridge] Sending ready to parent");
                 notifyParent("ready");
                 parent.postMessage({ type: "unityReady" }, "*");
                 parent.postMessage({ type: "unity-ready" }, "*");

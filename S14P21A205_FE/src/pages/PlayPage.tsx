@@ -1437,9 +1437,6 @@ function PlayPageSession({
     setGuests((prev) => prev + 1);
     displayedGuestsRef.current += 1;
     spawnTimingRef.current.totalArrived += 1;
-    const { totalSpawned, totalArrived } = spawnTimingRef.current;
-    const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
-    console.log(`[SpawnTiming] 도착 (누적 도착: ${totalArrived}/${totalSpawned}, 미도착: ${totalSpawned - totalArrived}), 남은 시간: ${remainingUntilEnd}ms`);
   };
 
   // Unity UNITY_POPUP_ARRIVAL 이벤트 수신
@@ -1569,9 +1566,6 @@ function PlayPageSession({
           );
           spawnTimingRef.current.totalSpawned += gd;
           spawnTimingRef.current.lastRequestAt = Date.now();
-          const { totalSpawned, totalArrived } = spawnTimingRef.current;
-          const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
-          console.log(`[SpawnTiming] 스폰 요청: +${gd}명 (누적 스폰: ${totalSpawned}, 도착: ${totalArrived}, 미도착: ${totalSpawned - totalArrived}), 남은 시간: ${remainingUntilEnd}ms`);
         }
       }
     } else {
@@ -1929,15 +1923,6 @@ function PlayPageSession({
 
       if (nextRemainingMilliseconds <= 0) {
         window.clearInterval(timer);
-        const { totalSpawned, totalArrived } = spawnTimingRef.current;
-        if (totalSpawned > 0) {
-          const missing = totalSpawned - totalArrived;
-          if (missing > 0) {
-            console.warn(`[SpawnTiming] ⚠️ 하루 종료! 누적 미도착: ${missing}/${totalSpawned}명 (도착률: ${Math.round(totalArrived / totalSpawned * 100)}%)`);
-          } else {
-            console.log(`[SpawnTiming] ✅ 하루 종료! 전원 도착: ${totalArrived}/${totalSpawned}명`);
-          }
-        }
       }
     }, 100);
 
