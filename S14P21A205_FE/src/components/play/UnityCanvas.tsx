@@ -14,15 +14,6 @@ type UnityMethodName =
   | "SpawnSinglePopupVisitor"
   | "SetCongestionLevel";
 
-interface UnityAppBridge {
-  isReady: boolean;
-  sendMessage: (methodName: UnityMethodName, payload: string) => boolean;
-}
-
-interface UnityFrameWindow extends Window {
-  unityApp?: UnityAppBridge;
-}
-
 export interface UnityBridgeHandle {
   isReady: () => boolean;
   sendMessage: (methodName: UnityMethodName, payload: string) => boolean;
@@ -46,14 +37,6 @@ interface PendingUnityMessage {
 
 const UNITY_LOADING_VERSION = "20260327-6";
 
-function getUnityApp(frame: HTMLIFrameElement | null) {
-  try {
-    return (frame?.contentWindow as UnityFrameWindow | null)?.unityApp ?? null;
-  } catch {
-    return null;
-  }
-}
-
 const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function UnityCanvas(
   { className = "", src = "/unity/index.html", iframeRef: externalIframeRef, onReady, onPopupArrival },
   ref,
@@ -72,13 +55,14 @@ const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function Uni
   };
 
   const sendMessage = (methodName: UnityMethodName, payload: string) => {
-    const unityApp = getUnityApp(internalIframeRef.current);
+    const contentWindow = internalIframeRef.current?.contentWindow;
 
-    if (!unityApp?.isReady) {
+    if (!contentWindow || !isReady) {
       return false;
     }
 
-    return unityApp.sendMessage(methodName, payload);
+    contentWindow.postMessage({ type: "unity", method: methodName, payload }, "*");
+    return true;
   };
 
   useImperativeHandle(
