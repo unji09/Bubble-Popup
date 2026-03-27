@@ -51,6 +51,24 @@ export default function FloodEffect({ durationMs }: Props) {
 
   const vignetteTex = useMemo(() => createVignetteTexture(), []);
 
+  // 그라데이션 vertex color가 적용된 물 geometry
+  const waterGeo = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(30, WATER_H, 192, 16);
+    const posAttr = geo.getAttribute("position");
+    const colors = new Float32Array(posAttr.count * 3);
+    const topColor = new THREE.Color("#5b8fd8");
+    const botColor = new THREE.Color("#1a3366");
+    const tmp = new THREE.Color();
+    for (let i = 0; i < posAttr.count; i++) {
+      const localY = posAttr.getY(i);
+      const ratio = (localY + WATER_H / 2) / WATER_H; // 0(아래)~1(위)
+      tmp.copy(botColor).lerp(topColor, ratio);
+      tmp.toArray(colors, i * 3);
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    return geo;
+  }, []);
+
   const bubbleData = useMemo(() => {
     return Array.from({ length: BUBBLE_COUNT }, () => ({
       x: (Math.random() - 0.5) * 20,
@@ -68,7 +86,7 @@ export default function FloodEffect({ durationMs }: Props) {
     const o = opacity.current;
 
     // 10초에 걸쳐 올라감 (easeIn: 처음 느리게)
-    const p = Math.min(t / 10, 1);
+    const p = Math.min(t / 8, 1);
     const rise = p * p * RISE_AMOUNT;
     const centerY = START_CENTER_Y + rise;
     const waterTop = centerY + WATER_H / 2; // 물 상단 y
@@ -96,7 +114,7 @@ export default function FloodEffect({ durationMs }: Props) {
 
       // 물이 화면에 보이기 시작하면 opacity 올림
       const visible = Math.max(0, waterTop - SCREEN_BOT);
-      waterMatRef.current.opacity = o * Math.min(visible * 0.08, 0.4);
+      waterMatRef.current.opacity = o * Math.min(visible * 0.1, 0.6);
     }
 
     // 수면 밴드
@@ -176,12 +194,11 @@ export default function FloodEffect({ durationMs }: Props) {
 
   return (
     <group>
-      {/* 물 — 높이 12, 처음엔 화면 아래에 숨겨짐 */}
-      <mesh ref={waterRef} position={[0, START_CENTER_Y, 0]}>
-        <planeGeometry args={[30, WATER_H, 192, 1]} />
+      {/* 물 — 높이 12, 아래가 진한 그라데이션 */}
+      <mesh ref={waterRef} geometry={waterGeo} position={[0, START_CENTER_Y, 0]}>
         <meshBasicMaterial
           ref={waterMatRef}
-          color="#3b6fc0"
+          vertexColors
           transparent
           opacity={0}
           side={THREE.DoubleSide}

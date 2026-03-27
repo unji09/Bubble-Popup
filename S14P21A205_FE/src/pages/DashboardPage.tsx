@@ -492,6 +492,12 @@ export default function DashboardPage() {
       return;
     }
 
+    // 파산 유저 또는 시즌 종료 시 버튼 숨김
+    if (bankruptNoticeSeasonNumber != null || !participation.storeAccessible || phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
+      setGameReturnPath(null);
+      return;
+    }
+
     if (typeof playableFromDay === "number" && currentDay < playableFromDay) {
       setGameReturnPath("/game/waiting");
       return;
@@ -499,7 +505,7 @@ export default function DashboardPage() {
 
     const path = phaseToRoute(phase, currentDay);
     setGameReturnPath(path && path !== "/" ? path : null);
-  }, [participation, waitingStatus]);
+  }, [bankruptNoticeSeasonNumber, participation, waitingStatus]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -562,9 +568,8 @@ export default function DashboardPage() {
     }
 
     const isBankruptSeason = currentSeasonNumber === bankruptNoticeSeasonNumber;
-    const isBeforeDaySix = (waitingStatus.currentDay ?? 0) < 6;
 
-    if (isBankruptSeason && isBeforeDaySix) {
+    if (isBankruptSeason) {
       setIsBankruptWarningVisible(true);
       return;
     }

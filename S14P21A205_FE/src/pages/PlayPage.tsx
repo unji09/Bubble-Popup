@@ -1,5 +1,5 @@
 ﻿import axios, { type AxiosError } from "axios";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { GAME_EXIT_CODES } from "../api/client";
 import type { GameGuardContext } from "../router/GameGuard";
@@ -28,6 +28,7 @@ import {
 } from "../api/action";
 import {
   getGameDayState,
+  getSeasonTime,
   getCurrentSeasonTopRankings,
   startGameDay,
   type CustomerPlanByHourItem,
@@ -53,11 +54,13 @@ import {
   type SeasonPhase,
 } from "../constants/gameTime";
 import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
-import { classifyEventEffect } from "../components/play/effects/effects";
+import { classifyEventEffect, EFFECT_CONFIG } from "../components/play/effects/effects";
+import { mapWeatherToUnity } from "../utils/unity";
 import { useEventEffectStore } from "../components/play/effects/useEventEffect";
 import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
 import useBrandName from "../hooks/useBrandName";
 import useStatQueue from "../hooks/useStatQueue";
+import { useGameStore } from "../stores/useGameStore";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
 
@@ -577,8 +580,8 @@ function mapStoreMenusToEmergencyMenus(menus: StoreMenuResponse[]): EmergencyMen
     ingredientPrice: menu.ingredientPrice,
     ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     emoji: resolveMenuEmoji(menu.menuId, menu.menuName),
-    recommendedPrice: menu.recommendedPrice,
-    maxSellingPrice: menu.maxSellingPrice,
+    recommendedPrice: menu.recommendedPrice ?? 0,
+    maxSellingPrice: menu.maxSellingPrice ?? 0,
   }));
 }
 
@@ -800,7 +803,7 @@ function PlayPageSession({
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
   const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
   const [moveDataError, setMoveDataError] = useState<string | null>(null);
-  const playEndTimestampMs = phaseEndTimestamp;
+  const [playEndTimestampMs, setPlayEndTimestampMs] = useState(phaseEndTimestamp);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasDeadlineAlertRef = useRef(false);
   const hasLowStockAlertRef = useRef(false);
@@ -816,8 +819,8 @@ function PlayPageSession({
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
-        recommendedPrice: currentOrder.recommendedPrice,
-        maxSellingPrice: currentOrder.maxSellingPrice,
+        recommendedPrice: currentOrder.recommendedPrice ?? 0,
+        maxSellingPrice: currentOrder.maxSellingPrice ?? 0,
         sellingPrice: currentLiveSellingPrice,
       }
     : null;
@@ -900,6 +903,60 @@ function PlayPageSession({
   useEffect(() => {
     remainingMillisecondsRef.current = remainingMilliseconds;
   }, [remainingMilliseconds]);
+
+  // --- 서버 시간 동기화 ---
+
+  const resyncPlayEnd = useCallback(async () => {
+    try {
+      const timeData = await getSeasonTime();
+      if (timeData.seasonPhase !== "DAY_BUSINESS") return;
+      const correctedEnd = Date.now() + timeData.phaseRemainingSeconds * 1000;
+      const drift = Math.abs(correctedEnd - playEndTimestampMs);
+      if (drift > 1000) {
+        setPlayEndTimestampMs(correctedEnd);
+      }
+    } catch {
+      /* 무시 — GameGuard가 에러 처리 */
+    }
+  }, [playEndTimestampMs]);
+
+  // 3.1 화면 진입 시 sync
+  useEffect(() => {
+    resyncPlayEnd();
+  }, []);
+
+  // 3.3 이벤트 5초 전 sync (14:00 = 40초 경과, 18:00 = 80초 경과)
+  useEffect(() => {
+    const businessStartMs = playEndTimestampMs - BUSINESS_SECONDS * 1000;
+    const syncPoints = [35, 75];
+    const timers = syncPoints.map((sec) => {
+      const delay = businessStartMs + sec * 1000 - Date.now();
+      if (delay > 0) return window.setTimeout(() => resyncPlayEnd(), delay);
+      return null;
+    });
+    return () => timers.forEach((t) => t !== null && clearTimeout(t));
+  }, [playEndTimestampMs, resyncPlayEnd]);
+
+  // 3.4 영업 종료 5초 전 sync
+  useEffect(() => {
+    const delay = playEndTimestampMs - 5000 - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => resyncPlayEnd(), delay);
+    return () => clearTimeout(timer);
+  }, [playEndTimestampMs, resyncPlayEnd]);
+
+  // 3.5 탭 복귀 시 sync
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        resyncPlayEnd();
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [resyncPlayEnd]);
+
+  // --- 서버 시간 동기화 끝 ---
 
   useEffect(() => {
     displayedGuestsRef.current = guests;
@@ -1305,7 +1362,9 @@ function PlayPageSession({
   };
 
   const applyOneArrival = () => {
-    // 숫자 변경은 statQueue가 담당, 여기는 Unity 스폰 타이밍 추적만
+    // 유니티 손님 도착 → 헤더 손님 수 +1
+    setGuests((prev) => prev + 1);
+    displayedGuestsRef.current += 1;
     spawnTimingRef.current.totalArrived += 1;
     const { totalSpawned, totalArrived } = spawnTimingRef.current;
     const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
@@ -1403,8 +1462,13 @@ function PlayPageSession({
         currentBalance: displayedBalanceRef.current,
       });
 
-      // 손님수는 서버 값으로 직접 업데이트
-      setGuests(state.customerCount);
+      // 손님수: 유니티 도착 신호가 메인, 서버와 많이 벌어지면 보정
+      const guestDiff = state.customerCount - displayedGuestsRef.current;
+      if (Math.abs(guestDiff) > 20) {
+        const correction = Math.round(guestDiff / 2);
+        setGuests((prev) => prev + correction);
+        displayedGuestsRef.current += correction;
+      }
 
       // Unity 비주얼 스폰 (숫자 변경과 분리, 시각 효과만)
       if (gd > 0 && !hasCustomerPlan) {
@@ -1656,6 +1720,7 @@ function PlayPageSession({
 
       if (storeResult.status === "fulfilled") {
         setCurrentLocationName(storeResult.value.location);
+        useGameStore.getState().setCurrentLocationName(storeResult.value.location);
         // 매장 지역의 Unity 인덱스 계산 (locationId - 1 = 0-based index)
         if (locationResult.status === "fulfilled") {
           const matched = locationResult.value.locations.find(
@@ -1841,24 +1906,34 @@ function PlayPageSession({
           },
           ...prev,
         ]);
-        // 3D 이벤트 이펙트 트리거 (Unity + 프론트엔드 동시)
-        // 지역 이벤트는 플레이어의 지역과 일치할 때만 애니메이션 표시
-        const eventRegion = event.scope?.region ?? null;
-        const playerRegion = storeRegionIndex !== null ? storeRegionIndex + 1 : null;
-        const isGlobal = eventRegion === null;
-        const isMyRegion = eventRegion !== null && eventRegion === playerRegion;
-
+        // 3D 이벤트 이펙트 트리거 (내 지역 또는 전역 이벤트만)
         const effectType = classifyEventEffect(event);
-        if (effectType && (isGlobal || isMyRegion)) {
-          const regionIdx = storeRegionIndex ?? 0;
-          if (effectType === "TYPHOON") {
-            sendToUnity(unityIframeRef, "SetWeather", `Wind,${regionIdx}`);
-          } else if (effectType === "EARTHQUAKE") {
-            sendToUnity(unityIframeRef, "SetWeather", `Earthquake,${regionIdx}`);
-          } else if (effectType === "FIRE") {
-            sendToUnity(unityIframeRef, "SetWeather", `Fire,${regionIdx}`);
+        if (effectType) {
+          const eventRegionId = event.targetRegionId ?? event.scope?.region ?? null;
+          const isGlobal = eventRegionId === null;
+          const isMyRegion = eventRegionId === currentLocationIdRef.current;
+
+          if (isGlobal || isMyRegion) {
+            const regionIdx = storeRegionIndex ?? 0;
+            if (effectType === "TYPHOON") {
+              sendToUnity(unityIframeRef, "SetWeather", `Wind,${regionIdx}`);
+            } else if (effectType === "EARTHQUAKE") {
+              sendToUnity(unityIframeRef, "SetWeather", `Earthquake,${regionIdx}`);
+            } else if (effectType === "FIRE") {
+              sendToUnity(unityIframeRef, "SetWeather", `Fire,${regionIdx}`);
+            } else if (effectType === "FLOOD") {
+              sendToUnity(unityIframeRef, "SetWeather", `Rain,${regionIdx}`);
+            }
+            // Unity 날씨 이펙트 종료 후 원래 날씨로 복원
+            if (effectType === "TYPHOON" || effectType === "EARTHQUAKE" || effectType === "FIRE" || effectType === "FLOOD") {
+              const restoreId = window.setTimeout(() => {
+                const weather = mapWeatherToUnity(dayWeatherType ?? "SUNNY");
+                sendToUnity(unityIframeRef, "SetWeather", `${weather},${regionIdx}`);
+              }, EFFECT_CONFIG[effectType].durationMs);
+              pendingEventTimersRef.current.push(restoreId);
+            }
+            triggerEffect(effectType);
           }
-          triggerEffect(effectType);
         }
 
         queueDebugLog(
@@ -2286,9 +2361,11 @@ function PlayPageSession({
               currentLocationIdRef.current =
                 locationIdByNameRef.current.get(normalizeAreaName(storeSyncResult.value.location)) ?? regionId;
               setCurrentLocationName(storeSyncResult.value.location);
+              useGameStore.getState().setCurrentLocationName(storeSyncResult.value.location);
             } else {
               currentLocationIdRef.current = regionId;
               setCurrentLocationName(regionName);
+              useGameStore.getState().setCurrentLocationName(regionName);
             }
 
             schedulePlannedVisitors(

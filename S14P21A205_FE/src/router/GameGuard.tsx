@@ -6,7 +6,7 @@ import {
   type CurrentSeasonTimeResponse,
   type ParticipationResponse,
 } from "../api/game";
-import { getStore, type StoreResponse } from "../api/store";
+import type { StoreResponse } from "../api/store";
 import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
 import { setStoredBrandName } from "../hooks/useBrandName";
 import { useGameStore } from "../stores/useGameStore";
@@ -31,6 +31,7 @@ async function resolveJoinedStoreAccess(day: number | null) {
     const participation = await getCurrentParticipation();
 
     if (!participation.joinedCurrentSeason) {
+      useGameStore.getState().clearGame();
       return { joined: false, storeData: null as StoreResponse | null };
     }
 
@@ -40,27 +41,16 @@ async function resolveJoinedStoreAccess(day: number | null) {
     if (participation.storeName) {
       setStoredBrandName(participation.storeName);
     }
+    if (typeof participation.playableFromDay === "number") {
+      useGameStore.getState().setPlayableFromDay(participation.playableFromDay);
+    }
 
+    // 파산한 유저(storeAccessible=false)는 미참여 취급 -> setup 재진입 허용
     if (!participation.storeAccessible) {
-      return { joined: true, storeData: fallbackStoreData };
+      return { joined: false, storeData: null as StoreResponse | null };
     }
 
-    try {
-      const storeData = await getStore();
-      if (storeData.popupName) {
-        setStoredBrandName(storeData.popupName);
-      }
-      return {
-        joined: true,
-        storeData: {
-          ...fallbackStoreData,
-          ...storeData,
-          playableFromDay: storeData.playableFromDay ?? fallbackStoreData.playableFromDay,
-        },
-      };
-    } catch {
-      return { joined: true, storeData: fallbackStoreData };
-    }
+    return { joined: true, storeData: fallbackStoreData };
   } catch {
     return { joined: false, storeData: null as StoreResponse | null };
   }
@@ -70,8 +60,10 @@ function buildFallbackStoreData(
   participation: ParticipationResponse,
   day: number | null,
 ): StoreResponse {
+  const cachedLocationName = useGameStore.getState().currentLocationName;
+
   return {
-    location: "-",
+    location: cachedLocationName ?? "-",
     popupName: participation.storeName ?? "-",
     menu: "",
     day: typeof day === "number" ? day : 1,
@@ -91,7 +83,7 @@ function isAllowedForJoinedUser(
     return pathname === "/game/waiting";
   }
   if (phase === "LOCATION_SELECTION") {
-    // 이미 참여한 유저 → waiting + prep 허용 (waiting 타이머 끝나면 prep으로 이동)
+    // 이미 참여한 유저 -> waiting + prep 허용 (waiting 타이머 끝나면 prep으로 이동)
     return pathname === "/game/waiting" || pathname === `/game/${day}/prep`;
   }
   if (phase === "DAY_PREPARING" && pathname === "/game/waiting") {
@@ -134,7 +126,7 @@ function buildWaitingState(
     };
   }
 
-  // LOCATION_SELECTION 중 이미 참여한 유저 → 오픈 대기
+  // LOCATION_SELECTION 중 이미 참여한 유저 -> 오픈 대기
   return {
     mode: "prep_locked",
     brandName,
@@ -181,7 +173,7 @@ export default function GameGuard() {
     try {
       let timeData = await getSeasonTime();
 
-      // 남은 시간이 0이면 서버가 아직 페이즈 전환 안 한 것 → 1초 후 재시도
+      // 남은 시간이 0이면 서버가 아직 페이즈 전환 안 한 것 -> 1초 후 재시도
       if (timeData.phaseRemainingSeconds <= 0) {
         await new Promise((r) => setTimeout(r, 1000));
         timeData = await getSeasonTime();
@@ -194,29 +186,17 @@ export default function GameGuard() {
       const joinIntent = hasSeasonJoinIntent();
 
       // 참여 여부 확인
-      let { joined, storeData } = await resolveJoinedStoreAccess(day);
+      const { joined, storeData } = await resolveJoinedStoreAccess(day);
 
-      // getStore 실패 시 sessionStorage의 playableFromDay를 fallback으로 사용
-      // (BE가 파산 후 재참여 시 store를 바로 안 만드는 경우 대비)
-      const cachedPlayableFromDay = useGameStore.getState().playableFromDay;
-      if (!joined && cachedPlayableFromDay != null && day < cachedPlayableFromDay) {
-        joined = true;
-      }
-
-      const playableFromDay = storeData?.playableFromDay ?? cachedPlayableFromDay;
+      // participation 응답과 session cache만으로 진입 대기 여부를 계산한다.
+      const playableFromDay = storeData?.playableFromDay ?? useGameStore.getState().playableFromDay;
       const waitingForPlayableDay = joined
         && playableFromDay != null
         && day < playableFromDay;
 
-      // playableFromDay를 지났으면 캐시 클리어 (다음 시즌에 영향 방지)
-      if (cachedPlayableFromDay != null && day >= cachedPlayableFromDay) {
-        useGameStore.getState().clearGame();
-      }
-
       if (joined || !joinEnabled) {
         clearSeasonJoinIntent();
       }
-
 
       const pathname = location.pathname;
       let allowed = false;
@@ -239,7 +219,7 @@ export default function GameGuard() {
 
       if (allowed) {
         // 대기 유저가 /game/waiting에 route state 없이 도달한 경우 (새로고침, 직접 이동 등)
-        // → state를 주입해서 WaitingPage가 정상 렌더링되도록
+        // -> state를 주입해서 WaitingPage가 정상 렌더링되도록
         if (waitingForPlayableDay && pathname === "/game/waiting" && !location.state) {
           const waitingState = buildWaitingState(timeData, storeData, true);
           setState({
@@ -284,7 +264,7 @@ export default function GameGuard() {
         const { joined, storeData } = await resolveJoinedStoreAccess(day);
         const canEnterSetup = Boolean(timeData.joinEnabled && hasSeasonJoinIntent());
 
-        const pfd = storeData?.playableFromDay ?? null;
+        const pfd = storeData?.playableFromDay ?? useGameStore.getState().playableFromDay;
         const waiting = joined && pfd != null && day < pfd;
 
         let target: RedirectTarget;
@@ -317,7 +297,7 @@ export default function GameGuard() {
 
     checkAndRoute().then((result) => {
       if (cancelled) return;
-      // waiting 페이지는 자체 타이머로 전환 처리 → GameGuard 타이머 스킵
+      // waiting 페이지는 자체 타이머로 전환 처리 -> GameGuard 타이머 스킵
       const isWaiting = location.pathname === "/game/waiting";
       if (result.allowed && result.remaining > 0 && !isWaiting) {
         scheduleTransition(result.remaining);
@@ -329,6 +309,25 @@ export default function GameGuard() {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [checkAndRoute, scheduleTransition]);
+
+  // 탭 복귀 시 서버 상태 재확인 + 타이머 재스케줄링 (요구사항 3.5)
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+
+      // 기존 transition 타이머 클리어
+      if (timerRef.current) clearTimeout(timerRef.current);
+
+      checkAndRoute().then((result) => {
+        const isWaiting = location.pathname === "/game/waiting";
+        if (result.allowed && result.remaining > 0 && !isWaiting) {
+          scheduleTransition(result.remaining);
+        }
+      });
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [checkAndRoute, scheduleTransition, location.pathname]);
 
   if (state.status === "loading") {
     return (

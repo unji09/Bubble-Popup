@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import type { GameGuardContext } from "../router/GameGuard";
-import { getAllDayReports, getDayReport, type GameDayReportResponse } from "../api/game";
+import { getAllDayReports, getDayReport, getSeasonTime, type GameDayReportResponse } from "../api/game";
 import AppHeader from "../components/common/AppHeader";
 import Badge from "../components/common/Badge";
 import Button from "../components/common/Button";
@@ -65,10 +65,37 @@ export default function ReportPage() {
   const day = Number(dayParam) || 1;
   const { brandName } = useBrandName();
 
+  const [reportEndTimestampMs, setReportEndTimestampMs] = useState(guardContext.phaseEndTimestamp);
   const [report, setReport] = useState<GameDayReportResponse | null>(null);
   const [allReports, setAllReports] = useState<GameDayReportResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // --- 서버 시간 동기화 ---
+  const resyncReportEnd = useCallback(async () => {
+    try {
+      const timeData = await getSeasonTime();
+      if (timeData.seasonPhase !== "DAY_REPORT") return;
+      const correctedEnd = Date.now() + timeData.phaseRemainingSeconds * 1000;
+      const drift = Math.abs(correctedEnd - reportEndTimestampMs);
+      if (drift > 1000) {
+        setReportEndTimestampMs(correctedEnd);
+      }
+    } catch { /* 무시 */ }
+  }, [reportEndTimestampMs]);
+
+  // 3.1 화면 진입 시 sync
+  useEffect(() => { resyncReportEnd(); }, []);
+
+  // 3.5 탭 복귀 시 sync
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") resyncReportEnd();
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [resyncReportEnd]);
+  // --- 서버 시간 동기화 끝 ---
 
   useEffect(() => {
     let cancelled = false;
@@ -294,7 +321,7 @@ export default function ReportPage() {
             <div className="flex flex-col items-end gap-3">
               <div className="flex flex-col items-end gap-1.5">
                 <CountdownTimer
-                  endTimestampMs={guardContext.phaseEndTimestamp}
+                  endTimestampMs={reportEndTimestampMs}
                   label={isBankrupt ? "로비 이동까지 남은 시간" : "다음 날 이동까지 남은 시간"}
                   onComplete={isBankrupt ? handleBankruptExit : undefined}
                   variant="pill"

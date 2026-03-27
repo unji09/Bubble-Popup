@@ -15,15 +15,15 @@ interface DistrictMeshProps {
 }
 
 const gradeColors: Record<string, string> = {
-  "S등급": "#f87171",
-  "A등급": "#fbbf24",
-  "B등급": "#94a3b8",
+  "S등급": "#fecdd3",
+  "A등급": "#fde68a",
+  "B등급": "#bae6fd",
 };
 
 const gradeHoverColors: Record<string, string> = {
-  "S등급": "#ef4444",
-  "A등급": "#f59e0b",
-  "B등급": "#64748b",
+  "S등급": "#fda4af",
+  "A등급": "#fcd34d",
+  "B등급": "#7dd3fc",
 };
 
 const selectedColor = "#A8BFA9";

@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useEffectLifecycle } from "../useEffectLifecycle";
@@ -18,8 +18,12 @@ const BURST_PALETTES = [
   ["#ffbb33", "#ffdd55", "#ffeeaa", "#ffffff"],
 ];
 
-const BURST_CYCLE = 3.5;
+const BURST_CYCLE = 6.0;
 const GRAVITY = 1.8; // 강한 중력 → 곡선 궤적
+const FESTIVAL_SFX_SRC = "/sfx/festival.mp3";
+const FESTIVAL_SFX_VOLUME = 0.5;
+const FESTIVAL_SFX_SKIP = 0.8;
+const AUDIO_POOL_SIZE = BURST_COUNT;
 
 interface Props {
   durationMs: number;
@@ -109,6 +113,29 @@ export default function FireworkEffect({ durationMs }: Props) {
   const glowRef = useRef<THREE.InstancedMesh>(null);
   const sparkleRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const startTimeRef = useRef<number | null>(null);
+  // 각 burst의 마지막 폭발 사이클 번호를 추적 (중복 재생 방지)
+  const lastBurstCycleRef = useRef<number[]>(Array(BURST_COUNT).fill(-1));
+  const audioPoolRef = useRef<HTMLAudioElement[]>([]);
+  const audioPoolIdx = useRef(0);
+
+  useEffect(() => {
+    const pool: HTMLAudioElement[] = [];
+    for (let i = 0; i < AUDIO_POOL_SIZE; i++) {
+      const audio = new Audio(FESTIVAL_SFX_SRC);
+      audio.volume = FESTIVAL_SFX_VOLUME;
+      audio.preload = "auto";
+      pool.push(audio);
+    }
+    audioPoolRef.current = pool;
+
+    return () => {
+      for (const a of pool) {
+        a.pause();
+        a.src = "";
+      }
+    };
+  }, []);
 
   const rayTex = useMemo(() => createRayTexture(), []);
   const glowTex = useMemo(() => createGlowTexture(), []);
@@ -140,9 +167,9 @@ export default function FireworkEffect({ durationMs }: Props) {
       });
 
       return {
-        centerX: -4 + (b / (BURST_COUNT - 1)) * 8 + (Math.random() - 0.5) * 2,
-        centerY: 1.5 + Math.random() * 3,
-        delay: b * 0.9 + Math.random() * 0.3,
+        centerX: (Math.random() - 0.5) * 14,
+        centerY: 3 + Math.random() * 3,
+        delay: Math.random() * 4,
         rays,
         sparkles,
       };
@@ -176,8 +203,29 @@ export default function FireworkEffect({ durationMs }: Props) {
   }, []);
 
   useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+    const elapsed = clock.getElapsedTime();
+    if (startTimeRef.current === null) startTimeRef.current = elapsed;
+    const t = elapsed - startTimeRef.current;
     const o = opacity.current;
+
+    // 폭죽 폭발 시점에 효과음 재생
+    for (let b = 0; b < BURST_COUNT; b++) {
+      const burst = burstData[b];
+      const rawBt = t - burst.delay;
+      if (rawBt < 0) continue;
+      const cycle = Math.floor(rawBt / BURST_CYCLE);
+      const bt = rawBt % BURST_CYCLE;
+      if (bt < 0.15 && cycle !== lastBurstCycleRef.current[b]) {
+        lastBurstCycleRef.current[b] = cycle;
+        const pool = audioPoolRef.current;
+        if (pool.length > 0) {
+          const audio = pool[audioPoolIdx.current % pool.length];
+          audioPoolIdx.current++;
+          audio.currentTime = FESTIVAL_SFX_SKIP;
+          audio.play().catch(() => {});
+        }
+      }
+    }
 
     // 폭죽 줄기 — 포물선 궤적
     if (rayRef.current) {

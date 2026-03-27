@@ -36,8 +36,8 @@ public class AiNewsGenerator {
             "너는 '버블팝업' 팝업스토어 상권을 취재하는 속보 전문 기자다. "
             + "이 세계에서 점주들이 서울 8개 상권(홍대, 강남, 성수, 여의도, 잠실, 이태원, 명동, 건대입구)에서 팝업 음식 매장을 운영하고 있다. "
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
-            + "제목: 최신 뉴스 헤드라인처럼 임팩트 있게 50자 이내로 써. 핵심 팩트(지역명, 메뉴명, 매장명, 수치)를 반드시 포함. "
-            + "본문: 300~500자. 리드문(핵심 사실 요약) → 상세 전개 → 관계자 코멘트 → 전망 순서로 구성해. "
+            + "제목: 10~20자. 짧고 임팩트 있게. 핵심 키워드만. "
+            + "본문: 300~400자 엄수. 리드문 → 상세 → 코멘트 순서. 400자 넘기지 마. "
             + "문체: 간결하고 힘 있는 뉴스 보도체. ~했다, ~밝혔다, ~전했다 등 기사 어미 사용. "
             + "반드시 한국어(한글, 숫자, 한국어 문장부호)만 사용. 영어, 일본어, 중국어, 아랍어, 특수문자, 외국어 단어를 절대 포함하지 마. 알파벳도 금지. "
             + "마크다운 금지. 이모지 금지. 줄바꿈 넣지 마. "
@@ -408,7 +408,7 @@ public class AiNewsGenerator {
     private NewsGenerationResult callAi(String promptText) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", model);
-        requestBody.put("max_tokens", 700);
+        requestBody.put("max_tokens", 400);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", SYSTEM_PROMPT),
                 Map.of("role", "user", "content", promptText)));

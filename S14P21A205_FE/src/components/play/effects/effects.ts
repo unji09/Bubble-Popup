@@ -14,19 +14,51 @@ export type EventEffectType =
   | "PRICE_DOWN"
   | "PRICE_UP";
 
-export const EFFECT_CONFIG: Record<EventEffectType, { durationMs: number }> = {
-  TYPHOON: { durationMs: 15000 },
-  FLOOD: { durationMs: 15000 },
-  FIRE: { durationMs: 15000 },
-  EARTHQUAKE: { durationMs: 15000 },
-  GOVERNMENT_SUBSIDY: { durationMs: 15000 },
-  CELEBRITY_APPEARANCE: { durationMs: 15000 },
-  SUBSTITUTE_HOLIDAY: { durationMs: 15000 },
-  INFECTIOUS_DISEASE: { durationMs: 15000 },
-  POLICY_CHANGE: { durationMs: 15000 },
-  FESTIVAL: { durationMs: 15000 },
-  PRICE_DOWN: { durationMs: 7000 },
-  PRICE_UP: { durationMs: 7000 },
+export interface SfxEntry {
+  src: string;
+  delayMs?: number;
+  volume?: number;
+}
+
+export type SoundSrc = string | SfxEntry[] | null;
+
+export const EFFECT_CONFIG: Record<
+  EventEffectType,
+  { durationMs: number; soundSrc: SoundSrc }
+> = {
+  TYPHOON: { durationMs: 15000, soundSrc: null },
+  FLOOD: {
+    durationMs: 15000,
+    soundSrc: [
+      { src: "/sfx/flood.mp3", delayMs: 0 },
+      { src: "/sfx/flood.mp3", delayMs: 5000 },
+      { src: "/sfx/flood.mp3", delayMs: 10000 },
+    ],
+  },
+  FIRE: { durationMs: 15000, soundSrc: "/sfx/fire.mp3" },
+  EARTHQUAKE: { durationMs: 15000, soundSrc: "/sfx/earthquake.mp3" },
+  GOVERNMENT_SUBSIDY: { durationMs: 15000, soundSrc: "/sfx/subsidy.mp3" },
+  CELEBRITY_APPEARANCE: {
+    durationMs: 15000,
+    soundSrc: [
+      { src: "/sfx/celebrity.mp3", volume: 0.15, delayMs: 0 },
+      { src: "/sfx/celebrity.mp3", volume: 0.15, delayMs: 4000 },
+      { src: "/sfx/celebrity.mp3", volume: 0.15, delayMs: 8000 },
+      { src: "/sfx/celebrity.mp3", volume: 0.15, delayMs: 12000 },
+    ],
+  },
+  SUBSTITUTE_HOLIDAY: { durationMs: 15000, soundSrc: null }, // ConfettiEffect에서 burst 타이밍에 맞춰 재생
+  INFECTIOUS_DISEASE: { durationMs: 15000, soundSrc: [{ src: "/sfx/epidemic.mp3", volume: 1.0 }] },
+  POLICY_CHANGE: {
+    durationMs: 15000,
+    soundSrc: [
+      { src: "/sfx/subsidy.mp3", delayMs: 0, volume: 0.8 },
+      { src: "/sfx/stamp.mp3", delayMs: 1500 },
+    ],
+  },
+  FESTIVAL: { durationMs: 15000, soundSrc: null },
+  PRICE_DOWN: { durationMs: 7000, soundSrc: "/sfx/price-down.mp3" },
+  PRICE_UP: { durationMs: 7000, soundSrc: [{ src: "/sfx/price-up.mp3", volume: 0.3 }] },
 };
 
 /** eventCategory → 이펙트 타입 매핑 */

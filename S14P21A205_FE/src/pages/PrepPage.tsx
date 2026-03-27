@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import type { GameGuardContext } from "../router/GameGuard";
 import AppHeader from "../components/common/AppHeader";
@@ -13,15 +13,16 @@ import {
   postRegularOrder,
   type CurrentOrderResponse,
 } from "../api/order";
-import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
+import { getGameWaitingStatus, getSeasonTime, type GameWaitingResponse } from "../api/game";
 import {
   getNewsRanking,
   getTodayNews,
   type AreaRankingItemResponse,
   type NewsRankingResponse,
 } from "../api/news";
-import { getStore, getStoreMenus, type StoreMenuResponse, type StoreResponse } from "../api/store";
+import { getStoreMenus, type StoreMenuResponse } from "../api/store";
 import bubbleNewsImage from "../assets/Bubblenewsimg.png";
+import { useGameStore } from "../stores/useGameStore";
 import {
   applyDiscount,
   normalizeDiscountMultiplier,
@@ -196,18 +197,6 @@ function normalizeMenuName(value: string | null | undefined) {
   return value?.trim() ?? "";
 }
 
-function resolvePlayableDay(store: StoreResponse | null) {
-  if (!store) {
-    return null;
-  }
-
-  if (typeof store.playableFromDay === "number") {
-    return store.playableFromDay;
-  }
-
-  return typeof store.playableday === "number" ? store.playableday : null;
-}
-
 function canUseExistingOrder(day: number, playableDay: number | null) {
   return playableDay !== null && day > playableDay;
 }
@@ -277,6 +266,7 @@ export default function PrepPage() {
   const parsedDay = Number(dayParam);
   const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const isRegularOrderRouteDay = isRegularOrderDay(day);
+  const cachedPlayableFromDay = useGameStore((state) => state.playableFromDay);
   const [tab, setTab] = useState<Tab>("news");
   const [menus, setMenus] = useState<PrepMenu[]>(fallbackMenus);
   const [isMenusLoading, setIsMenusLoading] = useState(true);
@@ -332,13 +322,65 @@ export default function PrepPage() {
     regularOrderStatus === "idle";
   const isPrepFormLocked =
     !canPrepareToday || isSubmittingRegularOrder || hasSubmittedRegularOrder;
-  const prepEndTimestampMs = useMemo(() => {
+  const [prepEndTimestampMs, setPrepEndTimestampMs] = useState<number | undefined>(() => {
     if (!isServerPreparing || typeof waitingStatus?.phaseRemainingSeconds !== "number") {
       return undefined;
     }
-
     return Date.now() + waitingStatus.phaseRemainingSeconds * 1000;
+  });
+
+  // waitingStatus 변경 시 prepEndTimestampMs 갱신
+  useEffect(() => {
+    if (!isServerPreparing || typeof waitingStatus?.phaseRemainingSeconds !== "number") {
+      setPrepEndTimestampMs(undefined);
+      return;
+    }
+    setPrepEndTimestampMs(Date.now() + waitingStatus.phaseRemainingSeconds * 1000);
   }, [isServerPreparing, waitingStatus?.phaseRemainingSeconds]);
+
+  // --- 서버 시간 동기화 ---
+
+  const resyncPrepEnd = useCallback(async () => {
+    try {
+      const timeData = await getSeasonTime();
+      if (timeData.seasonPhase !== "DAY_PREPARING") return;
+      const correctedEnd = Date.now() + timeData.phaseRemainingSeconds * 1000;
+      const drift = Math.abs(correctedEnd - (prepEndTimestampMs ?? 0));
+      if (drift > 1000) {
+        setPrepEndTimestampMs(correctedEnd);
+      }
+    } catch {
+      /* 무시 */
+    }
+  }, [prepEndTimestampMs]);
+
+  // 3.1 화면 진입 시 sync
+  useEffect(() => {
+    resyncPrepEnd();
+  }, []);
+
+  // 3.4 준비 종료 5초 전 sync
+  useEffect(() => {
+    if (!prepEndTimestampMs) return;
+    const delay = prepEndTimestampMs - 5000 - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => resyncPrepEnd(), delay);
+    return () => clearTimeout(timer);
+  }, [prepEndTimestampMs, resyncPrepEnd]);
+
+  // 3.5 탭 복귀 시 sync
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        resyncPrepEnd();
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [resyncPrepEnd]);
+
+  // --- 서버 시간 동기화 끝 ---
+
   const menuSelectorMenus = useMemo(
     () =>
       menus.map((menu) => {
@@ -399,9 +441,8 @@ export default function PrepPage() {
 
     const loadPrepMenus = async () => {
       try {
-        const [menusResult, storeResult, orderResult] = await Promise.allSettled([
+        const [menusResult, orderResult] = await Promise.allSettled([
           getStoreMenus(),
-          getStore(),
           getCurrentOrder(),
         ]);
 
@@ -409,11 +450,7 @@ export default function PrepPage() {
           return;
         }
 
-        const nextStore =
-          storeResult.status === "fulfilled"
-            ? storeResult.value
-            : null;
-        const nextPlayableDay = resolvePlayableDay(nextStore);
+        const nextPlayableDay = cachedPlayableFromDay;
         const shouldReuseExistingOrder = canUseExistingOrder(day, nextPlayableDay);
         const nextBaseOrder =
           orderResult.status === "fulfilled" && shouldReuseExistingOrder
@@ -421,11 +458,7 @@ export default function PrepPage() {
             : null;
 
         setBaseOrder(nextBaseOrder);
-        const nextStoreMenuName = shouldReuseExistingOrder
-          ? normalizeMenuName(nextStore?.menu)
-          : "";
-        const nextCurrentStoreMenuName =
-          nextStoreMenuName || normalizeMenuName(nextBaseOrder?.menuName);
+        const nextCurrentStoreMenuName = normalizeMenuName(nextBaseOrder?.menuName);
         setCurrentStoreMenuName(nextCurrentStoreMenuName || null);
         setPlayableday(nextPlayableDay);
 
@@ -473,7 +506,7 @@ export default function PrepPage() {
     return () => {
       isActive = false;
     };
-  }, [day]);
+  }, [cachedPlayableFromDay, day]);
 
   useEffect(() => {
     let isActive = true;

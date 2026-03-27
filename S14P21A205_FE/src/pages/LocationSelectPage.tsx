@@ -1,8 +1,8 @@
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import type { GameGuardContext } from "../router/GameGuard";
-import { getGameWaitingStatus, joinCurrentSeason, type GameWaitingResponse } from "../api/game";
+import { getGameWaitingStatus, getSeasonTime, joinCurrentSeason, type GameWaitingResponse } from "../api/game";
 import { getLocationList } from "../api/store";
 import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
 import CountdownTimer from "../components/common/CountdownTimer";
@@ -173,7 +173,7 @@ const LOCATION_NAME_MAP: Record<string, string> = {
 
 export default function LocationSelectPage() {
   const guardContext = useOutletContext<GameGuardContext>();
-  const [locationSelectionDeadlineMs] = useState(() => guardContext.phaseEndTimestamp);
+  const [locationSelectionDeadlineMs, setLocationSelectionDeadlineMs] = useState(() => guardContext.phaseEndTimestamp);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectionWindow, setSelectionWindow] = useState<SelectionWindowState | null>(null);
   const [isJoining, setIsJoining] = useState(false);
@@ -183,6 +183,32 @@ export default function LocationSelectPage() {
   const [serverLocations, setServerLocations] = useState<Array<{locationId: number; locationName: string; rent: number; interiorCost: number; discount: number}>>([]);
   const [trafficRanking, setTrafficRanking] = useState<AreaRankingItemResponse[]>([]);
   const navigate = useNavigate();
+
+  // --- 서버 시간 동기화 ---
+  const resyncDeadline = useCallback(async () => {
+    try {
+      const timeData = await getSeasonTime();
+      if (timeData.seasonPhase !== "LOCATION_SELECTION") return;
+      const correctedEnd = Date.now() + timeData.phaseRemainingSeconds * 1000;
+      const drift = Math.abs(correctedEnd - locationSelectionDeadlineMs);
+      if (drift > 1000) {
+        setLocationSelectionDeadlineMs(correctedEnd);
+      }
+    } catch { /* 무시 */ }
+  }, [locationSelectionDeadlineMs]);
+
+  // 3.1 화면 진입 시 sync
+  useEffect(() => { resyncDeadline(); }, []);
+
+  // 3.5 탭 복귀 시 sync
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") resyncDeadline();
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [resyncDeadline]);
+  // --- 서버 시간 동기화 끝 ---
 
   // 서버 지역 데이터 + 유동인구 순위 로드
   useEffect(() => {
@@ -335,6 +361,7 @@ export default function LocationSelectPage() {
       });
       // join 응답의 playableFromDay를 store에 저장 (GameGuard에서 참조)
       useGameStore.getState().setPlayableFromDay(joinResponse.playableFromDay);
+      useGameStore.getState().setCurrentLocationName(selectedDistrict.name);
       const nextPrepPath = `/game/${joinResponse.playableFromDay ?? DEFAULT_PREP_DAY}/prep`;
       const remainingSelectionSeconds = Math.max(
         0,
@@ -470,7 +497,7 @@ export default function LocationSelectPage() {
         </div>
       </div>
 
-      <SeoulMap3D selectedId={selectedId} onSelect={setSelectedId} />
+      <SeoulMap3D districts={mergedDistricts} selectedId={selectedId} onSelect={setSelectedId} />
 
       {selectedDistrict && (
         <DistrictDetailPanel

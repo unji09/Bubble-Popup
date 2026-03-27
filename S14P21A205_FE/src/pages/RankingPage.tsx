@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCurrentSeasonFinalRankings, type CurrentSeasonFinalRankingsResponse } from "../api/game";
+import { getCurrentSeasonFinalRankings, getSeasonTime, type CurrentSeasonFinalRankingsResponse } from "../api/game";
 import AppHeader from "../components/common/AppHeader";
 import Badge from "../components/common/Badge";
 import Button from "../components/common/Button";
@@ -27,6 +27,24 @@ export default function RankingPage() {
       .catch(() => setError("랭킹 정보를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, []);
+
+  // --- 서버 시간 동기화 ---
+  // 3.1 화면 진입 시 sync (상태 확인용)
+  useEffect(() => {
+    getSeasonTime().catch(() => {});
+  }, []);
+
+  // 3.5 탭 복귀 시 sync
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        getSeasonTime().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
+  // --- 서버 시간 동기화 끝 ---
 
   if (loading) {
     return (

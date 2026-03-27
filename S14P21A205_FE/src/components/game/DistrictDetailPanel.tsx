@@ -46,7 +46,7 @@ function getCongestionStyle(congestion: string): { label: string; text: string }
 const gradeTone: Record<string, string> = {
   S: "border-accent-rose bg-accent-rose text-white",
   A: "border-amber-200 bg-amber-100 text-amber-800",
-  B: "border-primary/20 bg-primary/15 text-primary-dark",
+  B: "border-sky-300 bg-sky-100 text-sky-800",
 };
 
 export default function DistrictDetailPanel({

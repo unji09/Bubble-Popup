@@ -3,9 +3,10 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment, ContactShadows } from "@react-three/drei";
 import { Shape, ExtrudeGeometry, PCFShadowMap } from "three";
 import DistrictMesh, { BackgroundMesh } from "./DistrictMesh";
-import { seoulDistricts, backgroundGus } from "./seoulDistricts";
+import { backgroundGus, type DistrictGeo } from "./seoulDistricts";
 
 interface SeoulMap3DProps {
+  districts: DistrictGeo[];
   selectedId: number | null;
   onSelect: (id: number) => void;
 }
@@ -52,7 +53,7 @@ function HanRiver() {
   );
 }
 
-function MapScene({ selectedId, onSelect }: SeoulMap3DProps) {
+function MapScene({ districts, selectedId, onSelect }: SeoulMap3DProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
 
   return (
@@ -70,7 +71,7 @@ function MapScene({ selectedId, onSelect }: SeoulMap3DProps) {
       <HanRiver />
 
       {/* Interactive districts */}
-      {seoulDistricts.map((d) => (
+      {districts.map((d) => (
         <DistrictMesh
           key={d.id}
           district={d}
@@ -101,7 +102,7 @@ function MapScene({ selectedId, onSelect }: SeoulMap3DProps) {
   );
 }
 
-export default function SeoulMap3D({ selectedId, onSelect }: SeoulMap3DProps) {
+export default function SeoulMap3D({ districts, selectedId, onSelect }: SeoulMap3DProps) {
   return (
     <div className="w-full h-full relative z-0">
       <Canvas
@@ -111,7 +112,7 @@ export default function SeoulMap3D({ selectedId, onSelect }: SeoulMap3DProps) {
         onPointerMissed={() => {}}
       >
         <Suspense fallback={null}>
-          <MapScene selectedId={selectedId} onSelect={onSelect} />
+          <MapScene districts={districts} selectedId={selectedId} onSelect={onSelect} />
         </Suspense>
       </Canvas>
 
