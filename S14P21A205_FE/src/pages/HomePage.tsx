@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import LobbyPage from "./LobbyPage";
 import DashboardPage from "./DashboardPage";
 import { isAuthenticated } from "../hooks/useAuth";
 import { useUserStore } from "../stores/useUserStore";
@@ -15,5 +14,5 @@ export default function HomePage() {
     }
   }, [loggedIn, isLoaded, fetchUser]);
 
-  return loggedIn ? <DashboardPage /> : <LobbyPage />;
+  return <DashboardPage />;
 }

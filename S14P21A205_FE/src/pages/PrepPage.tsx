@@ -596,7 +596,7 @@ export default function PrepPage() {
 
   useEffect(() => {
     setPrice(defaultSellingPrice);
-  }, [defaultSellingPrice]);
+  }, [selectedMenu]);
 
   useEffect(() => {
     setTab("news");

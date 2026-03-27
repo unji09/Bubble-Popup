@@ -23,9 +23,11 @@ import AnimatedNumber from "../components/common/AnimatedNumber";
 import AppHeader from "../components/common/AppHeader";
 import BankruptWarning from "../components/common/BankruptWarning";
 import FloatingBubbles from "../components/common/FloatingBubbles";
+import HeroCarousel, { AnimatedParticipants } from "../components/common/HeroCarousel";
 import ItemSelector from "../components/common/ItemSelector";
 import Modal from "../components/common/Modal";
 import SeasonCTA from "../components/common/SeasonCTA";
+import { isAuthenticated } from "../hooks/useAuth";
 import { useGameStore } from "../stores/useGameStore";
 import { setSeasonJoinIntent } from "../utils/seasonJoinIntent";
 import {
@@ -305,6 +307,7 @@ function resolveSeasonCardData(
 }
 
 export default function DashboardPage() {
+  const loggedIn = isAuthenticated();
   const location = useLocation();
   const navigate = useNavigate();
   const [currentPoints, setCurrentPoints] = useState<number | null>(null);
@@ -407,10 +410,18 @@ export default function DashboardPage() {
   const participationSyncKey = waitingStatus
     ? `${waitingStatus.status ?? "null"}:${waitingStatus.nextSeasonNumber ?? "null"}:${waitingStatus.seasonPhase ?? "null"}`
     : null;
-  const seasonCard = useMemo(
-    () => resolveSeasonCardData(waitingStatus, currentSeasonNumber),
-    [currentSeasonNumber, waitingStatus],
-  );
+  const seasonCard = useMemo(() => {
+    const card = resolveSeasonCardData(waitingStatus, currentSeasonNumber);
+    if (!loggedIn) {
+      return {
+        ...card,
+        ctaLabel: "로그인하고 대기하기",
+        ctaTo: "/login",
+        disabled: false,
+      };
+    }
+    return card;
+  }, [currentSeasonNumber, loggedIn, waitingStatus]);
   const noticeDay = waitingStatus?.currentDay ?? null;
   const showDeadlineNotice = Boolean(
     waitingStatus?.status === "IN_PROGRESS" &&
@@ -478,6 +489,21 @@ export default function DashboardPage() {
     let isCancelled = false;
 
     async function loadDashboard() {
+      if (!loggedIn) {
+        try {
+          const waitingResult = await getGameWaitingStatus();
+          if (!isCancelled) {
+            setWaitingStatus(waitingResult);
+          }
+        } catch {
+          // ignore
+        }
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
       const [pointsResult, itemsResult, waitingResult, participationResult] = await Promise.allSettled([
         getUserPoints(),
         getShopItems(),
@@ -528,10 +554,10 @@ export default function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [syncParticipation]);
+  }, [loggedIn, syncParticipation]);
 
   useEffect(() => {
-    if (participationSyncKey === null) {
+    if (!loggedIn || participationSyncKey === null) {
       return;
     }
 
@@ -554,7 +580,7 @@ export default function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [participationSyncKey]);
+  }, [loggedIn, participationSyncKey]);
 
   useEffect(() => {
     if (hideGameReturnButton) {
@@ -629,6 +655,10 @@ export default function DashboardPage() {
   ]);
 
   useEffect(() => {
+    if (!loggedIn) {
+      return;
+    }
+
     let isCancelled = false;
 
     async function loadCurrentSeasonNumber() {
@@ -662,7 +692,7 @@ export default function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [waitingStatus?.status]);
+  }, [loggedIn, waitingStatus?.status]);
 
   useEffect(() => {
     if (bankruptNoticeSeasonNumber === null) {
@@ -710,6 +740,14 @@ export default function DashboardPage() {
 
     const timer = window.setTimeout(async () => {
       try {
+        if (!loggedIn) {
+          const nextWaitingStatus = await getGameWaitingStatus();
+          if (!isCancelled) {
+            setWaitingStatus(nextWaitingStatus);
+          }
+          return;
+        }
+
         const [nextWaitingStatusResult, nextParticipationResult] = await Promise.allSettled([
           getGameWaitingStatus(),
           getCurrentParticipation(),
@@ -733,7 +771,7 @@ export default function DashboardPage() {
       isCancelled = true;
       window.clearTimeout(timer);
     };
-  }, [waitingStatus]);
+  }, [loggedIn, waitingStatus]);
 
   const handleSeasonCountdownComplete = async () => {
     try {
@@ -769,43 +807,51 @@ export default function DashboardPage() {
       <FloatingBubbles bubbles={dashBubbles} />
       <AppHeader />
 
-      <main className="z-10 mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-center px-6 pb-12 pt-24 md:px-12">
-        {loadError && (
+      <main className={`z-10 mx-auto flex w-full max-w-[1100px] flex-1 flex-col px-6 pb-12 pt-24 md:px-12 ${loggedIn ? "items-center" : "items-center justify-center"}`}>
+        {loggedIn && loadError && (
           <div className="mb-6 w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
             {loadError}
           </div>
         )}
 
-        <div className="grid w-full grid-cols-1 items-start gap-8 md:grid-cols-2">
-          <div className="flex flex-col gap-6 lg:w-[95%]">
-            <div className="flex w-full flex-col gap-2 rounded-[20px] bg-white p-6 shadow-soft">
-              <span className="text-sm font-medium text-gray-500">보유 포인트</span>
-              <div className="flex items-baseline gap-2">
-                <AnimatedNumber
-                  value={displayedPoints}
-                  suffix="P"
-                  className="font-countdown text-[40px] font-bold leading-none tracking-tight text-primary"
-                />
-                {currentPoints !== null && pendingUsedPoints > 0 && (
-                  <span className="text-sm font-medium text-slate-400">/ {currentPoints}P</span>
-                )}
-              </div>
-              {currentPoints !== null && pendingUsedPoints > 0 && (
-                <p className="text-xs text-slate-400">
-                  현재 선택 기준으로 {pendingUsedPoints}P 사용 예정
-                </p>
-              )}
-            </div>
+        <div className={`grid w-full grid-cols-1 gap-8 ${loggedIn ? "md:grid-cols-2 items-start" : "md:grid-cols-[1.2fr_1fr] items-start"}`}>
+          <div className={`flex flex-col gap-6 ${loggedIn ? "lg:w-[95%]" : ""}`}>
+            {loggedIn ? (
+              <>
+                <div className="flex w-full flex-col gap-2 rounded-[20px] bg-white p-6 shadow-soft">
+                  <span className="text-sm font-medium text-gray-500">보유 포인트</span>
+                  <div className="flex items-baseline gap-2">
+                    <AnimatedNumber
+                      value={displayedPoints}
+                      suffix="P"
+                      className="font-countdown text-[40px] font-bold leading-none tracking-tight text-primary"
+                    />
+                    {currentPoints !== null && pendingUsedPoints > 0 && (
+                      <span className="text-sm font-medium text-slate-400">/ {currentPoints}P</span>
+                    )}
+                  </div>
+                  {currentPoints !== null && pendingUsedPoints > 0 && (
+                    <p className="text-xs text-slate-400">
+                      현재 선택 기준으로 {pendingUsedPoints}P 사용 예정
+                    </p>
+                  )}
+                </div>
 
-            <ItemSelector
-              groups={itemGroups}
-              selectedIds={effectiveSelectedIds}
-              onToggle={handleToggle}
-              availablePoints={displayedPoints}
-              disabled={isItemSelectionLocked}
-              disabledMessage={ITEM_SELECTION_LOCK_MESSAGE}
-              isLoading={isLoading && shopItems.length === 0}
-            />
+                <ItemSelector
+                  groups={itemGroups}
+                  selectedIds={effectiveSelectedIds}
+                  onToggle={handleToggle}
+                  availablePoints={displayedPoints}
+                  disabled={isItemSelectionLocked}
+                  disabledMessage={ITEM_SELECTION_LOCK_MESSAGE}
+                  isLoading={isLoading && shopItems.length === 0}
+                />
+              </>
+            ) : (
+              <div className="w-full [&>div]:aspect-auto [&>div]:min-h-[400px]">
+                <HeroCarousel />
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-6">
@@ -819,7 +865,11 @@ export default function DashboardPage() {
               }
             />
 
-            {gameReturnPath && (
+            {!loggedIn && (
+              <AnimatedParticipants count={waitingStatus?.participantCount ?? 0} />
+            )}
+
+            {loggedIn && gameReturnPath && (
               <button
                 onClick={() => navigate(gameReturnPath)}
                 className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-white font-bold shadow-lg hover:bg-primary-dark transition-all hover:-translate-y-0.5"
@@ -829,7 +879,7 @@ export default function DashboardPage() {
               </button>
             )}
 
-            {showRecentSeasonRankingButton && (
+            {loggedIn && showRecentSeasonRankingButton && (
               <button
                 onClick={() => navigate("/ranking")}
                 className="w-full flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-6 py-4 text-white font-bold shadow-lg hover:bg-slate-900 transition-all hover:-translate-y-0.5"
@@ -839,7 +889,7 @@ export default function DashboardPage() {
               </button>
             )}
 
-            {showDeadlineNotice && (
+            {loggedIn && showDeadlineNotice && (
               <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 p-5 shadow-soft">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex size-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
@@ -856,13 +906,13 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {showBankruptRetryNotice && <BankruptWarning />}
+            {loggedIn && showBankruptRetryNotice && <BankruptWarning />}
           </div>
         </div>
       </main>
 
       <Modal
-        isOpen={showMidSeasonSetupExpiredModal}
+        isOpen={loggedIn && showMidSeasonSetupExpiredModal}
         onClose={() => navigate(location.pathname, { replace: true, state: null })}
         title="설정 시간이 종료되었습니다"
       >
