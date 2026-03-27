@@ -199,6 +199,9 @@ function formatPlayDebugBlock(input: {
   ].join("\n");
 }
 
+const VISITOR_SPAWN_STEP_MS = 1000;
+const VISITOR_DELTA_SPREAD_SECONDS = 6;
+
 
 const MENU_EMOJI_MAP: Record<number, string> = {
   1: "🍞",
@@ -1212,6 +1215,58 @@ function PlayPageSession({
     return unityBridgeRef.current?.spawnPopupVisitors(popupStoreIndex, totalCount, hasStock) ?? false;
   };
 
+  const schedulePopupVisitorBatches = (
+    popupStoreIndex: number,
+    totalCount: number,
+    totalWindowMs: number,
+    gameHour: number | null = null,
+  ) => {
+    const normalizedCount = Math.max(0, Math.floor(totalCount));
+    if (normalizedCount <= 0) {
+      return;
+    }
+
+    const normalizedWindowMs = Math.max(VISITOR_SPAWN_STEP_MS, Math.floor(totalWindowMs));
+    const batchSteps = Math.min(
+      normalizedCount,
+      Math.max(1, Math.ceil(normalizedWindowMs / VISITOR_SPAWN_STEP_MS)),
+    );
+    const baseBatchCount = Math.floor(normalizedCount / batchSteps);
+    let remainder = normalizedCount % batchSteps;
+
+    for (let step = 0; step < batchSteps; step += 1) {
+      const batchCount = baseBatchCount + (remainder > 0 ? 1 : 0);
+      if (remainder > 0) {
+        remainder -= 1;
+      }
+      if (batchCount <= 0) {
+        continue;
+      }
+
+      const delayMs =
+        batchSteps <= 1
+          ? 0
+          : Math.round((normalizedWindowMs * step) / Math.max(1, batchSteps - 1));
+
+      const timerId = window.setTimeout(() => {
+        const didSend = spawnPopupVisitorsImmediately(popupStoreIndex, batchCount);
+
+        if (!didSend) {
+          return;
+        }
+
+        if (gameHour !== null) {
+          dispatchedVisitorsByHourRef.current.set(
+            gameHour,
+            (dispatchedVisitorsByHourRef.current.get(gameHour) ?? 0) + batchCount,
+          );
+        }
+      }, delayMs);
+
+      scheduledVisitorTimersRef.current.push(timerId);
+    }
+  };
+
   const schedulePlannedVisitors = (
     customerPlanByHour: CustomerPlanByHourItem[] | null | undefined,
     backendCustomerCount: number,
@@ -1280,22 +1335,21 @@ function PlayPageSession({
       }
 
       const scheduleWindowStart = Math.max(elapsedBusinessSeconds, hourWindow.start);
-      const delayMs = Math.max(0, Math.round((scheduleWindowStart - elapsedBusinessSeconds) * 1000));
+      const scheduleStartDelayMs = Math.max(
+        0,
+        Math.round((scheduleWindowStart - elapsedBusinessSeconds) * 1000),
+      );
+      const remainingWindowMs = Math.max(
+        VISITOR_SPAWN_STEP_MS,
+        Math.round((hourWindow.end - scheduleWindowStart) * 1000),
+      );
 
-      const timerId = window.setTimeout(() => {
-        const didSend = spawnPopupVisitorsImmediately(popupStoreIndex, remainingCustomers);
-
-        if (!didSend) {
-          return;
-        }
-
-        dispatchedVisitorsByHourRef.current.set(
-          planItem.gameHour,
-          (dispatchedVisitorsByHourRef.current.get(planItem.gameHour) ?? 0) + remainingCustomers,
-        );
-      }, delayMs);
-
-      scheduledVisitorTimersRef.current.push(timerId);
+      schedulePopupVisitorBatches(
+        popupStoreIndex,
+        remainingCustomers,
+        remainingWindowMs + scheduleStartDelayMs,
+        planItem.gameHour,
+      );
     }
   };
 
@@ -1476,7 +1530,11 @@ function PlayPageSession({
         const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
 
         if (popupStoreIndex !== null) {
-          spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+          schedulePopupVisitorBatches(
+            popupStoreIndex,
+            gd,
+            Math.max(VISITOR_SPAWN_STEP_MS, VISITOR_DELTA_SPREAD_SECONDS * 1000),
+          );
           spawnTimingRef.current.totalSpawned += gd;
           spawnTimingRef.current.lastRequestAt = Date.now();
           const { totalSpawned, totalArrived } = spawnTimingRef.current;
