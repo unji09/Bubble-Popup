@@ -44,7 +44,7 @@ interface PendingUnityMessage {
   payload: string;
 }
 
-const UNITY_LOADING_VERSION = "20260327-3";
+const UNITY_LOADING_VERSION = "20260327-5";
 
 function getUnityApp(frame: HTMLIFrameElement | null) {
   try {
