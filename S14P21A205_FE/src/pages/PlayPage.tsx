@@ -1219,6 +1219,7 @@ function PlayPageSession({
     popupStoreIndex: number,
     totalCount: number,
     totalWindowMs: number,
+    startDelayMs = 0,
     gameHour: number | null = null,
   ) => {
     const normalizedCount = Math.max(0, Math.floor(totalCount));
@@ -1244,9 +1245,12 @@ function PlayPageSession({
       }
 
       const delayMs =
-        batchSteps <= 1
-          ? 0
-          : Math.round((normalizedWindowMs * step) / Math.max(1, batchSteps - 1));
+        startDelayMs
+        + (
+          batchSteps <= 1
+            ? 0
+            : Math.round((normalizedWindowMs * step) / Math.max(1, batchSteps - 1))
+        );
 
       const timerId = window.setTimeout(() => {
         const didSend = spawnPopupVisitorsImmediately(popupStoreIndex, batchCount);
@@ -1347,7 +1351,8 @@ function PlayPageSession({
       schedulePopupVisitorBatches(
         popupStoreIndex,
         remainingCustomers,
-        remainingWindowMs + scheduleStartDelayMs,
+        remainingWindowMs,
+        scheduleStartDelayMs,
         planItem.gameHour,
       );
     }
@@ -1534,6 +1539,7 @@ function PlayPageSession({
             popupStoreIndex,
             gd,
             Math.max(VISITOR_SPAWN_STEP_MS, VISITOR_DELTA_SPREAD_SECONDS * 1000),
+            0,
           );
           spawnTimingRef.current.totalSpawned += gd;
           spawnTimingRef.current.lastRequestAt = Date.now();
