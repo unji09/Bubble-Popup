@@ -1,7 +1,7 @@
 import { useState, Suspense, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment, ContactShadows } from "@react-three/drei";
-import { Shape, ExtrudeGeometry } from "three";
+import { Shape, ExtrudeGeometry, PCFShadowMap } from "three";
 import DistrictMesh, { BackgroundMesh } from "./DistrictMesh";
 import { seoulDistricts, backgroundGus } from "./seoulDistricts";
 
@@ -105,7 +105,7 @@ export default function SeoulMap3D({ selectedId, onSelect }: SeoulMap3DProps) {
   return (
     <div className="w-full h-full relative z-0">
       <Canvas
-        shadows
+        shadows={{ type: PCFShadowMap }}
         camera={{ position: [0, 22, 22], fov: 42 }}
         style={{ background: "transparent" }}
         onPointerMissed={() => {}}
