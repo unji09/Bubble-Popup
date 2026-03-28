@@ -74,6 +74,17 @@ export interface SeasonDemoSkipResponse {
   message: string;
 }
 
+export interface SeasonRuntimeControlResponse {
+  paused: boolean;
+  pausedAt: string | null;
+  effectiveNow: string;
+  currentSeasonId: number | null;
+  seasonStatus: string | null;
+  currentDay: number | null;
+  phase: string | null;
+  remainingPhaseSeconds: number | null;
+}
+
 export async function getCurrentSeasonFinalRankings() {
   const { data } = await client.get<CurrentSeasonFinalRankingsResponse>(
     "/api/game/seasons/current/rankings/final",
@@ -85,6 +96,27 @@ export async function reserveSeasonDemoSkip(payload: SeasonDemoSkipRequest) {
   const { data } = await client.post<SeasonDemoSkipResponse>(
     "/api/game/seasons/admin/demo-skip",
     payload,
+  );
+  return data;
+}
+
+export async function getSeasonRuntimeControl() {
+  const { data } = await client.get<SeasonRuntimeControlResponse>(
+    "/api/game/seasons/admin/runtime",
+  );
+  return data;
+}
+
+export async function pauseSeasonRuntime() {
+  const { data } = await client.post<SeasonRuntimeControlResponse>(
+    "/api/game/seasons/admin/runtime/pause",
+  );
+  return data;
+}
+
+export async function resumeSeasonRuntime() {
+  const { data } = await client.post<SeasonRuntimeControlResponse>(
+    "/api/game/seasons/admin/runtime/resume",
   );
   return data;
 }

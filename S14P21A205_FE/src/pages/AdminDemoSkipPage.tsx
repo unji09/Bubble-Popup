@@ -1,12 +1,16 @@
 import axios from "axios";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import AppHeader from "../components/common/AppHeader";
 import Badge from "../components/common/Badge";
 import Button from "../components/common/Button";
 import FloatingBubbles from "../components/common/FloatingBubbles";
 import {
+  getSeasonRuntimeControl,
+  pauseSeasonRuntime,
   reserveSeasonDemoSkip,
+  resumeSeasonRuntime,
   type SeasonDemoSkipResponse,
+  type SeasonRuntimeControlResponse,
 } from "../api/game";
 
 type SubmissionState =
@@ -38,21 +42,55 @@ const bubbles = [
   },
 ];
 
-function extractErrorMessage(error: unknown) {
+function extractErrorMessage(
+  error: unknown,
+  fallback: string,
+) {
   if (axios.isAxiosError(error)) {
     const responseMessage = error.response?.data?.message;
     if (typeof responseMessage === "string" && responseMessage.trim()) {
       return responseMessage;
     }
   }
-  return "데모 스킵 예약 요청을 처리하지 못했습니다.";
+  return fallback;
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 export default function AdminDemoSkipPage() {
   const [seasonIdInput, setSeasonIdInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [runtimeSubmitting, setRuntimeSubmitting] = useState<
+    "pause" | "resume" | "refresh" | null
+  >(null);
   const [result, setResult] = useState<SeasonDemoSkipResponse | null>(null);
+  const [runtimeControl, setRuntimeControl] =
+    useState<SeasonRuntimeControlResponse | null>(null);
   const [submissionState, setSubmissionState] = useState<SubmissionState>({
+    type: "idle",
+    message: null,
+  });
+  const [runtimeState, setRuntimeState] = useState<SubmissionState>({
     type: "idle",
     message: null,
   });
@@ -62,6 +100,35 @@ export default function AdminDemoSkipPage() {
     seasonIdInput.trim().length > 0 &&
     Number.isInteger(parsedSeasonId) &&
     parsedSeasonId > 0;
+
+  const loadRuntimeControl = async (mode: "initial" | "refresh" = "refresh") => {
+    if (mode === "initial") {
+      setRuntimeLoading(true);
+    } else {
+      setRuntimeSubmitting("refresh");
+    }
+
+    try {
+      const response = await getSeasonRuntimeControl();
+      setRuntimeControl(response);
+      setRuntimeState({ type: "idle", message: null });
+    } catch (error) {
+      setRuntimeState({
+        type: "error",
+        message: extractErrorMessage(
+          error,
+          "런타임 상태를 불러오지 못했습니다.",
+        ),
+      });
+    } finally {
+      setRuntimeLoading(false);
+      setRuntimeSubmitting((prev) => (prev === "refresh" ? null : prev));
+    }
+  };
+
+  useEffect(() => {
+    loadRuntimeControl("initial");
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -91,10 +158,61 @@ export default function AdminDemoSkipPage() {
       setResult(null);
       setSubmissionState({
         type: "error",
-        message: extractErrorMessage(error),
+        message: extractErrorMessage(
+          error,
+          "데모 스킵 예약 요청을 처리하지 못했습니다.",
+        ),
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePause = async () => {
+    setRuntimeSubmitting("pause");
+    setRuntimeState({ type: "idle", message: null });
+
+    try {
+      const response = await pauseSeasonRuntime();
+      setRuntimeControl(response);
+      setRuntimeState({
+        type: "success",
+        message: "게임 시간이 정지되었습니다.",
+      });
+    } catch (error) {
+      setRuntimeState({
+        type: "error",
+        message: extractErrorMessage(
+          error,
+          "게임 시간 정지 요청을 처리하지 못했습니다.",
+        ),
+      });
+    } finally {
+      setRuntimeSubmitting(null);
+    }
+  };
+
+  const handleResume = async () => {
+    setRuntimeSubmitting("resume");
+    setRuntimeState({ type: "idle", message: null });
+
+    try {
+      const response = await resumeSeasonRuntime();
+      setRuntimeControl(response);
+      setRuntimeState({
+        type: "success",
+        message: "게임 시간이 다시 재생되었습니다.",
+      });
+    } catch (error) {
+      setRuntimeState({
+        type: "error",
+        message: extractErrorMessage(
+          error,
+          "게임 시간 재생 요청을 처리하지 못했습니다.",
+        ),
+      });
+    } finally {
+      setRuntimeSubmitting(null);
     }
   };
 
@@ -119,6 +237,112 @@ export default function AdminDemoSkipPage() {
               </p>
             </div>
           </div>
+
+          <section className="rounded-3xl border border-slate-200 bg-slate-50/80 p-5">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-900">
+                    시즌 시간 제어
+                  </h2>
+                  <Badge
+                    variant={runtimeControl?.paused ? "rose" : "green"}
+                    size="md"
+                  >
+                    {runtimeControl?.paused ? "정지됨" : "재생 중"}
+                  </Badge>
+                </div>
+                <p className="text-sm text-slate-500">
+                  현재 시즌 시간을 전역으로 멈추거나 다시 재생합니다.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={runtimeSubmitting === "refresh"}
+                  onClick={() => loadRuntimeControl("refresh")}
+                >
+                  새로고침
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={runtimeLoading || runtimeControl?.paused === true}
+                  loading={runtimeSubmitting === "pause"}
+                  onClick={handlePause}
+                >
+                  시간 정지
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={runtimeLoading || runtimeControl?.paused !== true}
+                  loading={runtimeSubmitting === "resume"}
+                  onClick={handleResume}
+                >
+                  시간 재생
+                </Button>
+              </div>
+            </div>
+
+            {runtimeState.message && (
+              <div
+                className={`mb-4 rounded-2xl border px-4 py-4 text-sm leading-6 ${
+                  runtimeState.type === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
+                }`}
+              >
+                {runtimeState.message}
+              </div>
+            )}
+
+            <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1">
+                <dt className="text-slate-500">현재 시즌</dt>
+                <dd className="font-semibold text-slate-900">
+                  {runtimeControl?.currentSeasonId ?? "-"}
+                </dd>
+              </div>
+              <div className="space-y-1">
+                <dt className="text-slate-500">시즌 상태</dt>
+                <dd className="font-semibold text-slate-900">
+                  {runtimeControl?.seasonStatus ?? "-"}
+                </dd>
+              </div>
+              <div className="space-y-1">
+                <dt className="text-slate-500">현재 Day</dt>
+                <dd className="font-semibold text-slate-900">
+                  {runtimeControl?.currentDay ?? "-"}
+                </dd>
+              </div>
+              <div className="space-y-1">
+                <dt className="text-slate-500">현재 Phase</dt>
+                <dd className="font-semibold text-slate-900">
+                  {runtimeControl?.phase ?? "-"}
+                </dd>
+              </div>
+              <div className="space-y-1">
+                <dt className="text-slate-500">남은 초</dt>
+                <dd className="font-semibold text-slate-900">
+                  {runtimeControl?.remainingPhaseSeconds ?? "-"}
+                </dd>
+              </div>
+              <div className="space-y-1">
+                <dt className="text-slate-500">정지 시각</dt>
+                <dd className="font-semibold text-slate-900">
+                  {formatDateTime(runtimeControl?.pausedAt ?? null)}
+                </dd>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <dt className="text-slate-500">현재 기준 시각</dt>
+                <dd className="font-semibold text-slate-900">
+                  {formatDateTime(runtimeControl?.effectiveNow ?? null)}
+                </dd>
+              </div>
+            </dl>
+          </section>
 
           <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
             <label className="flex flex-col gap-2">
