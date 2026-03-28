@@ -10,6 +10,7 @@ import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonRuntimeControlResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -165,6 +166,84 @@ public interface SeasonControllerDoc {
             @Parameter(hidden = true) Authentication authentication,
             @Parameter(description = "Demo skip reservation request")
             SeasonDemoSkipRequest request
+    );
+
+    @Operation(
+            summary = "Get runtime pause state",
+            description = "Admin-only API. Returns the current global game runtime pause state and effective season timeline snapshot.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Runtime state lookup success",
+                    content = @Content(schema = @Schema(implementation = SeasonRuntimeControlResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Admin role required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SeasonRuntimeControlResponse> getRuntimeControl(
+            @Parameter(hidden = true) Authentication authentication
+    );
+
+    @Operation(
+            summary = "Pause global season runtime",
+            description = "Admin-only API. Freezes the effective game time for all users until resumed.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Runtime pause success",
+                    content = @Content(schema = @Schema(implementation = SeasonRuntimeControlResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Admin role required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SeasonRuntimeControlResponse> pauseRuntime(
+            @Parameter(hidden = true) Authentication authentication
+    );
+
+    @Operation(
+            summary = "Resume global season runtime",
+            description = "Admin-only API. Resumes the effective game time for all users from the frozen point.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Runtime resume success",
+                    content = @Content(schema = @Schema(implementation = SeasonRuntimeControlResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Admin role required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SeasonRuntimeControlResponse> resumeRuntime(
+            @Parameter(hidden = true) Authentication authentication
     );
 
     @Operation(

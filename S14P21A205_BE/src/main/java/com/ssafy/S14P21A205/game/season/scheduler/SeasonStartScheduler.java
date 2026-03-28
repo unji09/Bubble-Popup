@@ -1,5 +1,7 @@
 package com.ssafy.S14P21A205.game.season.scheduler;
 
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeClockSupport;
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeControlStateHolder;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -28,6 +30,8 @@ public class SeasonStartScheduler {
     private final SeasonRepository seasonRepository;
     private final SeasonLifecycleService seasonLifecycleService;
     private final Clock clock;
+    private final GameRuntimeClockSupport gameRuntimeClockSupport;
+    private final GameRuntimeControlStateHolder runtimeControlStateHolder;
 
     @Value("${app.game.season-start.retry-delay-ms:10000}")
     private long retryDelayMs;
@@ -36,15 +40,27 @@ public class SeasonStartScheduler {
 
     @EventListener(ApplicationReadyEvent.class)
     public void initializeCurrentSeasonStartSchedule() {
+        if (runtimeControlStateHolder.isPaused()) {
+            clearAll();
+            return;
+        }
         synchronizeCurrentScheduledSeason();
     }
 
     public void synchronizeCurrentScheduledSeason() {
+        if (runtimeControlStateHolder.isPaused()) {
+            clearAll();
+            return;
+        }
         seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED)
                 .ifPresentOrElse(this::synchronize, this::clearAll);
     }
 
     public void synchronize(Season season) {
+        if (runtimeControlStateHolder.isPaused()) {
+            clear(season == null ? null : season.getId());
+            return;
+        }
         if (season == null || season.getId() == null || season.getStatus() != SeasonStatus.SCHEDULED) {
             clear(season == null ? null : season.getId());
             return;
@@ -89,6 +105,10 @@ public class SeasonStartScheduler {
     }
 
     private void triggerStart(Long seasonId, SeasonStartScheduleSignature expectedSignature) {
+        if (runtimeControlStateHolder.isPaused()) {
+            clear(seasonId);
+            return;
+        }
         Season scheduledSeason = seasonRepository.findByIdAndStatus(seasonId, SeasonStatus.SCHEDULED).orElse(null);
         if (scheduledSeason == null) {
             clear(seasonId);
@@ -115,7 +135,7 @@ public class SeasonStartScheduler {
     }
 
     private void scheduleRetry(Long seasonId, SeasonStartScheduleSignature signature) {
-        Instant retryAt = Instant.now(clock).plusMillis(retryDelayMs);
+        Instant retryAt = gameRuntimeClockSupport.realNow().plusMillis(retryDelayMs);
         ScheduledFuture<?> future = taskScheduler.schedule(
                 () -> triggerStart(seasonId, signature),
                 retryAt
@@ -137,7 +157,7 @@ public class SeasonStartScheduler {
             LocalDateTime startTime,
             boolean retry
     ) {
-        Instant triggerAt = startTime.atZone(clock.getZone()).toInstant();
+        Instant triggerAt = gameRuntimeClockSupport.toSchedulingInstant(startTime);
         ScheduledFuture<?> future = taskScheduler.schedule(
                 () -> triggerStart(seasonId, signature),
                 triggerAt
@@ -171,5 +191,9 @@ public class SeasonStartScheduler {
             SeasonStartScheduleSignature signature,
             ScheduledFuture<?> future
     ) {
+    }
+
+    public void pauseAllSchedules() {
+        clearAll();
     }
 }

@@ -2,8 +2,10 @@ package com.ssafy.S14P21A205.game.season.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeControlService;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonRuntimeControlResponse;
 import com.ssafy.S14P21A205.game.season.entity.DemoSkipStatus;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
@@ -26,13 +28,11 @@ public class SeasonAdminService {
 
     private final SeasonRepository seasonRepository;
     private final UserService userService;
+    private final GameRuntimeControlService gameRuntimeControlService;
     private final Clock clock;
 
     public SeasonDemoSkipResponse reserveDemoSkip(Authentication authentication, SeasonDemoSkipRequest request) {
-        User user = userService.getCurrentUser(authentication);
-        if (user.getRole() != User.UserRole.ADMIN) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
+        requireAdmin(authentication);
         if (request == null || request.seasonId() == null || request.seasonId() <= 0L) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "seasonId must be positive.");
         }
@@ -55,5 +55,28 @@ public class SeasonAdminService {
                 season.getDemoPlayableDays(),
                 "This season will run as a 3-day demo season when it starts."
         );
+    }
+
+    public SeasonRuntimeControlResponse getRuntimeControl(Authentication authentication) {
+        requireAdmin(authentication);
+        return gameRuntimeControlService.getRuntimeControl();
+    }
+
+    public SeasonRuntimeControlResponse pauseRuntime(Authentication authentication) {
+        requireAdmin(authentication);
+        return gameRuntimeControlService.pauseRuntime();
+    }
+
+    public SeasonRuntimeControlResponse resumeRuntime(Authentication authentication) {
+        requireAdmin(authentication);
+        return gameRuntimeControlService.resumeRuntime();
+    }
+
+    private User requireAdmin(Authentication authentication) {
+        User user = userService.getCurrentUser(authentication);
+        if (user.getRole() != User.UserRole.ADMIN) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED);
+        }
+        return user;
     }
 }

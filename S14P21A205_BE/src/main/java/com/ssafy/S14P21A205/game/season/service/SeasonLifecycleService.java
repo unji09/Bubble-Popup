@@ -5,6 +5,7 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeControlStateHolder;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
@@ -94,11 +95,15 @@ public class SeasonLifecycleService {
     private final NewsService newsService;
     private final EtlJobRequestRepository etlJobRequestRepository;
     private final ApplicationMonitoringService monitoringService;
+    private final GameRuntimeControlStateHolder runtimeControlStateHolder;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private final Clock clock;
 
     public void synchronize() {
+        if (runtimeControlStateHolder.isPaused()) {
+            return;
+        }
         LocalDateTime now = LocalDateTime.now(clock);
 
         Season inProgressSeason = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS).orElse(null);
@@ -136,6 +141,9 @@ public class SeasonLifecycleService {
     }
 
     public synchronized SeasonStartResult startScheduledSeason(Long seasonId) {
+        if (runtimeControlStateHolder.isPaused()) {
+            return SeasonStartResult.SKIPPED;
+        }
         if (seasonId == null) {
             return SeasonStartResult.SKIPPED;
         }
@@ -204,6 +212,9 @@ public class SeasonLifecycleService {
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void prepareScheduledSeasonIfNeeded() {
+        if (runtimeControlStateHolder.isPaused()) {
+            return;
+        }
         Season scheduledSeason = seasonRepository
                 .findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED).orElse(null);
         if (scheduledSeason == null) return;

@@ -1,5 +1,6 @@
 package com.ssafy.S14P21A205.game.scheduler;
 
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeControlStateHolder;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -14,6 +15,7 @@ public class GameTickScheduler {
     private static final Logger log = LoggerFactory.getLogger(GameTickScheduler.class);
 
     private final List<GameTickTask> gameTickTasks;
+    private final GameRuntimeControlStateHolder runtimeControlStateHolder;
 
     /*
     10초마다 runTick 실행
@@ -21,6 +23,9 @@ public class GameTickScheduler {
      */
     @Scheduled(fixedRateString = "${app.game.tick.fixed-rate-ms:10000}")
     public void runTick() {
+        if (runtimeControlStateHolder.isPaused()) {
+            return;
+        }
         for (GameTickTask gameTickTask : gameTickTasks) {
             try {
                 gameTickTask.execute();

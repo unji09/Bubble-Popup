@@ -9,6 +9,7 @@ import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonRuntimeControlResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
 import com.ssafy.S14P21A205.game.season.service.SeasonAdminService;
 import com.ssafy.S14P21A205.game.season.service.CurrentSeasonTimeService;
@@ -79,6 +80,24 @@ public class SeasonController implements SeasonControllerDoc {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(seasonAdminService.reserveDemoSkip(authentication, request));
+    }
+
+    @Override
+    @GetMapping("/seasons/admin/runtime")
+    public ResponseEntity<SeasonRuntimeControlResponse> getRuntimeControl(Authentication authentication) {
+        return ResponseEntity.ok(seasonAdminService.getRuntimeControl(authentication));
+    }
+
+    @Override
+    @PostMapping("/seasons/admin/runtime/pause")
+    public ResponseEntity<SeasonRuntimeControlResponse> pauseRuntime(Authentication authentication) {
+        return ResponseEntity.ok(seasonAdminService.pauseRuntime(authentication));
+    }
+
+    @Override
+    @PostMapping("/seasons/admin/runtime/resume")
+    public ResponseEntity<SeasonRuntimeControlResponse> resumeRuntime(Authentication authentication) {
+        return ResponseEntity.ok(seasonAdminService.resumeRuntime(authentication));
     }
 
     @Override

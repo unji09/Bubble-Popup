@@ -1,6 +1,8 @@
 package com.ssafy.S14P21A205.game.day.scheduler;
 
 import com.ssafy.S14P21A205.game.day.service.SeasonDayClosingService;
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeClockSupport;
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeControlStateHolder;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -27,17 +29,27 @@ public class SeasonDayClosingScheduler {
     private final SeasonRepository seasonRepository;
     private final SeasonDayClosingService seasonDayClosingService;
     private final Clock clock;
+    private final GameRuntimeClockSupport gameRuntimeClockSupport;
+    private final GameRuntimeControlStateHolder runtimeControlStateHolder;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private final Map<Long, SeasonScheduleState> scheduleStates = new ConcurrentHashMap<>();
 
     @EventListener(ApplicationReadyEvent.class)
     public void initializeCurrentSeasonSchedule() {
+        if (runtimeControlStateHolder.isPaused()) {
+            pauseAllSchedules();
+            return;
+        }
         seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
                 .ifPresent(this::synchronize);
     }
 
     public void synchronize(Season season) {
+        if (runtimeControlStateHolder.isPaused()) {
+            clear(season == null ? null : season.getId());
+            return;
+        }
         if (season == null || season.getId() == null || season.getStatus() != SeasonStatus.IN_PROGRESS) {
             return;
         }
@@ -83,7 +95,7 @@ public class SeasonDayClosingScheduler {
                             log.error("Day closing failed. seasonId={} day={}", season.getId(), targetDay, e);
                         }
                     },
-                    businessEndAt.atZone(clock.getZone()).toInstant()
+                    gameRuntimeClockSupport.toSchedulingInstant(businessEndAt)
             );
             if (future != null) {
                 futures.put(day, future);
@@ -116,5 +128,11 @@ public class SeasonDayClosingScheduler {
             SeasonScheduleSignature signature,
             Map<Integer, ScheduledFuture<?>> futures
     ) {
+    }
+
+    public void pauseAllSchedules() {
+        for (Long seasonId : scheduleStates.keySet().toArray(new Long[0])) {
+            clear(seasonId);
+        }
     }
 }

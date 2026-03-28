@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.game.day.service;
 
 import com.ssafy.S14P21A205.game.news.service.NewsService;
+import com.ssafy.S14P21A205.game.runtime.service.GameRuntimeControlStateHolder;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -27,6 +28,7 @@ public class SeasonDayClosingService {
     private final NewsService newsService;
     private final Executor dayClosingExecutor;
     private final ApplicationMonitoringService monitoringService;
+    private final GameRuntimeControlStateHolder runtimeControlStateHolder;
 
     public SeasonDayClosingService(
             SeasonRepository seasonRepository,
@@ -34,6 +36,7 @@ public class SeasonDayClosingService {
             GameDayReportService gameDayReportService,
             SeasonFinalRankingService seasonFinalRankingService,
             NewsService newsService,
+            GameRuntimeControlStateHolder runtimeControlStateHolder,
             ApplicationMonitoringService monitoringService,
             @Qualifier("dayClosingExecutor") Executor dayClosingExecutor
     ) {
@@ -42,11 +45,15 @@ public class SeasonDayClosingService {
         this.gameDayReportService = gameDayReportService;
         this.seasonFinalRankingService = seasonFinalRankingService;
         this.newsService = newsService;
+        this.runtimeControlStateHolder = runtimeControlStateHolder;
         this.monitoringService = monitoringService;
         this.dayClosingExecutor = dayClosingExecutor;
     }
 
     public void handleBusinessEnd(Long seasonId, int day) {
+        if (runtimeControlStateHolder.isPaused()) {
+            return;
+        }
         if (seasonId == null || day < 1) {
             return;
         }
