@@ -598,27 +598,22 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
 
 function formatEmergencyArrivalGameTime(
   arrivedTime: string,
-  serverTime: string | null,
-  remainingMilliseconds: number,
+  playEndTimestampMs: number,
 ) {
-  if (!serverTime) {
-    return "";
-  }
-
   const arrivedAt = new Date(arrivedTime);
-  const serverNow = new Date(serverTime);
-
-  if (Number.isNaN(arrivedAt.getTime()) || Number.isNaN(serverNow.getTime())) {
+  if (Number.isNaN(arrivedAt.getTime())) {
     return "";
   }
 
-  const delaySeconds = Math.max(0, Math.round((arrivedAt.getTime() - serverNow.getTime()) / 1000));
-  const currentElapsedBusinessSeconds = Math.floor(getElapsedBusinessSeconds(remainingMilliseconds));
-  const estimatedElapsedBusinessSeconds = Math.min(
-    BUSINESS_SECONDS,
-    currentElapsedBusinessSeconds + delaySeconds,
+  const businessStartTimestampMs = playEndTimestampMs - BUSINESS_SECONDS * 1000;
+  const estimatedElapsedBusinessSeconds = Math.round(
+    (arrivedAt.getTime() - businessStartTimestampMs) / 1000,
   );
-  return elapsedToGameTime(estimatedElapsedBusinessSeconds);
+  const normalizedElapsedBusinessSeconds = Math.max(
+    0,
+    Math.min(BUSINESS_SECONDS, estimatedElapsedBusinessSeconds),
+  );
+  return elapsedToGameTime(normalizedElapsedBusinessSeconds);
 }
 
 function getEstimatedEmergencyArrivalGameTime(
@@ -837,7 +832,7 @@ function PlayPageSession({
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
   const emergencyArrivalGameTime = emergencyArriveAt
-    ? formatEmergencyArrivalGameTime(emergencyArriveAt, latestServerTime, remainingMilliseconds)
+    ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs)
       || getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds)
       || null
     : getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds);
@@ -1710,6 +1705,21 @@ function PlayPageSession({
       let startErrorMessage: string | null = null;
       let dayStartFallbackBalance: number | null = null;
       let dayStartFallbackStock: number | null = null;
+      const scheduleInitialStateRecovery = () => {
+        clearInitialStateRecoveryTimers();
+        const retryDelays = [0, 1500, 4000];
+        initialStateRecoveryTimersRef.current = retryDelays.map((delayMs) =>
+          window.setTimeout(() => {
+            getGameDayState()
+              .then((nextState) => {
+                if (!isActive) return;
+                clearInitialStateRecoveryTimers();
+                applyGameState(nextState, "initial");
+              })
+              .catch(() => {});
+          }, delayMs),
+        );
+      };
 
       try {
         const dayStartRes = await startGameDay();
@@ -1754,6 +1764,22 @@ function PlayPageSession({
       if (stateResult.status === "fulfilled") {
         clearInitialStateRecoveryTimers();
         applyGameState(stateResult.value, "initial");
+
+        const reconciledFallbackStock = Math.max(
+          0,
+          orderResult.status === "fulfilled" ? orderResult.value.stock : 0,
+          dayStartFallbackStock ?? 0,
+        );
+
+        if (
+          stateResult.value.day === dayNumber &&
+          stateResult.value.inventory.totalStock === 0 &&
+          reconciledFallbackStock > 0
+        ) {
+          setStock(reconciledFallbackStock);
+          prevStockRef.current = reconciledFallbackStock;
+          scheduleInitialStateRecovery();
+        }
       } else {
         // getGameDayState 실패 시에는 가능한 한 현재 주문 정보의 재고를 우선 사용
         if (dayStartFallbackBalance !== null) {
@@ -1782,19 +1808,7 @@ function PlayPageSession({
         setOptimisticUsedActions(new Set());
         setLiveSellingPrice(orderResult.status === "fulfilled" ? orderResult.value.sellingPrice : null);
 
-        clearInitialStateRecoveryTimers();
-        const retryDelays = [0, 1500, 4000];
-        initialStateRecoveryTimersRef.current = retryDelays.map((delayMs) =>
-          window.setTimeout(() => {
-            getGameDayState()
-              .then((nextState) => {
-                if (!isActive) return;
-                clearInitialStateRecoveryTimers();
-                applyGameState(nextState, "initial");
-              })
-              .catch(() => {});
-          }, delayMs),
-        );
+        scheduleInitialStateRecovery();
       }
 
       if (orderResult.status === "fulfilled") {
@@ -2308,8 +2322,7 @@ function PlayPageSession({
             const isNewMenuOrder = menuId !== currentOrder?.menuId;
             const arrivalLabel = formatEmergencyArrivalGameTime(
               response.arrivedTime,
-              latestServerTime,
-              remainingMillisecondsRef.current,
+              playEndTimestampMs,
             ) || getEstimatedEmergencyArrivalGameTime(
               remainingMillisecondsRef.current,
               estimatedEmergencyDelaySeconds,

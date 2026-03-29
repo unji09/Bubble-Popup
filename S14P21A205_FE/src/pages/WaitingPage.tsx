@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
+import { getGameWaitingStatus, getSeasonTime, type GameWaitingResponse } from "../api/game";
 import CountdownTimer from "../components/common/CountdownTimer";
 import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
+import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
 import type { WaitingRouteState } from "../types/waiting";
 
 function isWaitingRouteState(value: unknown): value is WaitingRouteState {
@@ -42,16 +43,29 @@ function buildSeasonStartingState(
 }
 
 export default function WaitingPage() {
+  const WAITING_STATE_SYNC_INTERVAL_MS = 1000;
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = isWaitingRouteState(location.state) ? location.state : null;
   const [waitingStatus, setWaitingStatus] = useState<GameWaitingResponse | null>(null);
   const [isStartingSyncing, setIsStartingSyncing] = useState(false);
+  const [syncedState, setSyncedState] = useState<WaitingRouteState | null>(routeState);
   const inferredSeasonStartingState = useMemo(
     () => buildSeasonStartingState(waitingStatus),
     [waitingStatus],
   );
-  const effectiveState = routeState ?? inferredSeasonStartingState;
+  const effectiveState = syncedState ?? inferredSeasonStartingState;
+
+  useEffect(() => {
+    setSyncedState(routeState);
+  }, [routeState]);
+
+  useEffect(() => {
+    if (routeState) {
+      return;
+    }
+    setSyncedState(inferredSeasonStartingState);
+  }, [inferredSeasonStartingState, routeState]);
 
   useEffect(() => {
     if (routeState) {
@@ -115,6 +129,71 @@ export default function WaitingPage() {
     };
 
     void pollSeasonStart();
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [effectiveState, navigate]);
+
+  useEffect(() => {
+    if (!effectiveState || effectiveState.mode === "season_starting") {
+      return;
+    }
+
+    let cancelled = false;
+    let timerId: number | null = null;
+
+    const syncWaitingState = async () => {
+      try {
+        const timeData = await getSeasonTime();
+
+        if (cancelled) {
+          return;
+        }
+
+        const phase = timeData.seasonPhase as SeasonPhase;
+        const day = timeData.currentDay;
+        const nextRoute = phaseToRoute(phase, day);
+
+        if (effectiveState.mode === "prep_locked" && phase !== "LOCATION_SELECTION") {
+          navigate(nextRoute ?? effectiveState.nextPath, { replace: true });
+          return;
+        }
+
+        if (
+          effectiveState.mode === "next_business_day" &&
+          typeof effectiveState.targetDay === "number" &&
+          day >= effectiveState.targetDay &&
+          nextRoute !== null
+        ) {
+          navigate(nextRoute, { replace: true });
+          return;
+        }
+
+        setSyncedState((prev) => {
+          if (!prev || prev.mode === "season_starting") {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            endTimestampMs: Date.now() + Math.max(0, timeData.phaseRemainingSeconds) * 1000,
+          };
+        });
+
+        timerId = window.setTimeout(syncWaitingState, WAITING_STATE_SYNC_INTERVAL_MS);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        timerId = window.setTimeout(syncWaitingState, WAITING_STATE_SYNC_INTERVAL_MS);
+      }
+    };
+
+    void syncWaitingState();
 
     return () => {
       cancelled = true;

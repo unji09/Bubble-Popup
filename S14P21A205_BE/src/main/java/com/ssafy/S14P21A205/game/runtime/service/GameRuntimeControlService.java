@@ -7,6 +7,7 @@ import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.season.scheduler.SeasonStartScheduler;
+import com.ssafy.S14P21A205.game.season.service.SeasonLifecycleService;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
@@ -26,6 +27,7 @@ public class GameRuntimeControlService {
     private final SeasonRepository seasonRepository;
     private final SeasonStartScheduler seasonStartScheduler;
     private final SeasonDayClosingScheduler seasonDayClosingScheduler;
+    private final SeasonLifecycleService seasonLifecycleService;
 
     private final Clock baseClock;
     private final Clock clock;
@@ -38,6 +40,7 @@ public class GameRuntimeControlService {
             SeasonRepository seasonRepository,
             SeasonStartScheduler seasonStartScheduler,
             SeasonDayClosingScheduler seasonDayClosingScheduler,
+            SeasonLifecycleService seasonLifecycleService,
             @Qualifier("baseClock") Clock baseClock,
             Clock clock
     ) {
@@ -46,6 +49,7 @@ public class GameRuntimeControlService {
         this.seasonRepository = seasonRepository;
         this.seasonStartScheduler = seasonStartScheduler;
         this.seasonDayClosingScheduler = seasonDayClosingScheduler;
+        this.seasonLifecycleService = seasonLifecycleService;
         this.baseClock = baseClock;
         this.clock = clock;
     }
@@ -92,7 +96,9 @@ public class GameRuntimeControlService {
         if (control.resume(LocalDateTime.now(baseClock))) {
             gameRuntimeControlRepository.save(control);
             stateHolder.update(control);
+            seasonLifecycleService.prepareScheduledSeasonIfNeeded();
             seasonStartScheduler.synchronizeCurrentScheduledSeason();
+            seasonLifecycleService.synchronize();
             seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
                     .ifPresent(seasonDayClosingScheduler::synchronize);
         } else {

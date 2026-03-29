@@ -235,10 +235,12 @@ type GuardState =
   | { status: "allowed"; context: GameGuardContext };
 
 export default function GameGuard() {
+  const ROUTE_REFRESH_INTERVAL_MS = 3000;
   const location = useLocation();
   const navigate = useNavigate();
   const [state, setState] = useState<GuardState>({ status: "loading" });
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const routeRefreshTimerRef = useRef<number | null>(null);
 
   const checkAndRoute = useCallback(async () => {
     try {
@@ -377,26 +379,52 @@ export default function GameGuard() {
     }, delayMs);
   }, [location.pathname, navigate]);
 
+  const syncRouteState = useCallback(async () => {
+    const result = await checkAndRoute();
+    const isWaiting = location.pathname === "/game/waiting";
+
+    if (result.allowed && result.remaining > 0 && !isWaiting) {
+      scheduleTransition(result.remaining);
+    }
+
+    return result;
+  }, [checkAndRoute, location.pathname, scheduleTransition]);
+
   // 페이지 진입 시 체크 + 타이머 설정
   useEffect(() => {
     let cancelled = false;
 
     setState({ status: "loading" });
 
-    checkAndRoute().then((result) => {
+    syncRouteState().then((result) => {
       if (cancelled) return;
-      // waiting 페이지는 자체 타이머로 전환 처리 -> GameGuard 타이머 스킵
-      const isWaiting = location.pathname === "/game/waiting";
-      if (result.allowed && result.remaining > 0 && !isWaiting) {
-        scheduleTransition(result.remaining);
-      }
     });
 
     return () => {
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (routeRefreshTimerRef.current !== null) {
+        window.clearInterval(routeRefreshTimerRef.current);
+        routeRefreshTimerRef.current = null;
+      }
     };
-  }, [checkAndRoute, scheduleTransition]);
+  }, [syncRouteState]);
+
+  useEffect(() => {
+    routeRefreshTimerRef.current = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      void syncRouteState();
+    }, ROUTE_REFRESH_INTERVAL_MS);
+
+    return () => {
+      if (routeRefreshTimerRef.current !== null) {
+        window.clearInterval(routeRefreshTimerRef.current);
+        routeRefreshTimerRef.current = null;
+      }
+    };
+  }, [syncRouteState]);
 
   // 탭 복귀 시 서버 상태 재확인 + 타이머 재스케줄링 (요구사항 3.5)
   useEffect(() => {
@@ -406,16 +434,11 @@ export default function GameGuard() {
       // 기존 transition 타이머 클리어
       if (timerRef.current) clearTimeout(timerRef.current);
 
-      checkAndRoute().then((result) => {
-        const isWaiting = location.pathname === "/game/waiting";
-        if (result.allowed && result.remaining > 0 && !isWaiting) {
-          scheduleTransition(result.remaining);
-        }
-      });
+      void syncRouteState();
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
-  }, [checkAndRoute, scheduleTransition, location.pathname]);
+  }, [syncRouteState]);
 
   if (state.status === "loading") {
     return (
