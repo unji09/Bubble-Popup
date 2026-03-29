@@ -1472,12 +1472,12 @@ function PlayPageSession({
       return;
     }
 
-    const arrivedAt = new Date(emergencyArriveAt);
-    const arrivalDelayMs = arrivedAt.getTime() - Date.now();
-
-    if (Number.isNaN(arrivedAt.getTime())) {
+    const arrivedAt = parseServerDateTime(emergencyArriveAt);
+    if (arrivedAt === null) {
       return;
     }
+
+    const arrivalDelayMs = arrivedAt.getTime() - Date.now();
 
     const refreshState = () => {
       getGameDayState()
