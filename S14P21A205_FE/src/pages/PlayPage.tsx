@@ -816,7 +816,6 @@ function PlayPageSession({
   const [trafficStatus, setTrafficStatus] = useState<GameTrafficStatus | null>(null);
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
-  const [latestServerTime, setLatestServerTime] = useState<string | null>(null);
   const [estimatedEmergencyDelaySeconds, setEstimatedEmergencyDelaySeconds] = useState<number | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
@@ -1530,7 +1529,6 @@ function PlayPageSession({
     lastActionStateDayRef.current = state.day;
 
     setLiveSellingPrice(state.customerTick.unitPrice);
-    setLatestServerTime(state.serverTime);
     const previousDisplayedGuests = displayedGuestsRef.current;
     const previousDisplayedStock = displayedStockRef.current;
     const previousDisplayedBalance = displayedBalanceRef.current;

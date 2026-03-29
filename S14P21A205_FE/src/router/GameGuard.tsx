@@ -396,7 +396,7 @@ export default function GameGuard() {
 
     setState({ status: "loading" });
 
-    syncRouteState().then((result) => {
+    syncRouteState().then(() => {
       if (cancelled) return;
     });
 
