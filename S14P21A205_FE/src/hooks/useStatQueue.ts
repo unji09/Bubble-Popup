@@ -48,6 +48,25 @@ export default function useStatQueue(
   const queueRef = useRef<QueueEntry[]>([]);
   const timerRef = useRef<number | null>(null);
 
+  const flushPendingTotals = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    let totalStock = 0;
+    let totalBalance = 0;
+    let totalGuests = 0;
+    for (const entry of queueRef.current) {
+      totalStock += entry.stockStep;
+      totalBalance += entry.balanceStep;
+      totalGuests += entry.guestStep;
+    }
+    queueRef.current = [];
+
+    return { totalStock, totalBalance, totalGuests };
+  }, []);
+
   const processNext = useCallback(() => {
     const entry = queueRef.current.shift();
     if (!entry) {
@@ -80,20 +99,7 @@ export default function useStatQueue(
   }, [processNext]);
 
   const flush = useCallback(() => {
-    if (timerRef.current !== null) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    let totalStock = 0;
-    let totalBalance = 0;
-    let totalGuests = 0;
-    for (const entry of queueRef.current) {
-      totalStock += entry.stockStep;
-      totalBalance += entry.balanceStep;
-      totalGuests += entry.guestStep;
-    }
-    queueRef.current = [];
+    const { totalStock, totalBalance, totalGuests } = flushPendingTotals();
 
     if (totalStock !== 0) {
       setStock((prev) => Math.max(0, prev + totalStock));
@@ -104,7 +110,7 @@ export default function useStatQueue(
     if (totalGuests !== 0 && setGuests) {
       setGuests((prev) => prev + totalGuests);
     }
-  }, [setStock, setBalance, setGuests]);
+  }, [flushPendingTotals, setStock, setBalance, setGuests]);
 
   const enqueue = useCallback(
     (opts: {
@@ -115,11 +121,25 @@ export default function useStatQueue(
       targetGuests?: number;
       currentGuests?: number;
     }) => {
-      flush();
+      const { totalStock, totalBalance, totalGuests } = flushPendingTotals();
 
-      const stockDelta = opts.targetStock - opts.currentStock;
-      const balanceDelta = opts.targetBalance - opts.currentBalance;
-      const guestDelta = (opts.targetGuests ?? 0) - (opts.currentGuests ?? 0);
+      if (totalStock !== 0) {
+        setStock((prev) => Math.max(0, prev + totalStock));
+      }
+      if (totalBalance !== 0) {
+        setBalance((prev) => prev + totalBalance);
+      }
+      if (totalGuests !== 0 && setGuests) {
+        setGuests((prev) => prev + totalGuests);
+      }
+
+      const effectiveCurrentStock = Math.max(0, opts.currentStock + totalStock);
+      const effectiveCurrentBalance = opts.currentBalance + totalBalance;
+      const effectiveCurrentGuests = (opts.currentGuests ?? 0) + totalGuests;
+
+      const stockDelta = opts.targetStock - effectiveCurrentStock;
+      const balanceDelta = opts.targetBalance - effectiveCurrentBalance;
+      const guestDelta = (opts.targetGuests ?? 0) - effectiveCurrentGuests;
 
       if (stockDelta === 0 && balanceDelta === 0 && guestDelta === 0) return;
 
@@ -142,7 +162,7 @@ export default function useStatQueue(
 
       startTimer();
     },
-    [flush, startTimer],
+    [flushPendingTotals, setStock, setBalance, setGuests, startTimer],
   );
 
   const enqueueDelta = useCallback(

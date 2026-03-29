@@ -473,6 +473,7 @@ public class ActionServiceImpl implements ActionService {
                     order.getId(),
                     request.quantity(),
                     totalCost,
+                    deliverySeconds,
                     arrivedTime,
                     "Emergency order accepted."
             );

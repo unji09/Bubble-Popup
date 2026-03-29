@@ -32,6 +32,7 @@ export interface EmergencyOrderResponse {
   orderId: number;
   quantity: number;
   totalCost: number;
+  deliverySeconds: number;
   arrivedTime: string;
   message: string;
 }

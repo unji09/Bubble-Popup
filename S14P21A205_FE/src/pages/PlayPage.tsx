@@ -596,12 +596,37 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
   return fallbackMessage;
 }
 
+function parseServerDateTime(value: string) {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/,
+  );
+
+  if (!match) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const [, year, month, day, hour, minute, second, fraction = "0"] = match;
+  const milliseconds = Number(fraction.slice(0, 3).padEnd(3, "0"));
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    milliseconds,
+  );
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function formatEmergencyArrivalGameTime(
   arrivedTime: string,
   playEndTimestampMs: number,
 ) {
-  const arrivedAt = new Date(arrivedTime);
-  if (Number.isNaN(arrivedAt.getTime())) {
+  const arrivedAt = parseServerDateTime(arrivedTime);
+  if (arrivedAt === null) {
     return "";
   }
 
@@ -2317,13 +2342,14 @@ function PlayPageSession({
             const response = await postEmergencyOrder(menuId, quantity, salePrice);
             didOrderEmergencyRef.current = true;
             hasEmergencyArrivalAlertRef.current = false;
+            setEstimatedEmergencyDelaySeconds(response.deliverySeconds);
             const isNewMenuOrder = menuId !== currentOrder?.menuId;
-            const arrivalLabel = formatEmergencyArrivalGameTime(
+            const arrivalLabel = getEstimatedEmergencyArrivalGameTime(
+              remainingMillisecondsRef.current,
+              response.deliverySeconds,
+            ) || formatEmergencyArrivalGameTime(
               response.arrivedTime,
               playEndTimestampMs,
-            ) || getEstimatedEmergencyArrivalGameTime(
-              remainingMillisecondsRef.current,
-              estimatedEmergencyDelaySeconds,
             ) || "";
             const arrivalText = arrivalLabel ? ` ${arrivalLabel} 도착 예정입니다.` : "";
             setEmergencyArriveAt(response.arrivedTime);
