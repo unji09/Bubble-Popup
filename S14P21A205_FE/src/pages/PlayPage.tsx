@@ -806,6 +806,7 @@ function PlayPageSession({
   const currentLocationIdRef = useRef<number | null>(null);
   const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
   const scheduledVisitorTimersRef = useRef<number[]>([]);
+  const emergencyArrivalRefreshTimersRef = useRef<number[]>([]);
   const dispatchedVisitorsByHourRef = useRef<Map<number, number>>(new Map());
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
   const latestBackendCustomerCountRef = useRef(0);
@@ -1225,6 +1226,14 @@ function PlayPageSession({
     scheduledVisitorTimersRef.current = [];
   };
 
+  const clearEmergencyArrivalRefreshTimers = () => {
+    for (const timerId of emergencyArrivalRefreshTimersRef.current) {
+      window.clearTimeout(timerId);
+    }
+
+    emergencyArrivalRefreshTimersRef.current = [];
+  };
+
   const spawnPopupVisitorsImmediately = (popupStoreIndex: number, count: number) => {
     const totalCount = Math.max(0, Math.floor(count));
     if (totalCount <= 0) return false;
@@ -1427,6 +1436,38 @@ function PlayPageSession({
 
     unityBridgeRef.current?.setPopupStockAvailable(stock > 0);
   }, [stock, unityReady]);
+
+  useEffect(() => {
+    clearEmergencyArrivalRefreshTimers();
+
+    if (!emergencyArriveAt) {
+      return;
+    }
+
+    const arrivedAt = new Date(emergencyArriveAt);
+    const arrivalDelayMs = arrivedAt.getTime() - Date.now();
+
+    if (Number.isNaN(arrivedAt.getTime())) {
+      return;
+    }
+
+    const refreshState = () => {
+      getGameDayState()
+        .then((state) => applyGameState(state, "emergency_refresh"))
+        .catch(() => {});
+    };
+
+    const scheduleDelayMs = Math.max(0, arrivalDelayMs);
+    const retryOffsets = [0, 1500, 4000];
+
+    emergencyArrivalRefreshTimersRef.current = retryOffsets.map((offsetMs) =>
+      window.setTimeout(refreshState, scheduleDelayMs + offsetMs),
+    );
+
+    return () => {
+      clearEmergencyArrivalRefreshTimers();
+    };
+  }, [emergencyArriveAt, dayNumber]);
 
   useEffect(() => {
     if (!isPlayDebugLoggingEnabled() || pendingDebugLogsRef.current.length === 0) {
@@ -1921,6 +1962,7 @@ function PlayPageSession({
   useEffect(() => {
     return () => {
       clearScheduledVisitorTimers();
+      clearEmergencyArrivalRefreshTimers();
     };
   }, []);
 
