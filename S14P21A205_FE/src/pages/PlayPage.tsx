@@ -807,6 +807,7 @@ function PlayPageSession({
   const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
   const scheduledVisitorTimersRef = useRef<number[]>([]);
   const emergencyArrivalRefreshTimersRef = useRef<number[]>([]);
+  const initialStateRecoveryTimersRef = useRef<number[]>([]);
   const dispatchedVisitorsByHourRef = useRef<Map<number, number>>(new Map());
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
   const latestBackendCustomerCountRef = useRef(0);
@@ -1232,6 +1233,14 @@ function PlayPageSession({
     }
 
     emergencyArrivalRefreshTimersRef.current = [];
+  };
+
+  const clearInitialStateRecoveryTimers = () => {
+    for (const timerId of initialStateRecoveryTimersRef.current) {
+      window.clearTimeout(timerId);
+    }
+
+    initialStateRecoveryTimersRef.current = [];
   };
 
   const spawnPopupVisitorsImmediately = (popupStoreIndex: number, count: number) => {
@@ -1743,14 +1752,18 @@ function PlayPageSession({
       setOptimisticUsedActions(new Set());
 
       if (stateResult.status === "fulfilled") {
+        clearInitialStateRecoveryTimers();
         applyGameState(stateResult.value, "initial");
       } else {
-        // getGameDayState 실패 시 startGameDay의 initialBalance/Stock을 fallback으로 사용
+        // getGameDayState 실패 시에는 가능한 한 현재 주문 정보의 재고를 우선 사용
         if (dayStartFallbackBalance !== null) {
           setBalance(dayStartFallbackBalance);
           prevBalanceRef.current = dayStartFallbackBalance;
         }
-        if (dayStartFallbackStock !== null) {
+        if (orderResult.status === "fulfilled" && typeof orderResult.value.stock === "number") {
+          setStock(orderResult.value.stock);
+          prevStockRef.current = orderResult.value.stock;
+        } else if (dayStartFallbackStock !== null) {
           setStock(dayStartFallbackStock);
           prevStockRef.current = dayStartFallbackStock;
         }
@@ -1767,7 +1780,21 @@ function PlayPageSession({
         syncShareActionState(false);
         syncEmergencyActionState(false);
         setOptimisticUsedActions(new Set());
-        setLiveSellingPrice(null);
+        setLiveSellingPrice(orderResult.status === "fulfilled" ? orderResult.value.sellingPrice : null);
+
+        clearInitialStateRecoveryTimers();
+        const retryDelays = [0, 1500, 4000];
+        initialStateRecoveryTimersRef.current = retryDelays.map((delayMs) =>
+          window.setTimeout(() => {
+            getGameDayState()
+              .then((nextState) => {
+                if (!isActive) return;
+                clearInitialStateRecoveryTimers();
+                applyGameState(nextState, "initial");
+              })
+              .catch(() => {});
+          }, delayMs),
+        );
       }
 
       if (orderResult.status === "fulfilled") {
@@ -1963,6 +1990,7 @@ function PlayPageSession({
     return () => {
       clearScheduledVisitorTimers();
       clearEmergencyArrivalRefreshTimers();
+      clearInitialStateRecoveryTimers();
     };
   }, []);
 
