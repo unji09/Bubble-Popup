@@ -3,8 +3,62 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getGameWaitingStatus, getSeasonTime, type GameWaitingResponse } from "../api/game";
 import CountdownTimer from "../components/common/CountdownTimer";
 import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
-import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
+import {
+  DAY_SECONDS,
+  LOCATION_SELECTION_SECONDS,
+  phaseToRoute,
+  type SeasonPhase,
+} from "../constants/gameTime";
 import type { WaitingRouteState } from "../types/waiting";
+
+function parseServerDateTime(value: string) {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/,
+  );
+
+  if (!match) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const [, year, month, day, hour, minute, second, fraction = "0"] = match;
+  const milliseconds = Number(fraction.slice(0, 3).padEnd(3, "0"));
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    milliseconds,
+  );
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function resolveWaitingEndTimestampMs(
+  serverTime: string,
+  seasonStartTime: string,
+  phaseRemainingSeconds: number,
+  mode: WaitingRouteState["mode"],
+  targetDay?: number,
+) {
+  if (mode !== "next_business_day" || typeof targetDay !== "number") {
+    return Date.now() + Math.max(0, phaseRemainingSeconds) * 1000;
+  }
+
+  const seasonStart = parseServerDateTime(seasonStartTime);
+  const currentServerTime = parseServerDateTime(serverTime);
+  if (!seasonStart || !currentServerTime) {
+    return Date.now() + Math.max(0, phaseRemainingSeconds) * 1000;
+  }
+
+  const targetDayStartMs =
+    seasonStart.getTime()
+    + (LOCATION_SELECTION_SECONDS + DAY_SECONDS * (targetDay - 1)) * 1000;
+  const remainingMs = Math.max(0, targetDayStartMs - currentServerTime.getTime());
+  return Date.now() + remainingMs;
+}
 
 function isWaitingRouteState(value: unknown): value is WaitingRouteState {
   if (!value || typeof value !== "object") {
@@ -180,7 +234,13 @@ export default function WaitingPage() {
 
           return {
             ...prev,
-            endTimestampMs: Date.now() + Math.max(0, timeData.phaseRemainingSeconds) * 1000,
+            endTimestampMs: resolveWaitingEndTimestampMs(
+              timeData.serverTime,
+              timeData.seasonStartTime,
+              timeData.phaseRemainingSeconds,
+              prev.mode,
+              prev.targetDay,
+            ),
           };
         });
 

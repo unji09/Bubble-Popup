@@ -7,7 +7,12 @@ import {
   type ParticipationResponse,
 } from "../api/game";
 import type { StoreResponse } from "../api/store";
-import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
+import {
+  DAY_SECONDS,
+  LOCATION_SELECTION_SECONDS,
+  phaseToRoute,
+  type SeasonPhase,
+} from "../constants/gameTime";
 import { setStoredBrandName } from "../hooks/useBrandName";
 import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
@@ -24,6 +29,53 @@ export interface GameGuardContext {
 interface RedirectTarget {
   path: string;
   state?: WaitingRouteState;
+}
+
+function parseServerDateTime(value: string) {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/,
+  );
+
+  if (!match) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const [, year, month, day, hour, minute, second, fraction = "0"] = match;
+  const milliseconds = Number(fraction.slice(0, 3).padEnd(3, "0"));
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    milliseconds,
+  );
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function resolveWaitingEndTimestampMs(
+  timeData: CurrentSeasonTimeResponse,
+  waitingForPlayableDay: boolean,
+  targetDay?: number,
+) {
+  if (!waitingForPlayableDay || typeof targetDay !== "number") {
+    return Date.now() + timeData.phaseRemainingSeconds * 1000;
+  }
+
+  const seasonStart = parseServerDateTime(timeData.seasonStartTime);
+  const serverTime = parseServerDateTime(timeData.serverTime);
+  if (!seasonStart || !serverTime) {
+    return Date.now() + timeData.phaseRemainingSeconds * 1000;
+  }
+
+  const targetDayStartMs =
+    seasonStart.getTime()
+    + (LOCATION_SELECTION_SECONDS + DAY_SECONDS * (targetDay - 1)) * 1000;
+  const remainingMs = Math.max(0, targetDayStartMs - serverTime.getTime());
+  return Date.now() + remainingMs;
 }
 
 function isSetupPath(pathname: string): boolean {
@@ -173,7 +225,7 @@ function buildWaitingState(
       brandName,
       districtName,
       nextPath: `/game/${targetDay}/prep`,
-      endTimestampMs: Date.now() + timeData.phaseRemainingSeconds * 1000,
+      endTimestampMs: resolveWaitingEndTimestampMs(timeData, true, targetDay),
       targetDay,
     };
   }
@@ -184,7 +236,7 @@ function buildWaitingState(
     brandName,
     districtName,
     nextPath: `/game/${timeData.currentDay}/prep`,
-    endTimestampMs: Date.now() + timeData.phaseRemainingSeconds * 1000,
+    endTimestampMs: resolveWaitingEndTimestampMs(timeData, false),
   };
 }
 
