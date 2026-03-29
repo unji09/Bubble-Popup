@@ -894,7 +894,6 @@ function PlayPageSession({
     syncActionUsageState("emergency", emergencyUsed);
   };
 
-  const spawnTimingRef = useRef<{ totalSpawned: number; totalArrived: number; lastRequestAt: number }>({ totalSpawned: 0, totalArrived: 0, lastRequestAt: 0 });
   const unityBridgeRef = useRef<UnityBridgeHandle | null>(null);
   const latestTrafficStatusRef = useRef<GameTrafficStatus | null>(null);
   const lastUnityCongestionLevelRef = useRef<UnityCongestionLevel | null>(null);
@@ -1413,30 +1412,6 @@ function PlayPageSession({
     unityBridgeRef.current?.setPopupStockAvailable(stock > 0);
   }, [stock, unityReady]);
 
-  const applyOneArrival = () => {
-    // 유니티 손님 도착 → 헤더 손님 수 +1
-    setGuests((prev) => prev + 1);
-    displayedGuestsRef.current += 1;
-    spawnTimingRef.current.totalArrived += 1;
-  };
-
-  // Unity UNITY_POPUP_ARRIVAL 이벤트 수신
-  useEffect(() => {
-    const handleUnityMessage = (event: MessageEvent) => {
-      const currentUnityWindow = unityIframeRef.current?.contentWindow;
-      if (currentUnityWindow && event.source !== currentUnityWindow) return;
-      if (event.data?.type !== "UNITY_POPUP_ARRIVAL") return;
-
-      const signalValue = Number(event.data.signalValue ?? 1);
-      for (let i = 0; i < signalValue; i += 1) {
-        applyOneArrival();
-      }
-    };
-
-    window.addEventListener("message", handleUnityMessage);
-    return () => window.removeEventListener("message", handleUnityMessage);
-  }, []);
-
   useEffect(() => {
     if (!isPlayDebugLoggingEnabled() || pendingDebugLogsRef.current.length === 0) {
       return;
@@ -1504,36 +1479,16 @@ function PlayPageSession({
     if (prevGuestsRef.current !== null) {
       const gd = state.customerCount - prevGuestsRef.current;
 
-      // 재고/잔액은 항상 서버 절대값 기준으로 statQueue를 통해 점진 반영
-      if (source === "action_sync") {
-        // 액션 모달 오픈 시: 재고/잔액/손님수 모두 서버와 점진 동기화
-        const pendingArrivals = spawnTimingRef.current.totalSpawned - spawnTimingRef.current.totalArrived;
-        const targetGuests = state.customerCount - Math.max(0, pendingArrivals);
-        statQueue.enqueue({
-          targetStock: state.inventory.totalStock,
-          targetBalance: state.cash,
-          targetGuests,
-          currentStock: displayedStockRef.current,
-          currentBalance: displayedBalanceRef.current,
-          currentGuests: displayedGuestsRef.current,
-        });
-        displayedGuestsRef.current = targetGuests;
-      } else {
-        statQueue.enqueue({
-          targetStock: state.inventory.totalStock,
-          targetBalance: state.cash,
-          currentStock: displayedStockRef.current,
-          currentBalance: displayedBalanceRef.current,
-        });
-
-        // 손님수: 유니티 도착 신호가 메인, 서버와 많이 벌어지면 보정
-        const guestDiff = state.customerCount - displayedGuestsRef.current;
-        if (Math.abs(guestDiff) > 20) {
-          const correction = Math.round(guestDiff / 2);
-          setGuests((prev) => prev + correction);
-          displayedGuestsRef.current += correction;
-        }
-      }
+      // 손님/재고/잔액은 모두 서버 절대값 기준으로 점진 동기화
+      statQueue.enqueue({
+        targetStock: state.inventory.totalStock,
+        targetBalance: state.cash,
+        targetGuests: state.customerCount,
+        currentStock: displayedStockRef.current,
+        currentBalance: displayedBalanceRef.current,
+        currentGuests: displayedGuestsRef.current,
+      });
+      displayedGuestsRef.current = state.customerCount;
 
       // Unity 비주얼 스폰 (숫자 변경과 분리, 시각 효과만)
       if (gd > 0 && !hasCustomerPlan) {
@@ -1546,8 +1501,6 @@ function PlayPageSession({
             Math.max(VISITOR_SPAWN_STEP_MS, VISITOR_DELTA_SPREAD_SECONDS * 1000),
             0,
           );
-          spawnTimingRef.current.totalSpawned += gd;
-          spawnTimingRef.current.lastRequestAt = Date.now();
         }
       }
     } else {
@@ -1605,23 +1558,29 @@ function PlayPageSession({
       setTodayEventSchedule(nextTodayEventSchedule);
     }
     setEstimatedEmergencyDelaySeconds(state.traffic?.delaySeconds ?? null);
-    setEmergencyArriveAt((current) => {
-      if (state.actionStatus.emergencyOrderArriveAt) {
-        return state.actionStatus.emergencyOrderArriveAt;
-      }
-
-      if (!current) {
-        return null;
-      }
-
-      const currentArriveMs = new Date(current).getTime();
-
-      if (Number.isNaN(currentArriveMs)) {
-        return null;
-      }
-
-      return Date.now() < currentArriveMs ? current : null;
-    });
+    const nextEmergencyOrderPending = state.actionStatus.emergencyOrderPending;
+    setEmergencyArriveAt(
+      nextEmergencyOrderPending ? state.actionStatus.emergencyOrderArriveAt : null,
+    );
+    if (
+      didOrderEmergencyRef.current &&
+      emergencyOrderPendingRef.current &&
+      !nextEmergencyOrderPending &&
+      !hasEmergencyArrivalAlertRef.current
+    ) {
+      hasEmergencyArrivalAlertRef.current = true;
+      pushAlert("action", "긴급 발주 도착", "긴급 발주한 물품이 도착했습니다.");
+      const refreshData = () => {
+        getCurrentOrder().then((order) => setCurrentOrder(order)).catch(() => {});
+        getGameDayState()
+          .then((nextState) => applyGameState(nextState, "emergency_refresh"))
+          .catch(() => {});
+      };
+      refreshData();
+      setTimeout(refreshData, 2000);
+      setTimeout(refreshData, 5000);
+    }
+    emergencyOrderPendingRef.current = nextEmergencyOrderPending;
     syncDiscountActionState(state.actionStatus.discountUsed);
     syncPromotionActionState(state.actionStatus.promotionUsed);
     syncShareActionState(state.actionStatus.donationUsed);
@@ -2059,6 +2018,7 @@ function PlayPageSession({
   /** 사용자가 직접 발주했을 때만 true → 도착 알림 활성화 */
   const didOrderEmergencyRef = useRef(false);
   const hasEmergencyArrivalAlertRef = useRef(false);
+  const emergencyOrderPendingRef = useRef(false);
 
   function pushAlert(
     type: GameAlert["type"],
@@ -2080,37 +2040,6 @@ function PlayPageSession({
   const pushActionAlert = (title: string, description: string) => {
     pushAlert("action", title, description);
   };
-
-  useEffect(() => {
-    if (!emergencyArriveAt || !didOrderEmergencyRef.current) {
-      return;
-    }
-
-    const arriveMs = new Date(emergencyArriveAt).getTime();
-    if (Number.isNaN(arriveMs)) return;
-
-    if (hasEmergencyArrivalAlertRef.current) return;
-
-    const check = () => {
-      if (hasEmergencyArrivalAlertRef.current) return;
-      if (Date.now() >= arriveMs) {
-        hasEmergencyArrivalAlertRef.current = true;
-        pushAlert("action", "긴급 발주 도착", "긴급 발주한 물품이 도착했습니다.");
-        // 메뉴/재고/잔액 서버에서 재조회 (BE 반영 타이밍 보정 위해 다중 재시도)
-        const refreshData = () => {
-          getCurrentOrder().then((order) => setCurrentOrder(order)).catch(() => {});
-          getGameDayState().then((state) => applyGameState(state, "emergency_refresh")).catch(() => {});
-        };
-        refreshData();
-        setTimeout(refreshData, 2000);
-        setTimeout(refreshData, 5000);
-      }
-    };
-
-    check();
-    const timer = window.setInterval(check, 1000);
-    return () => window.clearInterval(timer);
-  }, [emergencyArriveAt]);
 
   const handleAction = async (action: ActionType) => {
     try {
