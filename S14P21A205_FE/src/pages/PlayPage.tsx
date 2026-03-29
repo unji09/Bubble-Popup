@@ -596,16 +596,29 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
   return fallbackMessage;
 }
 
-function formatEmergencyArrivalGameTime(arrivedTime: string, businessEndMs: number) {
-  const parsed = new Date(arrivedTime);
-
-  if (Number.isNaN(parsed.getTime())) {
+function formatEmergencyArrivalGameTime(
+  arrivedTime: string,
+  serverTime: string | null,
+  remainingMilliseconds: number,
+) {
+  if (!serverTime) {
     return "";
   }
 
-  const businessStartMs = businessEndMs - BUSINESS_SECONDS * 1000;
-  const elapsedSec = Math.max(0, Math.min((parsed.getTime() - businessStartMs) / 1000, BUSINESS_SECONDS));
-  return elapsedToGameTime(elapsedSec);
+  const arrivedAt = new Date(arrivedTime);
+  const serverNow = new Date(serverTime);
+
+  if (Number.isNaN(arrivedAt.getTime()) || Number.isNaN(serverNow.getTime())) {
+    return "";
+  }
+
+  const delaySeconds = Math.max(0, Math.round((arrivedAt.getTime() - serverNow.getTime()) / 1000));
+  const currentElapsedBusinessSeconds = Math.floor(getElapsedBusinessSeconds(remainingMilliseconds));
+  const estimatedElapsedBusinessSeconds = Math.min(
+    BUSINESS_SECONDS,
+    currentElapsedBusinessSeconds + delaySeconds,
+  );
+  return elapsedToGameTime(estimatedElapsedBusinessSeconds);
 }
 
 function getEstimatedEmergencyArrivalGameTime(
@@ -806,6 +819,7 @@ function PlayPageSession({
   const [trafficStatus, setTrafficStatus] = useState<GameTrafficStatus | null>(null);
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
+  const [latestServerTime, setLatestServerTime] = useState<string | null>(null);
   const [estimatedEmergencyDelaySeconds, setEstimatedEmergencyDelaySeconds] = useState<number | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
@@ -821,7 +835,9 @@ function PlayPageSession({
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
   const emergencyArrivalGameTime = emergencyArriveAt
-    ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs) || null
+    ? formatEmergencyArrivalGameTime(emergencyArriveAt, latestServerTime, remainingMilliseconds)
+      || getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds)
+      || null
     : getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds);
   const currentLiveSellingPrice = liveSellingPrice ?? currentOrder?.sellingPrice ?? 0;
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
@@ -1469,6 +1485,7 @@ function PlayPageSession({
     lastActionStateDayRef.current = state.day;
 
     setLiveSellingPrice(state.customerTick.unitPrice);
+    setLatestServerTime(state.serverTime);
     const previousDisplayedGuests = displayedGuestsRef.current;
     const previousDisplayedStock = displayedStockRef.current;
     const previousDisplayedBalance = displayedBalanceRef.current;
@@ -2219,7 +2236,14 @@ function PlayPageSession({
             didOrderEmergencyRef.current = true;
             hasEmergencyArrivalAlertRef.current = false;
             const isNewMenuOrder = menuId !== currentOrder?.menuId;
-            const arrivalLabel = formatEmergencyArrivalGameTime(response.arrivedTime, playEndTimestampMs);
+            const arrivalLabel = formatEmergencyArrivalGameTime(
+              response.arrivedTime,
+              latestServerTime,
+              remainingMillisecondsRef.current,
+            ) || getEstimatedEmergencyArrivalGameTime(
+              remainingMillisecondsRef.current,
+              estimatedEmergencyDelaySeconds,
+            ) || "";
             const arrivalText = arrivalLabel ? ` ${arrivalLabel} 도착 예정입니다.` : "";
             setEmergencyArriveAt(response.arrivedTime);
 
