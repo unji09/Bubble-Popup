@@ -186,7 +186,7 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
             ? 1.0 + 0.12 * (1 - progress / 0.15)
             : 1.0;
 
-          const moveDistance = 4.5;
+          const moveDistance = 3.0;
           const y = dir * (-1.0 + easedProgress * moveDistance) + d.yOffset;
           // 미세 좌우 흔들림 (느리고 작게)
           const wobbleX = Math.sin(t * 1.5 + d.wobblePhase) * 0.06;

@@ -240,7 +240,7 @@ export default function FloodEffect({ durationMs }: Props) {
 
       {/* 비네트 */}
       <mesh position={[0, 0, 0.5]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial
           ref={vignetteRef}
           map={vignetteTex}

@@ -201,13 +201,13 @@ export default function EarthquakeEffect({ durationMs }: Props) {
 
       {/* 플래시 */}
       <mesh position={[0, 0, -2]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial ref={flashRef} color="#ffffff" transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
 
       {/* 갈색 틴트 */}
       <mesh position={[0, 0, -2.5]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial ref={tintRef} color="#5c4033" transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
     </group>

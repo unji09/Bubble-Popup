@@ -497,9 +497,9 @@ const PROMOTION_OPTION_META: Record<
 };
 
 const DEFAULT_PROMOTION_PRICES: Record<PromotionType, number> = {
-  INFLUENCER: 50_000,
-  SNS: 30_000,
-  LEAFLET: 10_000,
+  INFLUENCER: 500_000,
+  SNS: 300_000,
+  LEAFLET: 100_000,
   FRIEND: 0,
 };
 

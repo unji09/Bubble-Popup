@@ -250,7 +250,7 @@ SELECT 'BREAD_PRICE_DOWN', '빵 원재료 가격 하락', 'NEXT_DAY', 'SEASON_EN
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'BREAD_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
-SELECT 'MALA_SKEWER_PRICE_DOWN', '마라 꼬치 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
+SELECT 'MALA_SKEWER_PRICE_DOWN', '마라꼬치 원재료 가격 하락', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 0.95, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'MALA_SKEWER_PRICE_DOWN');
 
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
@@ -353,25 +353,21 @@ INSERT INTO random_event (event_category, event_type, start_time, end_time, popu
 SELECT 'POLICY_CHANGE', '정부 방침 변경', 'NEXT_DAY', 'SEASON_END', 1.00, 1.00, 1.05, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'POLICY_CHANGE');
 
-UPDATE random_event
-SET stock_flat = 0.00
-WHERE event_category = 'INFECTIOUS_DISEASE';
-
 INSERT INTO random_event (event_category, event_type, start_time, end_time, population_rate, stock_flat, cost_rate, capital_flat)
 SELECT 'INFECTIOUS_DISEASE', '감염병', 'IMMEDIATE', 'SAME_DAY', 0.70, 0.00, 1.00, 0 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM random_event WHERE event_category = 'INFECTIOUS_DISEASE');
 
 -- 7. Action (액션)
 INSERT INTO action (category, promotion_type, cost, capture_rate)
-SELECT 'PROMOTION', 'INFLUENCER', 50000, 1.20 FROM DUAL
+SELECT 'PROMOTION', 'INFLUENCER', 500000, 1.20 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM action WHERE category = 'PROMOTION' AND promotion_type = 'INFLUENCER');
 
 INSERT INTO action (category, promotion_type, cost, capture_rate)
-SELECT 'PROMOTION', 'SNS', 30000, 1.15 FROM DUAL
+SELECT 'PROMOTION', 'SNS', 300000, 1.15 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM action WHERE category = 'PROMOTION' AND promotion_type = 'SNS');
 
 INSERT INTO action (category, promotion_type, cost, capture_rate)
-SELECT 'PROMOTION', 'LEAFLET', 10000, 1.10 FROM DUAL
+SELECT 'PROMOTION', 'LEAFLET', 100000, 1.10 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM action WHERE category = 'PROMOTION' AND promotion_type = 'LEAFLET');
 
 INSERT INTO action (category, promotion_type, cost, capture_rate)
@@ -383,9 +379,9 @@ SELECT 'DONATION', NULL, 0, 1.10 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM action WHERE category = 'DONATION');
 
 INSERT INTO action (category, promotion_type, cost, capture_rate)
-SELECT 'DISCOUNT', NULL, 500, 1.00 FROM DUAL
+SELECT 'DISCOUNT', NULL, 0, 1.00 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM action WHERE category = 'DISCOUNT');
 
 INSERT INTO action (category, promotion_type, cost, capture_rate)
-SELECT 'EMERGENCY_ORDER', NULL, 500, 1.00 FROM DUAL
+SELECT 'EMERGENCY_ORDER', NULL, 0, 1.00 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM action WHERE category = 'EMERGENCY_ORDER');

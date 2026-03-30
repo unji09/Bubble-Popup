@@ -320,7 +320,7 @@ export default function TyphoonDebrisEffect({ durationMs }: Props) {
 
       {/* 어두운 틴트 (폭풍 느낌) */}
       <mesh position={[0, 0, -2]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial ref={tintRef} color="#4a5568" transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
     </group>

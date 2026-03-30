@@ -199,7 +199,7 @@ export default function VirusFogEffect({ durationMs }: Props) {
 
       {/* 녹색 틴트 */}
       <mesh position={[0, 0, -2]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial ref={tintRef} color="#166534" transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
     </group>

@@ -846,6 +846,23 @@ export default function DashboardPage() {
                   disabledMessage={ITEM_SELECTION_LOCK_MESSAGE}
                   isLoading={isLoading && shopItems.length === 0}
                 />
+
+                {/* 튜토리얼 버튼 */}
+                <button
+                  onClick={() => navigate("/tutorial")}
+                  className="w-full rounded-[20px] bg-white p-5 shadow-soft border-2 border-slate-100 hover:border-primary hover:bg-primary/5 hover:shadow-md transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
+                      <span className="material-symbols-outlined text-[22px]">menu_book</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-bold text-slate-800">게임 가이드</span>
+                      <p className="text-xs text-slate-500 mt-0.5">게임 플레이 방법을 알아보세요</p>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-300 group-hover:text-primary transition-colors">chevron_right</span>
+                  </div>
+                </button>
               </>
             ) : (
               <div className="w-full [&>div]:aspect-auto [&>div]:min-h-[400px]">

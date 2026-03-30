@@ -22,7 +22,7 @@ export default function FireEffect({ durationMs }: Props) {
 
   const emberData = useMemo(() => {
     return Array.from({ length: EMBER_COUNT }, () => ({
-      x: (Math.random() - 0.5) * 24,
+      x: (Math.random() - 0.5) * 50,
       speed: 1.5 + Math.random() * 4,
       wobbleFreq: 1 + Math.random() * 3,
       wobbleAmp: 0.4 + Math.random() * 0.8,
@@ -34,7 +34,7 @@ export default function FireEffect({ durationMs }: Props) {
 
   const smokeData = useMemo(() => {
     return Array.from({ length: SMOKE_COUNT }, () => ({
-      x: (Math.random() - 0.5) * 22,
+      x: (Math.random() - 0.5) * 46,
       speed: 0.5 + Math.random() * 1.2,
       scale: 0.8 + Math.random() * 2,
       offset: Math.random() * 14,
@@ -44,7 +44,7 @@ export default function FireEffect({ durationMs }: Props) {
   // 재(ash) 파티클: 느리게 내려오며 흔들림
   const ashData = useMemo(() => {
     return Array.from({ length: ASH_COUNT }, () => ({
-      x: (Math.random() - 0.5) * 24,
+      x: (Math.random() - 0.5) * 50,
       speed: 0.3 + Math.random() * 0.8,
       offset: Math.random() * 16,
       swayFreq: 0.5 + Math.random() * 1.5,
@@ -139,7 +139,7 @@ export default function FireEffect({ durationMs }: Props) {
 
       {/* 불빛 글로우 */}
       <mesh position={[0, 0, -2]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial ref={glowRef} color="#cc2200" transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
     </group>

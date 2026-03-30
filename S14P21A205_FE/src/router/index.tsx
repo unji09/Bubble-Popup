@@ -22,6 +22,7 @@ import InternalServerErrorPage from "../pages/InternalServerErrorPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import ServiceUnavailablePage from "../pages/ServiceUnavailablePage";
 import UnauthorizedPage from "../pages/UnauthorizedPage";
+import TutorialPage from "../pages/TutorialPage";
 
 const router = createBrowserRouter([
   {
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
         element: <PrivateRoute />,
         children: [
           { path: "/mypage", element: <MyPage /> },
+          { path: "/tutorial", element: <TutorialPage /> },
           {
             element: <GameGuard />,
             children: [
@@ -76,6 +78,7 @@ const router = createBrowserRouter([
     children: [
       // 가드 없는 페이지 (언제든 접근 가능)
       { path: "/mypage", element: <MyPage /> },
+      { path: "/tutorial", element: <TutorialPage /> },
 
       // 게임 페이즈 가드 적용
       {

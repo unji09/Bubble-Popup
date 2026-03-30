@@ -101,7 +101,7 @@ export default function StarBurstEffect({ durationMs }: Props) {
 
   const starData = useMemo(() => {
     return Array.from({ length: STAR_COUNT }, () => ({
-      baseX: (Math.random() - 0.5) * 14,
+      baseX: (Math.random() - 0.5) * 50,
       speed: 0.5 + Math.random() * 1.0,
       offset: Math.random() * 12,
       twinkleFreq: 3 + Math.random() * 6,
@@ -114,7 +114,7 @@ export default function StarBurstEffect({ durationMs }: Props) {
 
   const heartData = useMemo(() => {
     return Array.from({ length: HEART_COUNT }, () => ({
-      baseX: (Math.random() - 0.5) * 12,
+      baseX: (Math.random() - 0.5) * 44,
       speed: 0.3 + Math.random() * 0.7,
       offset: Math.random() * 12,
       wobbleFreq: 1 + Math.random() * 2,
@@ -126,7 +126,7 @@ export default function StarBurstEffect({ durationMs }: Props) {
 
   const sparkleData = useMemo(() => {
     return Array.from({ length: SPARKLE_COUNT }, () => ({
-      baseX: (Math.random() - 0.5) * 18,
+      baseX: (Math.random() - 0.5) * 50,
       speed: 0.8 + Math.random() * 1.5,
       offset: Math.random() * 10,
       twinkleFreq: 5 + Math.random() * 10,
@@ -302,7 +302,7 @@ export default function StarBurstEffect({ durationMs }: Props) {
 
       {/* 배경 글로우 */}
       <mesh position={[0, -1, -3]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial
           ref={glowRef}
           color="#f9a8d4"

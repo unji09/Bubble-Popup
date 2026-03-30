@@ -511,7 +511,7 @@ function create50KTexture(): THREE.CanvasTexture {
 
 function makeBillData(count: number) {
   return Array.from({ length: count }, () => ({
-    x: (Math.random() - 0.5) * 22,
+    x: (Math.random() - 0.5) * 20,
     z: (Math.random() - 0.5) * 4,
     speed: 0.5 + Math.random() * 1.2,
     offset: Math.random() * 18,
@@ -592,7 +592,7 @@ export default function CoinRainEffect({ durationMs }: Props) {
       </instancedMesh>
 
       <mesh position={[0, 0, -3]}>
-        <planeGeometry args={[30, 20]} />
+        <planeGeometry args={[80, 60]} />
         <meshBasicMaterial ref={glowRef} color="#f5c542" transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
     </group>
