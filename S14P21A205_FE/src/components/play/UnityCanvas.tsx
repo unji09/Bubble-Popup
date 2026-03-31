@@ -37,7 +37,7 @@ interface PendingUnityMessage {
   payload: string;
 }
 
-const UNITY_LOADING_VERSION = "20260327-6";
+const UNITY_LOADING_VERSION = "20260331-1";
 
 const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function UnityCanvas(
   { className = "", src = "/unity/index.html", iframeRef: externalIframeRef, onReady, onPopupArrival },

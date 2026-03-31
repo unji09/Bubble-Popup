@@ -670,10 +670,17 @@ public class GameDayStateService {
 
     private BigDecimal resolveLiveCaptureRate(GameDayLiveState state) {
         if (state.captureRate() != null) {
-            return captureRatePolicy.normalizeCaptureRate(state.captureRate());
+            BigDecimal normalizedLiveCaptureRate = captureRatePolicy.normalizeCaptureRate(state.captureRate());
+            if (normalizedLiveCaptureRate.signum() > 0) {
+                return normalizedLiveCaptureRate;
+            }
         }
         if (state.startResponse() != null && state.startResponse().captureRate() != null) {
-            return captureRatePolicy.normalizeCaptureRate(state.startResponse().captureRate());
+            BigDecimal normalizedStartCaptureRate =
+                    captureRatePolicy.normalizeCaptureRate(state.startResponse().captureRate());
+            if (normalizedStartCaptureRate.signum() > 0) {
+                return normalizedStartCaptureRate;
+            }
         }
         return captureRatePolicy.defaultCaptureRate();
     }

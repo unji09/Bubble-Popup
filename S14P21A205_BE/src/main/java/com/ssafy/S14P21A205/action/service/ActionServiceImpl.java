@@ -553,11 +553,20 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private BigDecimal resolveAppliedCaptureRate(GameDayLiveState state, BigDecimal multiplier) {
-        BigDecimal currentRate = state.captureRate() != null
-                ? state.captureRate()
-                : state.startResponse() != null && state.startResponse().captureRate() != null
-                ? state.startResponse().captureRate()
-                : captureRatePolicy.defaultCaptureRate();
+        BigDecimal currentRate = captureRatePolicy.defaultCaptureRate();
+        if (state.startResponse() != null && state.startResponse().captureRate() != null) {
+            BigDecimal normalizedStartCaptureRate =
+                    captureRatePolicy.normalizeCaptureRate(state.startResponse().captureRate());
+            if (normalizedStartCaptureRate.signum() > 0) {
+                currentRate = normalizedStartCaptureRate;
+            }
+        }
+        if (state.captureRate() != null) {
+            BigDecimal normalizedLiveCaptureRate = captureRatePolicy.normalizeCaptureRate(state.captureRate());
+            if (normalizedLiveCaptureRate.signum() > 0) {
+                currentRate = normalizedLiveCaptureRate;
+            }
+        }
         return captureRatePolicy.applyMultiplier(currentRate, multiplier);
     }
 
