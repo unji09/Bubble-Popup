@@ -132,7 +132,11 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
                         candidate.roi(),
                         candidate.totalRevenue(),
                         resolveRewardPoints(currentRank),
-                        false
+                        false,
+                        candidate.store().getUser().isBot(),
+                        candidate.store().getUser().getBotDifficulty() == null
+                                ? null
+                                : candidate.store().getUser().getBotDifficulty().name()
                 ));
             }
 

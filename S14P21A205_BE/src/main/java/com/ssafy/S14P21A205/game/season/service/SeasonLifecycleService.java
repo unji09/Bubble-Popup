@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.game.season.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.bot.service.BotSeasonFillService;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
@@ -89,6 +90,7 @@ public class SeasonLifecycleService {
     private final NewsReportRepository newsReportRepository;
     private final NewsService newsService;
     private final SparkEtlScheduler sparkEtlScheduler;
+    private final BotSeasonFillService botSeasonFillService;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private final Clock clock;
@@ -163,6 +165,7 @@ public class SeasonLifecycleService {
         }
 
         prepareDailyEventsIfMissing(scheduledSeason, locations);
+        botSeasonFillService.fillBotsToMinimum(scheduledSeason);
 
         scheduledSeason.startAt(now, sourceBatchKey);
         scheduledSeason.applyReservedDemoSkip();

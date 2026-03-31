@@ -157,7 +157,9 @@ public class SeasonRankingService {
                 valueOf(record.getTotalRevenue()),
                 record.getRewardPoints(),
                 record.getIsBankruptcy(),
-                record.getStore().getUser().getId().equals(userId)
+                record.getStore().getUser().getId().equals(userId),
+                record.getStore().getUser().isBot(),
+                record.getStore().getUser().getBotDifficulty() == null ? null : record.getStore().getUser().getBotDifficulty().name()
         );
         return new RankingView(
                 record.getStore().getId(),
@@ -231,7 +233,9 @@ public class SeasonRankingService {
                 ranking.roi(),
                 ranking.totalRevenue(),
                 ranking.rewardPoints(),
-                isMine
+                isMine,
+                ranking.isBot(),
+                ranking.botDifficulty()
         );
     }
 

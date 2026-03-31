@@ -113,7 +113,7 @@ public class SeasonWaitingService {
         if (seasonId == null) {
             return null;
         }
-        return Math.toIntExact(storeRepository.countDistinctUsersBySeasonId(seasonId));
+        return Math.toIntExact(storeRepository.countActiveCompetitorsBySeasonId(seasonId));
     }
 
     private Integer safeInt(long value) {

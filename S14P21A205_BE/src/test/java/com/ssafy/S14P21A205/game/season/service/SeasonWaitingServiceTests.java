@@ -31,7 +31,7 @@ class SeasonWaitingServiceTests {
         Season inProgressSeason = season(3L, SeasonStatus.IN_PROGRESS, 3, 7, LocalDateTime.of(2026, 3, 16, 9, 59, 10));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressSeason));
-        when(storeRepository.countDistinctUsersBySeasonId(3L)).thenReturn(12L);
+        when(storeRepository.countActiveCompetitorsBySeasonId(3L)).thenReturn(12L);
 
         GameWaitingResponse response = seasonWaitingService.getWaitingStatus();
 

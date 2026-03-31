@@ -102,7 +102,9 @@ class SeasonRankingServiceTests {
                                 new BigDecimal("30.0"),
                                 300_000L,
                                 30,
-                                false
+                                false,
+                                false,
+                                null
                         ),
                         new CurrentSeasonTopRankingItemResponse(
                                 2,
@@ -112,7 +114,9 @@ class SeasonRankingServiceTests {
                                 new BigDecimal("20.0"),
                                 200_000L,
                                 20,
-                                false
+                                false,
+                                false,
+                                null
                         )
                 ),
                 "2026-03-13T15:00:00"
@@ -415,7 +419,9 @@ class SeasonRankingServiceTests {
                     BigDecimal.valueOf(100 - rank).setScale(1),
                     rank * 100000L,
                     rank == 1 ? 30 : rank == 2 ? 20 : rank == 3 ? 10 : 5,
-                    false
+                    false,
+                    false,
+                    null
             ));
         }
         return rankings;

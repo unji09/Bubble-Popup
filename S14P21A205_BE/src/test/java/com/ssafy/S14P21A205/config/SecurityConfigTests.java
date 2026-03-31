@@ -32,6 +32,9 @@ import com.ssafy.S14P21A205.game.day.service.SeasonDayClosingService;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.SeasonWeatherRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.bot.service.BotDecisionService;
+import com.ssafy.S14P21A205.game.bot.service.BotExecutionService;
+import com.ssafy.S14P21A205.game.bot.service.BotSeasonFillService;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.repository.NewsArticleRepository;
 import com.ssafy.S14P21A205.game.news.service.AiNewsGenerator;
@@ -218,6 +221,15 @@ class SecurityConfigTests {
 
     @MockitoBean
     private AiNewsGenerator aiNewsGenerator;
+
+    @MockitoBean
+    private BotDecisionService botDecisionService;
+
+    @MockitoBean
+    private BotExecutionService botExecutionService;
+
+    @MockitoBean
+    private BotSeasonFillService botSeasonFillService;
 
     @Test
     void startDayAllowsAuthenticatedRequest() throws Exception {

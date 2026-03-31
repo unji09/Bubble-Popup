@@ -32,6 +32,7 @@ import com.ssafy.S14P21A205.game.event.entity.EventCategory;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
 import com.ssafy.S14P21A205.game.event.repository.RandomEventRepository;
+import com.ssafy.S14P21A205.game.bot.service.BotSeasonFillService;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -108,6 +109,9 @@ class SeasonLifecycleServiceTests {
     @Mock
     private SparkEtlScheduler sparkEtlScheduler;
 
+    @Mock
+    private BotSeasonFillService botSeasonFillService;
+
     private SeasonLifecycleService seasonLifecycleService;
 
     @BeforeEach
@@ -158,6 +162,7 @@ class SeasonLifecycleServiceTests {
         assertThat(scheduledSeason.getCurrentDay()).isEqualTo(1);
         assertThat(scheduledSeason.getSourceBatchKey()).isEqualTo(batchKey);
         assertThat(scheduledSeason.getStartTime()).isEqualTo(now);
+        verify(botSeasonFillService).fillBotsToMinimum(scheduledSeason);
         verify(weatherDayRedisRepository).saveDay(eq(11L), eq(1), any());
         verify(trafficDayRedisRepository).saveDay(eq(11L), eq(3L), eq(1), any());
         verify(seasonDayClosingScheduler).synchronize(scheduledSeason);
@@ -428,6 +433,7 @@ class SeasonLifecycleServiceTests {
                 newsReportRepository,
                 newsService,
                 sparkEtlScheduler,
+                botSeasonFillService,
                 clock
         );
     }

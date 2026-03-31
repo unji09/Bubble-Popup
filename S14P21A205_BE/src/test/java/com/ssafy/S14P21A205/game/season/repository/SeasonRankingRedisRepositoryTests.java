@@ -54,7 +54,9 @@ class SeasonRankingRedisRepositoryTests {
                         new BigDecimal("12.5"),
                         120000L,
                         30,
-                        false
+                        false,
+                        false,
+                        null
                 )),
                 "2026-03-26T10:00:00"
         );
@@ -80,7 +82,9 @@ class SeasonRankingRedisRepositoryTests {
                         new BigDecimal("12.5"),
                         120000L,
                         30,
-                        false
+                        false,
+                        false,
+                        null
                 )),
                 "2026-03-26T10:00:00"
         );

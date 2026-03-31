@@ -36,6 +36,13 @@ public class User {
     @Column(nullable = false, length = 30)
     private String nickname;
 
+    @Column(name = "is_bot", nullable = false)
+    private boolean isBot;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "bot_difficulty", length = 16)
+    private BotDifficulty botDifficulty;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role;
@@ -46,8 +53,17 @@ public class User {
     public User(String email, String nickname) {
         this.email = email;
         this.nickname = normalizeNickname(nickname);
+        this.isBot = false;
+        this.botDifficulty = null;
         this.role = UserRole.GENERAL;
         this.point = 0;
+    }
+
+    public static User createBot(String email, String nickname, BotDifficulty botDifficulty) {
+        User user = new User(email, nickname);
+        user.isBot = true;
+        user.botDifficulty = botDifficulty;
+        return user;
     }
 
     private static String normalizeNickname(String nickname) {

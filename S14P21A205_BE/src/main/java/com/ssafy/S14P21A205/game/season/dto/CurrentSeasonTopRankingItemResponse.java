@@ -10,6 +10,8 @@ public record CurrentSeasonTopRankingItemResponse(
         BigDecimal roi,
         Long totalRevenue,
         Integer rewardPoints,
-        Boolean isMine
+        Boolean isMine,
+        Boolean isBot,
+        String botDifficulty
 ) {
 }

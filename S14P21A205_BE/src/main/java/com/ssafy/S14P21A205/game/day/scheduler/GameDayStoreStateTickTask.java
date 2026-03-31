@@ -1,5 +1,6 @@
 package com.ssafy.S14P21A205.game.day.scheduler;
 
+import com.ssafy.S14P21A205.game.bot.service.BotExecutionService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.scheduler.GameTickTask;
@@ -29,6 +30,7 @@ public class GameDayStoreStateTickTask implements GameTickTask {
     private final StoreRepository storeRepository;
     private final GameDayStateService gameDayStateService;
     private final NewsService newsService;
+    private final BotExecutionService botExecutionService;
 
     /** 영업 중 뉴스가 이미 생성 요청된 day를 추적 (시즌 내 중복 방지) */
     private final AtomicInteger openingNewsGeneratedDay = new AtomicInteger(-1);
@@ -46,6 +48,8 @@ public class GameDayStoreStateTickTask implements GameTickTask {
             openingNewsGeneratedDay.set(-1);
             return;
         }
+
+        botExecutionService.executeForSeason(season);
 
         List<Store> stores = storeRepository.findBySeason_IdOrderByIdAsc(season.getId());
         for (Store store : stores) {

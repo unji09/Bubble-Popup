@@ -118,6 +118,32 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
             """)
     long countDistinctUsersBySeasonId(@Param("seasonId") Long seasonId);
 
+    @Query("""
+            select count(distinct s.user.id)
+            from Store s
+            where s.season.id = :seasonId
+              and s.user.isBot = false
+            """)
+    long countDistinctHumanUsersBySeasonId(@Param("seasonId") Long seasonId);
+
+    @Query("""
+            select count(s)
+            from Store s
+            where s.season.id = :seasonId
+              and not exists (
+                    select 1
+                    from DailyReport report
+                    where report.store = s
+                      and report.day = (
+                            select max(latest.day)
+                            from DailyReport latest
+                            where latest.store = s
+                      )
+                      and report.isBankrupt = true
+              )
+            """)
+    long countActiveCompetitorsBySeasonId(@Param("seasonId") Long seasonId);
+
     long countBySeason_IdAndLocation_Id(Long seasonId, Long locationId);
 
     Optional<Store> findByUserId(Integer userId);

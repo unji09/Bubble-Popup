@@ -13,6 +13,8 @@ public record CurrentSeasonRankingItemResponse(
         Long totalRevenue,
         Integer rewardPoints,
         Boolean isBankrupt,
-        Boolean isMine
+        Boolean isMine,
+        Boolean isBot,
+        String botDifficulty
 ) {
 }
