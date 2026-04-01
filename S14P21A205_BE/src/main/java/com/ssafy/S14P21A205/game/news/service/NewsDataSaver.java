@@ -63,6 +63,9 @@ public class NewsDataSaver {
     @Value("${app.game.demo.reproduce-global-news-delete-enabled:false}")
     private boolean reproduceGlobalNewsDeleteEnabled;
 
+    @Value("${app.game.demo.reproduce-lock-hold-ms:15000}")
+    private long reproduceLockHoldMs;
+
     @Transactional
     public void saveNewsData(
             Long seasonId,
@@ -75,6 +78,7 @@ public class NewsDataSaver {
             newsArticleRepository.deleteAllInBatch();
             newsReportRepository.deleteAllInBatch();
             log.warn("[DEMO] Cleared global news before regeneration for season {}", seasonId);
+            holdDemoLockWindow(seasonId);
         } else {
             newsArticleRepository.deleteBySeasonId(seasonId);
             newsReportRepository.deleteBySeasonId(seasonId);
@@ -126,6 +130,23 @@ public class NewsDataSaver {
             }
         }
         log.info("[NEWS] Step 4/4: All news generated for season {}", seasonId);
+    }
+
+    private void holdDemoLockWindow(Long seasonId) {
+        if (reproduceLockHoldMs <= 0L) {
+            return;
+        }
+        log.warn(
+                "[DEMO] Holding news transaction lock for {} ms to reproduce lock contention. seasonId={}",
+                reproduceLockHoldMs,
+                seasonId
+        );
+        try {
+            Thread.sleep(reproduceLockHoldMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while reproducing demo lock contention.", e);
+        }
     }
 
     @Transactional
