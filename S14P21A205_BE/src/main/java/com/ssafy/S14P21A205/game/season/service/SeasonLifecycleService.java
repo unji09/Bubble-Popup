@@ -55,6 +55,7 @@ import java.util.Set;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,6 +78,9 @@ public class SeasonLifecycleService {
     private static final int FESTIVAL_DAY = 4;
     private static final int FESTIVAL_APPLY_OFFSET_SECONDS = 0;
     private static final int FESTIVAL_EXPIRE_OFFSET_SECONDS = 120;
+
+    @Value("${app.game.demo.reproduce-season-start-lock-enabled:false}")
+    private boolean reproduceSeasonStartLockEnabled;
 
     private final SeasonRepository seasonRepository;
     private final SeasonDayClosingScheduler seasonDayClosingScheduler;
@@ -180,6 +184,10 @@ public class SeasonLifecycleService {
         prepareDailyEventsIfMissing(scheduledSeason, locations);
         boolean shouldGenerateNewsAfterStart = !newsReportRepository.existsBySeasonId(scheduledSeason.getId());
         try {
+            if (reproduceSeasonStartLockEnabled && shouldGenerateNewsAfterStart) {
+                log.warn("[DEMO] Reproducing legacy season-start/news lock path for season {}", scheduledSeason.getId());
+                newsService.generateSeasonNews(scheduledSeason.getId());
+            }
             scheduledSeason.startAt(now, sourceBatchKey);
             scheduledSeason.applyReservedDemoSkip();
             Random random = new Random(resolveSeed(scheduledSeason));

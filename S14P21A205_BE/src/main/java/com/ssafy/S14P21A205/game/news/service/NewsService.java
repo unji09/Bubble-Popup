@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -47,6 +48,9 @@ public class NewsService {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private final Set<Long> generatingSeasonIds = ConcurrentHashMap.newKeySet();
 
+    @Value("${app.game.demo.reproduce-season-start-lock-enabled:false}")
+    private boolean reproduceSeasonStartLockEnabled;
+
     private final NewsDataSaver newsDataSaver;
     private final NewsArticleRepository newsArticleRepository;
     private final NewsMenuMentionRepository newsMenuMentionRepository;
@@ -58,14 +62,14 @@ public class NewsService {
         if (seasonId == null) {
             return;
         }
-        if (!generatingSeasonIds.add(seasonId)) {
+        if (!reproduceSeasonStartLockEnabled && !generatingSeasonIds.add(seasonId)) {
             log.info("[NEWS] Generation already in progress for season {}. Skipping duplicate request.", seasonId);
             return;
         }
         Season season = seasonRepository.findById(seasonId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
         try {
-            if (newsReportRepository.existsBySeasonId(seasonId)) {
+            if (!reproduceSeasonStartLockEnabled && newsReportRepository.existsBySeasonId(seasonId)) {
                 log.info("[NEWS] Season {} already has news. Skipping regeneration.", seasonId);
                 return;
             }
@@ -83,7 +87,9 @@ public class NewsService {
             // DB 저장 + AI 호출 (별도 빈 → @Transactional 프록시 정상 동작)
             newsDataSaver.saveNewsData(seasonId, season, totalDays, dayMentions, sourceBatchKey);
         } finally {
-            generatingSeasonIds.remove(seasonId);
+            if (!reproduceSeasonStartLockEnabled) {
+                generatingSeasonIds.remove(seasonId);
+            }
         }
     }
 

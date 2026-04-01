@@ -33,6 +33,7 @@ import lombok.RequiredArgsConstructor;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +60,9 @@ public class NewsDataSaver {
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ApplicationMonitoringService monitoringService;
 
+    @Value("${app.game.demo.reproduce-global-news-delete-enabled:false}")
+    private boolean reproduceGlobalNewsDeleteEnabled;
+
     @Transactional
     public void saveNewsData(
             Long seasonId,
@@ -67,9 +71,15 @@ public class NewsDataSaver {
             Map<Integer, List<MenuMentionCount>> dayMentions,
             String sourceBatchKey
     ) {
-        newsArticleRepository.deleteBySeasonId(seasonId);
-        newsReportRepository.deleteBySeasonId(seasonId);
-        log.info("Cleared season-scoped news before regeneration for season {}", seasonId);
+        if (reproduceGlobalNewsDeleteEnabled) {
+            newsArticleRepository.deleteAllInBatch();
+            newsReportRepository.deleteAllInBatch();
+            log.warn("[DEMO] Cleared global news before regeneration for season {}", seasonId);
+        } else {
+            newsArticleRepository.deleteBySeasonId(seasonId);
+            newsReportRepository.deleteBySeasonId(seasonId);
+            log.info("Cleared season-scoped news before regeneration for season {}", seasonId);
+        }
 
         List<LocalDate> trafficDates = populationRepository.findDistinctDatesOrderedBySourceBatchKey(sourceBatchKey);
         log.info("[NEWS] Step 3/4: Generating news for {} days via AI", totalDays);

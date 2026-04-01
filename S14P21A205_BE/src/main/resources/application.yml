@@ -89,6 +89,9 @@ app:
     season-lifecycle:
       prepare-fixed-rate-ms: ${APP_GAME_SEASON_LIFECYCLE_PREPARE_FIXED_RATE_MS:${APP_GAME_SEASON_LIFECYCLE_FIXED_RATE_MS:10000}}
       synchronize-fixed-rate-ms: ${APP_GAME_SEASON_LIFECYCLE_SYNCHRONIZE_FIXED_RATE_MS:${APP_GAME_SEASON_LIFECYCLE_FIXED_RATE_MS:10000}}
+    demo:
+      reproduce-season-start-lock-enabled: ${APP_GAME_DEMO_REPRODUCE_SEASON_START_LOCK_ENABLED:false}
+      reproduce-global-news-delete-enabled: ${APP_GAME_DEMO_REPRODUCE_GLOBAL_NEWS_DELETE_ENABLED:false}
   jwt:
     secret: ${JWT_SECRET:}
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:P1D}
