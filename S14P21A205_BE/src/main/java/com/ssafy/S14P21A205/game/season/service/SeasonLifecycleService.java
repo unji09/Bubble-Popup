@@ -182,9 +182,10 @@ public class SeasonLifecycleService {
         }
 
         prepareDailyEventsIfMissing(scheduledSeason, locations);
-        boolean shouldGenerateNewsAfterStart = !newsReportRepository.existsBySeasonId(scheduledSeason.getId());
+        boolean shouldGenerateNewsAfterStart = reproduceSeasonStartLockEnabled
+                || !newsReportRepository.existsBySeasonId(scheduledSeason.getId());
         try {
-            if (reproduceSeasonStartLockEnabled && shouldGenerateNewsAfterStart) {
+            if (reproduceSeasonStartLockEnabled) {
                 log.warn("[DEMO] Reproducing legacy season-start/news lock path for season {}", scheduledSeason.getId());
                 newsService.generateSeasonNews(scheduledSeason.getId());
             }
