@@ -8,6 +8,8 @@ import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.ParticipationResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonNewsLockReproductionRequest;
+import com.ssafy.S14P21A205.game.season.dto.SeasonNewsLockReproductionResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonRuntimeControlResponse;
@@ -244,6 +246,49 @@ public interface SeasonControllerDoc {
     })
     ResponseEntity<SeasonRuntimeControlResponse> resumeRuntime(
             @Parameter(hidden = true) Authentication authentication
+    );
+
+    @Operation(
+            summary = "Trigger deterministic news lock reproduction",
+            description = "Admin-only API. Schedules two overlapping news generation jobs for the target season to deterministically reproduce lock contention for portfolio/demo capture.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "News lock reproduction trigger accepted",
+                    content = @Content(schema = @Schema(implementation = SeasonNewsLockReproductionResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Admin role required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Target season not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Reproduction flags are disabled",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SeasonNewsLockReproductionResponse> reproduceNewsLock(
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(description = "Deterministic news lock reproduction request")
+            SeasonNewsLockReproductionRequest request
     );
 
     @Operation(

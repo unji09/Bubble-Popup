@@ -7,6 +7,8 @@ import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.ParticipationResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonDemoSkipResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonNewsLockReproductionRequest;
+import com.ssafy.S14P21A205.game.season.dto.SeasonNewsLockReproductionResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonRuntimeControlResponse;
@@ -98,6 +100,15 @@ public class SeasonController implements SeasonControllerDoc {
     @PostMapping("/seasons/admin/runtime/resume")
     public ResponseEntity<SeasonRuntimeControlResponse> resumeRuntime(Authentication authentication) {
         return ResponseEntity.ok(seasonAdminService.resumeRuntime(authentication));
+    }
+
+    @Override
+    @PostMapping("/seasons/admin/demo/reproduce-news-lock")
+    public ResponseEntity<SeasonNewsLockReproductionResponse> reproduceNewsLock(
+            Authentication authentication,
+            @Valid @RequestBody SeasonNewsLockReproductionRequest request
+    ) {
+        return ResponseEntity.ok(seasonAdminService.reproduceNewsLock(authentication, request));
     }
 
     @Override

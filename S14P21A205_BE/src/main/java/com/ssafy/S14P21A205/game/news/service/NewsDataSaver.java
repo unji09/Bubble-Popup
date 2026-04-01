@@ -34,6 +34,7 @@ import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,12 +60,16 @@ public class NewsDataSaver {
     private final DailyEventRepository dailyEventRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ApplicationMonitoringService monitoringService;
+    private final JdbcTemplate jdbcTemplate;
 
     @Value("${app.game.demo.reproduce-global-news-delete-enabled:false}")
     private boolean reproduceGlobalNewsDeleteEnabled;
 
     @Value("${app.game.demo.reproduce-lock-hold-ms:15000}")
     private long reproduceLockHoldMs;
+
+    @Value("${app.game.demo.reproduce-lock-wait-timeout-seconds:3}")
+    private int reproduceLockWaitTimeoutSeconds;
 
     @Transactional
     public void saveNewsData(
@@ -75,6 +80,7 @@ public class NewsDataSaver {
             String sourceBatchKey
     ) {
         if (reproduceGlobalNewsDeleteEnabled) {
+            configureDemoLockWaitTimeout();
             newsArticleRepository.deleteAllInBatch();
             newsReportRepository.deleteAllInBatch();
             log.warn("[DEMO] Cleared global news before regeneration for season {}", seasonId);
@@ -147,6 +153,17 @@ public class NewsDataSaver {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while reproducing demo lock contention.", e);
         }
+    }
+
+    private void configureDemoLockWaitTimeout() {
+        if (reproduceLockWaitTimeoutSeconds <= 0) {
+            return;
+        }
+        jdbcTemplate.execute("SET SESSION innodb_lock_wait_timeout = " + reproduceLockWaitTimeoutSeconds);
+        log.warn(
+                "[DEMO] Set session innodb_lock_wait_timeout={} seconds for lock reproduction",
+                reproduceLockWaitTimeoutSeconds
+        );
     }
 
     @Transactional

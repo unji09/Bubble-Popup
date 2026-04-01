@@ -93,6 +93,7 @@ app:
       reproduce-season-start-lock-enabled: ${APP_GAME_DEMO_REPRODUCE_SEASON_START_LOCK_ENABLED:false}
       reproduce-global-news-delete-enabled: ${APP_GAME_DEMO_REPRODUCE_GLOBAL_NEWS_DELETE_ENABLED:false}
       reproduce-lock-hold-ms: ${APP_GAME_DEMO_REPRODUCE_LOCK_HOLD_MS:15000}
+      reproduce-lock-wait-timeout-seconds: ${APP_GAME_DEMO_REPRODUCE_LOCK_WAIT_TIMEOUT_SECONDS:3}
   jwt:
     secret: ${JWT_SECRET:}
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:P1D}
